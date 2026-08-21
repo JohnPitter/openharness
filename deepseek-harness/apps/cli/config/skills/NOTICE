@@ -1,0 +1,8 @@
+J-Space Cognition Suite V3.6
+Copyright Tiger3807861189 (2026)
+https://github.com/Tiger3807861189/J-Space-Cognition-Suite-V3.6
+Licensed under Apache License 2.0.
+
+Shipped as the default construction protocol for OpenHarness agent presets
+standard, code, and workflow. The skill directory is an unmodified copy of
+the upstream `j-space/` package.

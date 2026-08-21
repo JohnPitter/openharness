@@ -1,0 +1,3 @@
+name: Workflow mode
+description: Orchestrator/planner session that delegates construction and subagents to a separate worker model. Construction follows the J-Space protocol by default.
+order: 5

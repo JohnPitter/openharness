@@ -1,0 +1,166 @@
+# OpenHarness — shell desktop do DeepSeek Harness
+
+App desktop (Wails v2) que empacota o **DeepSeek Harness** original (TypeScript,
+`deepseek-harness/`) num único `.exe` Windows: o harness roda como sidecar local
+(node.exe embutido + árvore de runtime buildada) e a UI web oficial
+(`apps/web`) é exibida num iframe dentro do shell.
+
+## Arquitetura
+
+```
+main.go                 entrypoint Wails (janela frameless)
+internal/
+  sidecar/              Manager: extrai assets embutidos para
+                        %LOCALAPPDATA%\openharness\runtime (stamp por conteúdo:
+                        CRC dos arquivos do zip + hash do node.exe — rezip sem
+                        mudar arquivos reusa o cache), sobe `node lib/bin.js web
+                        --no-open --host 127.0.0.1 --port 0`, captura a URL do stdout
+                        ("dsh web: http://..."), DSH_HOME isolado em
+                        %LOCALAPPDATA%\openharness\dsh-home
+  sidecar/assets/       node.exe + dsh-runtime.zip (embed via go:embed; NÃO
+                        commitar — ver .gitignore; gerados pelo pipeline abaixo)
+  app/                  bindings Wails: HarnessState (polling {url}|{error}),
+                        RestartHarness, shutdown mata o sidecar
+frontend/dist/          shell estático (sem build step): titlebar própria
+                        (logo, --wails-draggable, min/max/close via runtime
+                        Wails) + iframe full-bleed para a URL do harness
+build/appicon.png       logo gerada (anel aberto + nós); windows/icon.ico idem
+```
+
+## Pipeline do runtime embutido
+
+O loader Cordis resolve plugins por nome a partir de `$DSH_HOME/profiles`, então
+o runtime precisa de arquivos REAIS em disco (por isso extração, não SEA/pkg).
+
+```powershell
+cd deepseek-harness
+pnpm install && pnpm run build          # builda libs + apps/web/dist
+# staging sem symlinks (mesma rota do scripts/build-exe-for-python-sdk.ts):
+pnpm --filter @deepseek-ai/dsh deploy --legacy --prod `
+  --config.node-linker=hoisted --config.auto-install-peers=false `
+  --config.link-workspace-packages=true ..\dsh-runtime
+# + restore de hoists, materialização de links e cópia de TODOS os pacotes
+#   workspace @deepseek-ai/* faltantes (vendor/* é raiz de pacote, 1 nível).
+#   O deploy --prod NÃO inclui transitivos do Cordis: cosmokit, schemastery,
+#   cordis-plugin-group, cordis-plugin-logger-console — sem eles o sidecar
+#   cai com ERR_MODULE_NOT_FOUND no primeiro import de cordis.
+# zipar dsh-runtime -> internal/sidecar/assets/dsh-runtime.zip
+# copiar node.exe -> internal/sidecar/assets/node.exe
+```
+
+## Rebrand (deepseek → openharness)
+
+Marca da UI trocada na fonte do monorepo (não há patch em runtime — edite lá e
+rebuilde). A tela de boot não vive mais em `AppRoot.tsx`: o rc.8 preenche a
+marca via slots em `packages/client/ui-brand-official` (só registra se
+`DSH_CLIENT_BUILD_PROFILE === 'official'`). O título do produto vem de
+`DSH_CLIENT_TITLE` (inlinado no bundle client).
+
+Build da face client/web:
+
+```powershell
+$env:DSH_CLIENT_BUILD_PROFILE = 'official'
+$env:DSH_CLIENT_TITLE = 'OpenHarness'
+# opcional: $env:DSH_CLIENT_COMMIT_HASH = (git -C deepseek-harness rev-parse --short HEAD)
+pnpm run build:lib:client
+pnpm --filter @deepseek-ai/dsh-web-frontend run build
+```
+
+Arquivos da marca:
+
+- `apps/web/index.html` (title), `apps/web/public/favicon.svg` (anel aberto +
+  nós), `apps/web/public/manifest.webmanifest`
+- `packages/client/ui-primitives/src/BrandWordmark.tsx` e `FishLogo.tsx`
+  (wordmark/ícone; `includeMark=false` usa viewBox `28 0 24 24` para o nome
+  sentar ao lado do mark slotted)
+- `packages/client/ui-brand-official/src/client/` (`OfficialBrandMark` /
+  `OfficialBrandName` nos slots sidebar/hero)
+- `packages/client/ui-conversation/src/client/locales.ts` (`hero.headline`)
+- `packages/client/ui-settings-models/src/onboarding-copy.ts` (aviso de boas-vindas)
+
+Locales pt (pt-BR) e es adicionados: `packages/client/locale` (LOCALE_IDS/LOCALES,
+dicionários common + settings) e dicionários `pt`/`es` em todos os `locales.ts`
+(23 pacotes em `packages/client/*` + `packages/extensions/ui-cordis` +
+`packages/session-query/session-log-export`). O registro tipado exige todos os
+locales por namespace — ao criar dicionário novo, inclua zh/en/pt/es.
+
+## Provider Kimi for Code
+
+`packages/llm/llm-kimi` é um clone adaptado de `llm-deepseek` (wire OpenAI
+chat-completions): rota `kimi-for-coding`, base `https://api.kimi.com/coding/v1`
+(env `KIMI_BASE_URL`), chave `KIMI_API_KEY`, modelos `kimi-for-coding` (K2.7)
+e `k3` / `k3-256k` (K3). Diferenças do DeepSeek: K2.x usa `thinking: {type}`
+(off/high; K2.7 Code não desliga thinking); K3 usa `reasoning_effort`
+`low`/`high`/`max` (sempre pensa, sem Off). Sem headers `x-deepseek-harness-*`,
+`x-trace-id` como request id, e `prompt_cache_key = sessionId` (afinidade de
+cache do Kimi). Com chave configurada, o discovery busca o `GET /models` ao
+vivo do endpoint e mescla sobre o catálogo (capacidades reais enriquecem até
+ids não catalogados); sem chave ou falha, cai no catálogo estático. Editor de
+settings igual ao DeepSeek (`layoutOf` em `ui-settings-models/ProviderEditor.tsx`
+mapeia `llm-kimi` → família `kimi`). Registrado em `packages/bundle/base/cordis.patch.yml` +
+`package.json` + referência em `tsconfig.host.json`. A chave se configura em
+Settings → Models (seção `llm-kimi`) ou via `KIMI_API_KEY`.
+
+## Providers Claude Code, Codex e GLM
+
+Rotas do catálogo `llm-pi-ai` (não plugins próprios): o adapter já fala
+Anthropic Messages, OpenAI Responses, Codex Responses e o dialect `thinkingFormat: zai`.
+A lista padrão em Settings → Models é **um card por família** (plano de coding).
+Console Anthropic (`anthropic`) e OpenAI Platform (`openai`) ficam no catálogo
+e entram por **Adicionar provedor** — mesmos modelos, cobrança pay-per-token.
+Composição em `packages/bundle/base/cordis.patch.yml` (`llm-pi-ai.config.providers`).
+`catalog:` herda a tabela de modelos de outro vendor (Claude Code herda `anthropic`).
+
+| UI | rota pi-ai | chave | o que é |
+|--------|-------------|-------|---------|
+| Claude Code | `claude-code` | `CLAUDE_CODE_OAUTH_TOKEN` | Plano Pro/Max (`claude setup-token`, `sk-ant-oat…`) |
+| Codex | `openai-codex` | `CODEX_ACCESS_TOKEN` | Plano ChatGPT Codex (JWT em `%USERPROFILE%\.codex\auth.json`) |
+| GLM Coding Plan | `zai` | `ZAI_API_KEY` | Coding Plan em `https://api.z.ai/api/coding/paas/v4` |
+| OpenCode | `opencode` | `OPENCODE_API_KEY` | Gateway Zen (`https://opencode.ai/zen/v1`, chat-completions) |
+
+Claude Code: o pi-ai detecta `sk-ant-oat` e manda Bearer + identity de Claude Code.
+Codex: o token precisa ser JWT com `chatgpt_account_id`; `sk-` da Platform não serve nessa rota.
+Cursor **não** entra: não há `/v1/chat/completions` oficial do plano Cursor (só Cloud Agents / SDK, que é outro agente, não um LLM no loop do harness).
+
+Login OAuth (Settings → Models, no card do provider): Claude Code e Codex
+aceitam **Sign in** (PKCE no browser, callback localhost) **e** colar token.
+Codex também oferece device code se a porta 1455 estiver ocupada. Tokens ficam
+em `$DSH_HOME/pi-ai-oauth.json` e o pi-ai faz refresh no request. HTTP:
+`GET/POST /dsh-llm-pi-ai/oauth/{status,login,logout}`.
+
+Para mudanças só de UI basta `build:lib:client` + web (com os env de marca
+acima). A face host do tsdown no Windows não expande o glob
+`lib/types/{index,invariant,startup}.js` no pacote raiz — o overlay
+`openharness-expand-host-entries` em `tsdown.config.ts` + stub
+`scripts/tsdown-root-stub.js` contorna isso. Rodar `pnpm run build` completo só
+quando libs host mudarem. O staging `dsh-runtime/` usa **hardlinks** para os
+pacotes workspace, então libs rebuildadas propagam sozinhas; a exceção é
+`dsh-web-frontend/dist` (saída do vite com hashes novos): remover a pasta no
+staging e copiar de `apps/web/dist` de novo antes de rezipar.
+
+## Comandos
+
+```powershell
+wails generate module                              # regera frontend/wailsjs
+Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs   # bindings vivem DENTRO do embed
+wails build   # gera build/bin/openharness.exe (~158 MB com assets embutidos)
+wails dev     # desenvolvimento (requer assets já gerados)
+go vet ./...  # lint
+```
+
+## Notas
+
+- Primeira execução extrai o runtime para `%LOCALAPPDATA%\openharness\runtime`. Rebuilds do exe só extraem de novo se o conteúdo do runtime ou do `node.exe` mudou (não o hash bruto do zip).
+- A chave da API se configura na própria UI do harness (settings) ou via
+  `DEEPSEEK_API_KEY` / `KIMI_API_KEY` / `ANTHROPIC_API_KEY` /
+  `CLAUDE_CODE_OAUTH_TOKEN` / `OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN` /
+  `ZAI_API_KEY` / `OPENCODE_API_KEY`.
+- Auto-update consulta as GitHub Releases do repo privado. Sem token o check
+  volta 404: grave um PAT (contents:read) em
+  `%LOCALAPPDATA%\openharness\github.token` ou `OPENHARNESS_GITHUB_TOKEN`.
+- O SQLite de sessão do rc.8 (v2) **não** lê o storage antigo: dados em
+  `%LOCALAPPDATA%\openharness\dsh-home` de um exe rc.5 podem quebrar. Se a UI
+  não subir sessões, apague (ou renomeie) essa pasta e reabra o app.
+- Tentativa de exe único via `@yao-pkg/pkg --sea` foi descartada: o loader
+  Cordis cria junctions em `$DSH_HOME/profiles/node_modules` apontando para
+  diretórios reais, incompatível com o FS virtual /snapshot do SEA.

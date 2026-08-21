@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>OpenHarness</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #121218; --panel: #1a1a24; --border: #2a2a3a;
+    --text: #e4e4ef; --muted: #8a8a9e; --accent: #4f8cff; --error: #ff5f6b;
+  }
+  :root[data-harness-scheme="light"] {
+    color-scheme: light;
+    --bg: #f5f5f7; --panel: #ececf1; --border: #d4d4de;
+    --text: #1c1c24; --muted: #5a5a6e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+  #app { height: 100vh; display: flex; flex-direction: column; }
+
+  .titlebar { height: 38px; flex: none; display: flex; align-items: center; gap: 8px;
+    padding-left: 10px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .titlebar img { height: 22px; width: 22px; }
+  .titlebar .app-title { font-weight: 600; font-size: 13px; }
+  .titlebar .ver { font-size: 11px; color: var(--muted); }
+  .update-chip { flex: none; display: none; align-items: center; gap: 8px;
+    margin-right: 8px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--bg); font-size: 12px; color: var(--text); }
+  .update-chip.visible { display: flex; }
+  .update-chip button { background: var(--accent); color: #fff; border: none;
+    border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+  .drag-region { flex: 1; align-self: stretch; --wails-draggable: drag; }
+  .win-btn { width: 46px; height: 100%; background: transparent; color: var(--muted);
+    border: none; cursor: pointer; font-family: 'Segoe MDL2 Assets'; font-size: 12px; }
+  .win-btn:hover { background: var(--border); color: var(--text); }
+  .win-btn.close:hover { background: var(--error); color: #fff; }
+
+  #frame { flex: 1; border: none; width: 100%; }
+  #status { flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; color: var(--muted); }
+  #status[hidden] { display: none; }
+  #status .spinner { width: 28px; height: 28px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #status .error { color: var(--error); white-space: pre-wrap; max-width: 70ch; }
+  #status button { background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 16px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="titlebar">
+    <img src="logo.png" alt="OpenHarness" />
+    <span class="app-title">OpenHarness</span>
+    <span class="ver" id="app-version"></span>
+    <div class="drag-region"></div>
+    <div class="update-chip" id="update-chip">
+      <span id="update-label"></span>
+      <button type="button" id="btn-update">Atualizar</button>
+    </div>
+    <button class="win-btn" id="btn-min" title="Minimizar">&#xE921;</button>
+    <button class="win-btn" id="btn-max" title="Maximizar">&#xE922;</button>
+    <button class="win-btn close" id="btn-close" title="Fechar">&#xE8BB;</button>
+  </header>
+  <div id="status">
+    <div class="spinner"></div>
+    <div id="status-text">Iniciando o harness…</div>
+  </div>
+  <iframe id="frame" hidden></iframe>
+</div>
+<script type="module">
+  import { WindowMinimise, WindowToggleMaximise, Quit } from '/wailsjs/runtime/runtime.js'
+  import { HarnessState, RestartHarness, AppVersion, CheckForUpdate, ApplyUpdate } from '/wailsjs/go/app/App.js'
+
+  document.getElementById('btn-min').onclick = () => WindowMinimise()
+  document.getElementById('btn-max').onclick = () => WindowToggleMaximise()
+  document.getElementById('btn-close').onclick = () => Quit()
+
+  const status = document.getElementById('status')
+  const statusText = document.getElementById('status-text')
+  const frame = document.getElementById('frame')
+
+  // O harness (iframe) avisa o tema resolvido; a titlebar acompanha.
+  window.addEventListener('message', (e) => {
+    if (e.source === frame.contentWindow && e.data?.type === 'openharness:color-scheme') {
+      document.documentElement.dataset.harnessScheme = e.data.scheme === 'light' ? 'light' : 'dark'
+    }
+  })
+
+  async function poll() {
+    for (;;) {
+      const s = await HarnessState()
+      if (s.url) {
+        frame.src = s.url
+        frame.hidden = false
+        status.hidden = true
+        return
+      }
+      if (s.error) {
+        statusText.innerHTML = `<span class="error">Falha ao iniciar o harness:\n${s.error}</span>`
+        const btn = document.createElement('button')
+        btn.textContent = 'Tentar novamente'
+        btn.onclick = async () => {
+          btn.remove()
+          statusText.textContent = 'Reiniciando o harness…'
+          await RestartHarness()
+          poll()
+        }
+        status.appendChild(btn)
+        return
+      }
+      if (s.phase === 'extracting') {
+        statusText.textContent = 'Extraindo o runtime (só na primeira execução de cada versão)…'
+      } else {
+        statusText.textContent = 'Iniciando o harness…'
+      }
+      await new Promise((r) => setTimeout(r, 500))
+    }
+  }
+  poll()
+  void (async () => {
+    try {
+      const ver = await AppVersion()
+      document.getElementById('app-version').textContent = ver ? `v${ver}` : ''
+      const info = await CheckForUpdate()
+      const chip = document.getElementById('update-chip')
+      const label = document.getElementById('update-label')
+      const btn = document.getElementById('btn-update')
+      if (info.available) {
+        label.textContent = `v${info.latest} disponível`
+        chip.classList.add('visible')
+        btn.onclick = async () => {
+          btn.disabled = true
+          label.textContent = 'Baixando atualização…'
+          try {
+            await ApplyUpdate()
+          } catch (err) {
+            label.textContent = String(err)
+            btn.disabled = false
+          }
+        }
+      } else if (info.needsToken) {
+        label.textContent = 'Auto-update: falta github.token'
+        btn.hidden = true
+        chip.classList.add('visible')
+      }
+    } catch {
+      /* check is best-effort */
+    }
+  })()
+</script>
+</body>
+</html>
