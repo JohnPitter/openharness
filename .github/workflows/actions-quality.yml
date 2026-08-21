@@ -54,3 +54,4 @@ jobs:
         with:
           advanced-security: false
           annotations: true
+          inputs: .github/workflows
