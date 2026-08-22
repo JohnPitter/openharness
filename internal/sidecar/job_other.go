@@ -4,10 +4,17 @@ package sidecar
 
 import (
 	"os"
+	"os/exec"
 	"syscall"
 )
 
 type pgidJob struct{ pid int }
+
+func prepareSidecarCmd(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+}
+
+func resumeSidecar(_ *os.Process) {}
 
 func attachSidecarJob(p *os.Process) sidecarJob {
 	if p == nil {

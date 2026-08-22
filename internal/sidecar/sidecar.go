@@ -462,7 +462,7 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 	m.Phase.Store("starting")
 	m.cmd = exec.Command(nodePath, binPath, "web", "--no-open", "--host", "127.0.0.1", "--port", "0")
 	m.cmd.Dir = filepath.Join(dir, "dsh-runtime")
-	hideConsole(m.cmd)
+	prepareSidecarCmd(m.cmd)
 	m.cmd.Env = append(os.Environ(),
 		"DSH_HOME="+filepath.Join(m.Root, "dsh-home"),
 	)
@@ -478,6 +478,7 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("falha ao iniciar dsh: %w", err)
 	}
 	m.job = attachSidecarJob(m.cmd.Process)
+	resumeSidecar(m.cmd.Process)
 	m.mu.Unlock()
 
 	urlCh := make(chan string, 1)
