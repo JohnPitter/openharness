@@ -35,17 +35,13 @@ Console Anthropic e OpenAI Platform entram em **Adicionar provedor**. A chave Op
 
 ## Instalar
 
-1. Abra a [release mais recente](https://github.com/JohnPitter/openharness/releases/latest) (repo privado — precisa de permissão ou PAT).
+1. Abra a [release mais recente](https://github.com/JohnPitter/openharness/releases/latest).
 2. Baixe `openharness.exe`.
 3. Execute. O runtime extrai só quando o conteúdo muda.
 
 ### Auto-update
 
-O app consulta as tags/releases do GitHub. Repo privado exige autenticação:
-
-1. Crie um PAT fine-grained com **Contents: Read** neste repositório.
-2. Grave em `%LOCALAPPDATA%\openharness\github.token` **ou** defina `OPENHARNESS_GITHUB_TOKEN`.
-3. Na titlebar aparece **vX.Y.Z disponível → Atualizar**. O exe é trocado e o app reabre.
+O app consulta as GitHub Releases públicas. Quando há uma tag mais nova, a titlebar mostra **vX.Y.Z disponível → Atualizar**. O exe é trocado e o app reabre.
 
 ## Desenvolvimento
 
@@ -83,10 +79,10 @@ Detalhes do pipeline, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 Publicar um binário:
 
 ```powershell
-wails build -ldflags "-X openharness/internal/update.Version=0.1.4"
-git tag v0.1.4
-git push origin v0.1.4
-gh release upload v0.1.4 build/bin/openharness.exe
+wails build -ldflags "-X openharness/internal/update.Version=0.1.5"
+git tag v0.1.5
+git push origin v0.1.5
+gh release upload v0.1.5 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.

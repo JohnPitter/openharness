@@ -140,10 +140,6 @@
             btn.disabled = false
           }
         }
-      } else if (info.needsToken) {
-        label.textContent = 'Auto-update: falta github.token'
-        btn.hidden = true
-        chip.classList.add('visible')
       }
     } catch {
       /* check is best-effort */

@@ -5,7 +5,6 @@ export namespace update {
 	    latest: string;
 	    available: boolean;
 	    notes: string;
-	    needsToken: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
@@ -17,7 +16,6 @@ export namespace update {
 	        this.latest = source["latest"];
 	        this.available = source["available"];
 	        this.notes = source["notes"];
-	        this.needsToken = source["needsToken"];
 	    }
 	}
 

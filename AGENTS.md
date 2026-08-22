@@ -155,9 +155,7 @@ go vet ./...  # lint
   `DEEPSEEK_API_KEY` / `KIMI_API_KEY` / `ANTHROPIC_API_KEY` /
   `CLAUDE_CODE_OAUTH_TOKEN` / `OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN` /
   `ZAI_API_KEY` / `OPENCODE_API_KEY`.
-- Auto-update consulta as GitHub Releases do repo privado. Sem token o check
-  volta 404: grave um PAT (contents:read) em
-  `%LOCALAPPDATA%\openharness\github.token` ou `OPENHARNESS_GITHUB_TOKEN`.
+- Auto-update consulta as GitHub Releases públicas; não precisa de token.
 - O SQLite de sessão do rc.8 (v2) **não** lê o storage antigo: dados em
   `%LOCALAPPDATA%\openharness\dsh-home` de um exe rc.5 podem quebrar. Se a UI
   não subir sessões, apague (ou renomeie) essa pasta e reabra o app.

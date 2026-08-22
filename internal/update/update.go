@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -17,7 +16,7 @@ import (
 
 // Version is the build's semver without a leading v. Release builds also pass
 // -ldflags "-X openharness/internal/update.Version=…".
-var Version = "0.1.4"
+var Version = "0.1.5"
 
 // Repo is owner/name of the GitHub repository that publishes releases.
 var Repo = "JohnPitter/openharness"
@@ -33,9 +32,7 @@ type Info struct {
 	Latest      string `json:"latest"`
 	Available   bool   `json:"available"`
 	Notes       string `json:"notes"`
-	NeedsToken  bool   `json:"needsToken"`
 	AssetURL    string `json:"-"`
-	AssetAPIURL string `json:"-"`
 }
 
 type ghRelease struct {
@@ -55,14 +52,12 @@ type Checker struct {
 	Client *http.Client
 	API    string
 	Repo   string
-	Token  string
 }
 
 func defaultChecker() *Checker {
 	return &Checker{
 		Client: &http.Client{Timeout: 20 * time.Second},
 		Repo:   Repo,
-		Token:  loadToken(),
 	}
 }
 
@@ -71,33 +66,6 @@ func (c *Checker) api() string {
 		return strings.TrimRight(c.API, "/")
 	}
 	return "https://api.github.com"
-}
-
-func loadToken() string {
-	if t := strings.TrimSpace(os.Getenv("OPENHARNESS_GITHUB_TOKEN")); t != "" {
-		return t
-	}
-	if t := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); t != "" {
-		return t
-	}
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return ""
-	}
-	body, err := os.ReadFile(filepath.Join(base, "openharness", "github.token"))
-	if err != nil {
-		return ghAuthToken()
-	}
-	return strings.TrimSpace(string(body))
-}
-
-func ghAuthToken() string {
-	cmd := exec.Command("gh", "auth", "token")
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // Check reports whether GitHub has a newer non-draft release than Version.
@@ -119,8 +87,7 @@ func (c *Checker) Check(current string) (Info, error) {
 	}
 	defer res.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusUnauthorized {
-		info.NeedsToken = c.Token == ""
+	if res.StatusCode == http.StatusNotFound {
 		return info, nil
 	}
 	if res.StatusCode != http.StatusOK {
@@ -142,11 +109,10 @@ func (c *Checker) Check(current string) (Info, error) {
 	for _, asset := range rel.Assets {
 		if strings.EqualFold(asset.Name, AssetName) {
 			info.AssetURL = asset.BrowserDownloadURL
-			info.AssetAPIURL = asset.URL
 			break
 		}
 	}
-	if info.AssetURL == "" && info.AssetAPIURL == "" {
+	if info.AssetURL == "" {
 		info.Available = false
 	}
 	return info, nil
@@ -156,9 +122,6 @@ func (c *Checker) headers(req *http.Request, accept string) {
 	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
 }
 
 // Apply downloads the latest exe and replaces this process's binary.
@@ -178,11 +141,7 @@ func (c *Checker) Apply() error {
 	if !info.Available {
 		return fmt.Errorf("não há atualização disponível")
 	}
-	url := info.AssetAPIURL
-	if url == "" {
-		url = info.AssetURL
-	}
-	bin, err := c.download(url)
+	bin, err := c.download(info.AssetURL)
 	if err != nil {
 		return err
 	}

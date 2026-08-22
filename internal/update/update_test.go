@@ -41,20 +41,20 @@ func TestCheckLatest(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		if got := r.Header.Get("Authorization"); got != "Bearer secret" {
-			t.Errorf("authorization %q", got)
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Errorf("unexpected authorization %q", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(payload)
 	}))
 	t.Cleanup(srv.Close)
 
-	c := &Checker{Client: srv.Client(), API: srv.URL, Repo: "JohnPitter/openharness", Token: "secret"}
+	c := &Checker{Client: srv.Client(), API: srv.URL, Repo: "JohnPitter/openharness"}
 	info, err := c.Check("0.1.0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.Available || info.Latest != "0.2.0" || info.AssetAPIURL == "" {
+	if !info.Available || info.Latest != "0.2.0" || info.AssetURL == "" {
 		t.Fatalf("%+v", info)
 	}
 	same, err := c.Check("0.2.0")
@@ -92,7 +92,7 @@ func TestAwaitPreviousUnsetsEnv(t *testing.T) {
 	}
 }
 
-func TestCheckPrivateWithoutToken(t *testing.T) {
+func TestCheckNotFoundIsQuiet(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -102,7 +102,7 @@ func TestCheckPrivateWithoutToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.NeedsToken || info.Available {
+	if info.Available {
 		t.Fatalf("%+v", info)
 	}
 }
