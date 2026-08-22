@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -62,6 +63,32 @@ func TestCheckLatest(t *testing.T) {
 	}
 	if same.Available {
 		t.Fatal("same version should not be available")
+	}
+}
+
+func TestPidFromEnv(t *testing.T) {
+	t.Setenv(waitPIDEnv, " 4321 ")
+	if pidFromEnv() != 4321 {
+		t.Fatalf("got %d", pidFromEnv())
+	}
+	t.Setenv(waitPIDEnv, "nope")
+	if pidFromEnv() != 0 {
+		t.Fatal("invalid pid should be 0")
+	}
+	t.Setenv(waitPIDEnv, "")
+	if pidFromEnv() != 0 {
+		t.Fatal("empty pid should be 0")
+	}
+}
+
+func TestAwaitPreviousUnsetsEnv(t *testing.T) {
+	prev := afterParent
+	afterParent = 0
+	t.Cleanup(func() { afterParent = prev })
+	t.Setenv(waitPIDEnv, "2147483647")
+	AwaitPrevious()
+	if os.Getenv(waitPIDEnv) != "" {
+		t.Fatal("wait pid env should be cleared")
 	}
 }
 

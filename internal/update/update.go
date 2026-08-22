@@ -15,9 +15,9 @@ import (
 	"time"
 )
 
-// Version is the build's semver without a leading v. Overridden at release
-// with -ldflags "-X openharness/internal/update.Version=0.1.2".
-var Version = "0.1.2"
+// Version is the build's semver without a leading v. Release builds also pass
+// -ldflags "-X openharness/internal/update.Version=…".
+var Version = "0.1.4"
 
 // Repo is owner/name of the GitHub repository that publishes releases.
 var Repo = "JohnPitter/openharness"
@@ -208,9 +208,7 @@ func (c *Checker) Apply() error {
 		_ = os.Rename(old, exe)
 		return err
 	}
-	cmd := exec.Command(exe)
-	cmd.Dir = filepath.Dir(exe)
-	if err := cmd.Start(); err != nil {
+	if err := startRelaunch(exe); err != nil {
 		return err
 	}
 	os.Exit(0)
