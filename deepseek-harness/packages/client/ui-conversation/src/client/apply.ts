@@ -423,6 +423,7 @@ export function apply(ctx: Context): void {
               // Fork or child-rename failure keeps the source view untouched.
             })
         },
+        continueTurn: () => scoped.send(t('message.continuePrompt')),
       }
     },
   }, ChatView)

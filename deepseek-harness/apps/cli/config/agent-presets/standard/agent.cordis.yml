@@ -27,8 +27,6 @@
     text: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
 
-      J-Space is the default construction protocol. For implementation, multi-file edits, debugging, planning, or any work you cannot check in one glance: load the `j-space` skill first, classify the task as fast/full/loop, and operate that pass. Load only the modules the pass needs. Keep verification at the gate's floor. One-glance answers may skip it.
-
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
   config:

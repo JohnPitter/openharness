@@ -24,9 +24,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CredentialView, IApiClient, SettingsNamespaceView, SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
-import {
-  DeepSeekModelsEditor, modelDrafts, validateDeepSeekModels,
-} from './DeepSeekModelsEditor.tsx'
+import { modelDrafts, validateDeepSeekModels } from './DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
@@ -254,7 +252,11 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   // What the form currently shows, which is what an interrogation must ask:
   // an edited-but-unsaved endpoint, and a key typed but not yet stored.
   const probeApi = stringAt(draft, 'api') ?? stringAt(fallback, 'api')
-  const probeBaseURL = stringAt(draft, 'baseURL') ?? stringAt(fallback, 'baseURL')
+  const probeBaseURL = stringAt(draft, 'baseURL')
+    ?? stringAt(fallback, 'baseURL')
+    ?? (layout === 'kimi'
+      ? KIMI_PUBLIC_BASE_URL
+      : layout === 'deepseek' ? DEEPSEEK_PUBLIC_BASE_URL : undefined)
   const probe = {
     settingsNs: namespace.ns,
     // Naming the route lets an adapter that already describes it answer from
@@ -375,8 +377,6 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     const customModels = schema.getPath(draft, ['models'])
     const modelsOverridden = schema.hasPath(draft, ['models'])
     const models = modelDrafts(modelsOverridden ? customModels : inheritedModels())
-    const defaultContextWindow = schema.getPath(fallback, ['defaultContextWindow'])
-    const defaultMaxTokens = schema.getPath(fallback, ['maxTokens'])
     const keyPlaceholder = keyLocked
       ? t('keyEnvLocked')
       : keyState?.configured === true && props.credentialRequired !== true
@@ -391,6 +391,12 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         setDraft(current => schema.setPath(current, ['models'], next))
       },
       onReset: () => { setDraft(current => schema.deletePath(current, ['models'])) },
+      ...typeof schema.getPath(fallback, ['defaultContextWindow']) === 'number'
+        ? { defaultContextWindow: schema.getPath(fallback, ['defaultContextWindow']) as number }
+        : {},
+      ...typeof schema.getPath(fallback, ['maxTokens']) === 'number'
+        ? { defaultMaxTokens: schema.getPath(fallback, ['maxTokens']) as number }
+        : {},
     }
     const runOauth = async (method?: string): Promise<void> => {
       setBusy(true)
@@ -562,19 +568,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 </div>
               )
               : null}
-            {/* The kimi editor shares DeepSeek's catalog rows (id, name,
-                context window); only pi-ai interrogates the endpoint instead. */}
-            {family === 'deepseek' || family === 'kimi'
-              ? (
-                <DeepSeekModelsEditor
-                  {...catalogProps}
-                  defaultContextWindow={typeof defaultContextWindow === 'number'
-                    ? defaultContextWindow
-                    : undefined}
-                  defaultMaxTokens={typeof defaultMaxTokens === 'number' ? defaultMaxTokens : undefined}
-                />
-              )
-              : <ModelListEditor {...catalogProps} probe={probe} probeBlocked={keyFailure} api={api} />}
+            <ModelListEditor {...catalogProps} probe={probe} probeBlocked={keyFailure} api={api} />
           </div>
         </details>}
       </>

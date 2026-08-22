@@ -48,7 +48,13 @@
       "path": "../../runtime-diagnostics/invariants"
     },
     {
-      "path": "../../api/remotes/tsconfig.client.json"
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../core/system-prompt"
+    },
+    {
+      "path": "../../../vendor/schemastery"
     }
   ]
 }

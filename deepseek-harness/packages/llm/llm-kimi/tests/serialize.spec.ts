@@ -68,6 +68,17 @@ describe('serializeRequest K3', () => {
     expect(wire.reasoning_effort).toBe('low')
     expect(wire.thinking).toBeUndefined()
   })
+
+  it('uses low effort for compaction on K3', () => {
+    const wire = serializeRequest(
+      request({
+        model: 'k3-256k',
+        purpose: 'compaction',
+        reasoningEffort: ReasoningEffortId('max'),
+      }),
+    )
+    expect(wire.reasoning_effort).toBe('low')
+  })
 })
 
 describe('serializeRequest K2', () => {
@@ -85,6 +96,18 @@ describe('serializeRequest K2', () => {
     )
     expect(off.thinking).toEqual({ type: 'disabled' })
     expect(off.reasoning_effort).toBeUndefined()
+  })
+
+  it('disables thinking for compaction on K2-toggle models', () => {
+    const wire = serializeRequest(
+      request({
+        model: 'kimi-k2.6',
+        purpose: 'compaction',
+        reasoningEffort: ReasoningEffortId('high'),
+      }),
+      { thinking: 'enabled' },
+    )
+    expect(wire.thinking).toEqual({ type: 'disabled' })
   })
 
   it('keeps K2.7 code thinking enabled', () => {

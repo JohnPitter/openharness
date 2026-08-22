@@ -37,6 +37,10 @@ import { UsagesSection } from './UsagesSection.tsx'
 import type { UsagesSectionInjected } from './UsagesSection.tsx'
 import { currentDirectorySource } from './usage-directory.ts'
 import { en, es, pt, zh, type ModelKey } from './locales.ts'
+import {
+  JSPACE_DEFAULT_ENABLED, JSPACE_ENABLED_FIELD, JSPACE_SETTINGS_NAMESPACE,
+  type JspaceSettings,
+} from '../jspace-settings.ts'
 
 export { ModelDirectory } from './directory.ts'
 export type { ModelDirectoryState } from './directory.ts'
@@ -109,7 +113,7 @@ function selectionOf(state: ModelDirectoryState, id: string): ModelSelection | u
 const NS = 'model'
 
 /** Required services: the contribution registry, the seat's slot registry, locale, and the service's own faces. */
-export const inject = ['commandUi', 'connection', 'locale', 'sessions', 'slots', 'remote', 'settingsNav']
+export const inject = ['commandUi', 'connection', 'locale', 'sessions', 'slots', 'remote', 'settingsNav', 'settingsScope']
 
 /**
  * Client plugin body: mount ModelDirectoryResolver, register the `model` dictionaries,
@@ -127,6 +131,17 @@ export function apply(ctx: ClientContext): void {
   // The composer-block reason is this plugin's own copy, read at raise time so
   // a locale change reaches the next publish.
   ctx.plugin(ModelDirectoryResolver, { blockReason: () => t('blocked.composer') })
+
+  const jspaceScope = ctx.settingsScope.bind<JspaceSettings>({ namespace: JSPACE_SETTINGS_NAMESPACE })
+  const jspaceControl = {
+    subscribe: (listener: () => void) => jspaceScope.subscribe(listener),
+    getEnabled: () => {
+      const snap = jspaceScope.getSnapshot()
+      if (snap.status !== 'ready') return JSPACE_DEFAULT_ENABLED
+      return snap.value?.enabled ?? JSPACE_DEFAULT_ENABLED
+    },
+    set: (enabled: boolean) => jspaceScope.set(JSPACE_ENABLED_FIELD, enabled),
+  }
 
   const settings = (ctx.get('connection') as ConnectionHandle | undefined)?.api.settings
   const worker = settings === undefined ? undefined : new WorkerModelStore(settings)
@@ -188,6 +203,7 @@ export function apply(ctx: ClientContext): void {
           select: (selection: ModelSelection) => available
             ? directory.select(selection).then(() => true, () => false)
             : Promise.resolve(false),
+          jspace: jspaceControl,
           ...worker === undefined ? {} : {
             worker: {
               directory: worker.store,

@@ -162,6 +162,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     read: () => savedScroll,
   }
   const forkAt = vi.fn()
+  const continueTurn = vi.fn(async () => {})
   // Selection rides the REAL chat store (same construction path as
   // production; the view reads it through the PropsStore useStore share).
   const chat = createChatStore().create()
@@ -287,6 +288,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     inspectCall,
     chatScroll,
     forkAt,
+    continueTurn,
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
     // Mirrors the real lookup chain (conversation namespace, then common).
@@ -295,7 +297,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
   const setSelection = (next: SelectionTarget | null): void => { chat.actions.select(next) }
   return {
     set, ChatView, props, openDetails, openFile, loadOlder, inspectCall,
-    chatScroll, forkAt, setSelection, toolOwners,
+    chatScroll, forkAt, continueTurn, setSelection, toolOwners,
   }
 }
 
@@ -585,9 +587,20 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     const statuses = view.getAllByRole('status')
     expect(statuses.map(status => status.textContent)).toEqual([
-      '本轮运行失败API key is invalidAUTH',
+      '本轮运行失败API key is invalid',
       '本轮运行失败plugin exploded',
     ])
+    expect(view.getByText('AUTH')).toBeTruthy()
+    const continues = view.getAllByRole('button', { name: '继续' })
+    expect(continues).toHaveLength(2)
+    fireEvent.click(continues[1]!)
+    expect(h.continueTurn).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables continue on a turn failure while the session is running', () => {
+    const h = makeHarness({ nodes: [user(1, 'try'), turnError(2, 'AUTH')], running: true })
+    const view = render(<h.ChatView {...h.props} />)
+    expect((view.getByRole('button', { name: '继续' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('renders the max-tokens notice with localized guidance, distinct from turn errors', () => {
@@ -597,6 +610,7 @@ describe('ChatView', () => {
     expect(statuses.map(status => status.textContent)).toEqual([
       '已达到输出 token 上限回答被截断，已有输出保留在对话中。发送“继续”可让模型接着输出。',
     ])
+    expect(view.getByRole('button', { name: '继续' })).toBeTruthy()
     expect(view.queryByText('本轮运行失败')).toBeNull()
   })
 

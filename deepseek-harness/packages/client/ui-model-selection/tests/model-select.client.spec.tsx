@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ComponentProps } from 'react'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import { ModelSelect } from '../src/client/ModelSelect.tsx'
@@ -180,5 +180,99 @@ describe('ModelSelect reasoning effort', () => {
 
     expect(screen.queryByRole('button')).toBeNull()
     expect(load).not.toHaveBeenCalled()
+  })
+})
+
+function jspaceControl(initial = true) {
+  let enabled = initial
+  const listeners = new Set<() => void>()
+  return {
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    getEnabled: () => enabled,
+    set: async (next: boolean) => {
+      enabled = next
+      for (const listener of listeners) listener()
+    },
+  }
+}
+
+describe('ModelSelect J-space toggle', () => {
+  it('offers Ligado/Desligado in the model menu and persists Off', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    const jspace = jspaceControl(true)
+    const set = vi.spyOn(jspace, 'set')
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      jspace={jspace}
+      t={t}
+    />)
+
+    const trigger = screen.getByRole('button', {
+      name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 High',
+    })
+    expect(trigger.textContent).toContain('开')
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /J-space/ }))
+    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
+      .toEqual(['开加载 j-space skill，按 fast/full/loop 工作。', '关不注入 J-space 协议。'])
+
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /关/ }))
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledWith(false)
+      expect(trigger.textContent).toContain('关')
+    })
+  })
+
+  it('hides the J-space row on the workflow worker picker', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    const worker = createSnapshotStore({ current: null, status: 'ready' as const, error: null })
+    const sessionId = 'wf' as SessionId
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      jspace={jspaceControl()}
+      sessionId={sessionId}
+      useSessions={sel => sel({
+        ids: [sessionId],
+        byId: {
+          [sessionId]: {
+            id: sessionId,
+            displayTitle: 'wf',
+            running: false,
+            blank: false,
+            updatedAt: 0,
+            agentPreset: 'workflow',
+          },
+        },
+        current: sessionId,
+        phase: 'ready',
+        subagentsByParent: {},
+        jobsBySession: {},
+        currentAddress: undefined,
+      })}
+      worker={{
+        directory: worker,
+        load: vi.fn(),
+        select: vi.fn().mockResolvedValue(true),
+      }}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /选择规划/ }))
+    expect(screen.getByRole('menuitem', { name: /J-space/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /选择规划/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: /选择工人/ }))
+    expect(screen.queryByRole('menuitem', { name: /J-space/ })).toBeNull()
   })
 })

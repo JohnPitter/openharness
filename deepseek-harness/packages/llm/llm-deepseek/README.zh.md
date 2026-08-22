@@ -68,7 +68,7 @@ harness LLM（大语言模型）seam 的 DeepSeek chat-completions 适配器：�
 
 同一确切模型结果会在部署策略允许思考时，为每个原样传递模型在 `reasoning` 下公开有序的 `off`、`low`、`high` 和 `max` 推理（reasoning）强度。`reasoningEffort` 选择部署默认值，省略时回退为 `high`。`agent/request` 可以在每个会话步骤替换它；解析后的值会记录在 `request/header`。`low`、`high` 和 `max` 会启用思考，并以同名值序列化为官方顶层 `reasoning_effort`；适配器持有的 `off` 则序列化为 `thinking.type: disabled`，且省略 `reasoning_effort`。兼容别名 `medium` 与 `xhigh` 映射为 `high`。不支持的值会在网络 I/O 前以 `UNSUPPORTED_REASONING_EFFORT` 失败。
 
-`thinking: disabled` 是部署锁定：它只公布 `off`，并以 `off` 为默认值。省略 `reasoningEffort` 或将其配置为 `off` 均有效；配置 `low`、`high` 或 `max` 会使插件加载失败，直接按请求启用思考也会在网络 I/O 前失败。携带 `GenerateOptions.purpose: 'session-title'` 的请求也会强制禁用思考并省略已解析的推理强度，将有界输出保留给可见标题文本，不改变会话或压缩（compaction）默认值。
+`thinking: disabled` 是部署锁定：它只公布 `off`，并以 `off` 为默认值。省略 `reasoningEffort` 或将其配置为 `off` 均有效；配置 `low`、`high` 或 `max` 会使插件加载失败，直接按请求启用思考也会在网络 I/O 前失败。携带 `GenerateOptions.purpose: 'session-title'` 或 `'compaction'` 的请求也会强制禁用思考并省略已解析的推理强度，将有界输出保留给可见标题或检查点文本。
 
 `streamIdleTimeoutMs` 会限制每次未完成提供方读取，包括初始 `fetch`，但不计入消费方在分片间花费的时间。DeepSeek SSE 注释和成功的文件解析会作为传输活动使尚未完成的读取重新计时，但绝不会成为 `StreamChunk` 值或会话日志事件。同一个稳定的 abort 信号会在整个调用期间传递给请求与 body reader；过期会停止传输并抛出 `LlmError('TIMEOUT')`，较早的调用方 abort 则抛出 `LlmError('ABORTED')`。适配器通常每次 `stream()` 调用发起一次 chat 请求，只有失效文件恢复会发起第二次。首次 chat 前的文件解析失败会发送一次内联请求。如果失效文件响应后的替换解析失败，该内联请求就是唯一允许的重试。适配器把已配置重试策略注册为提供方元数据，再由 `dsh-llm-retry` 在持久化的 agent（智能体）步骤边界单独执行该策略。
 
@@ -82,7 +82,7 @@ harness LLM（大语言模型）seam 的 DeepSeek chat-completions 适配器：�
 
 唯一在注册期捕获的事实是重试策略：其解析值变化时，插件原地重新注册该路由（同一适配器实例、一个同步区段），因此 `ctx.llm.providerRetryPolicy('deepseek-official')` 始终报告当前策略。
 
-该插件还会在可配置提供方目录（`ctx.llm.listConfigurableProviders()`）中声明自己的路由：提供方为 `deepseek-official`，settings namespace 为 `llm-deepseek`，settings path 为空——整个分节就是 profile。配置界面借助该条目，把本适配器与休眠的 pi-ai 提供方一并呈现。
+该插件还会在可配置提供方目录（`ctx.llm.listConfigurableProviders()`）中声明自己的路由：提供方为 `deepseek-official`，settings namespace 为 `llm-deepseek`，settings path 为空——整个分节就是 profile。配置界面借助该条目，把本适配器与休眠的 pi-ai 提供方一并呈现。`ctx.llm.registerModelDiscovery('llm-deepseek', …)` 回答 Models 页面的**获取可用模型**按钮（`GET {baseURL}/models`）；失败的 listing 会报告给表单，而不是静默回退。
 
 ## 应用归因
 

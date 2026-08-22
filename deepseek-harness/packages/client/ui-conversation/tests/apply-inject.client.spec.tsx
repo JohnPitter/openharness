@@ -147,6 +147,11 @@ describe('conversation slot inject API', () => {
     expect(b.runtime.sessions.calls).toContainEqual({
       method: 'fork', args: [{ sessionId: ROOT, atSeq: 17, increaseTitle: true }],
     })
+    await chatView.injected.continueTurn()
+    expect(b.sessionFake.prompt).toHaveBeenCalledWith(
+      [{ type: 'text', text: '从停下的地方继续，不要从头开始。' }],
+      'queue',
+    )
     await b.runtime.dispose()
   })
 

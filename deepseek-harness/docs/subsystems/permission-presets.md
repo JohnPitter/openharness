@@ -8,7 +8,7 @@ Source: [`packages/interaction/permission-presets/src/index.ts`](../../packages/
 
 ## The preset table
 
-A preset is a table key mapping to one sandbox/approval bundle plus optional client presentation; the default table ships `workspace-write` (`workspace-write` + `ask`) and `danger-full-access` (`danger-full-access` + `never`).
+A preset is a table key mapping to one sandbox/approval bundle plus optional client presentation; the default table ships `workspace-write` (`workspace-write` + `ask`) and `danger-full-access` (`danger-full-access` + `always`).
 
 ```ts type-equiv
 /** One preset's sandbox/approval bundle and optional client presentation. */

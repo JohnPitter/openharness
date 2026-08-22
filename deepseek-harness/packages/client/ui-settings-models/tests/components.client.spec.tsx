@@ -142,12 +142,14 @@ function scriptedFace(overrides: {
   mutate?: ReturnType<typeof vi.fn>
   set?: ReturnType<typeof vi.fn>
   unset?: ReturnType<typeof vi.fn>
+  discover?: ReturnType<typeof vi.fn>
 } = {}) {
   const update = overrides.update ?? vi.fn(() => Promise.resolve(ok(wireNamespaces()[2])))
   const replace = overrides.replace ?? vi.fn(() => Promise.resolve(ok(wireNamespaces()[2])))
   const mutate = overrides.mutate ?? vi.fn(() => Promise.resolve(ok(wireNamespaces()[2])))
   const set = overrides.set ?? vi.fn(() => Promise.resolve(ok({})))
   const unset = overrides.unset ?? vi.fn(() => Promise.resolve(ok({})))
+  const discover = overrides.discover ?? vi.fn(() => Promise.resolve(ok({ models: [] })))
   const face = {
     llm: {
       providers: vi.fn(() => Promise.resolve(ok({
@@ -161,6 +163,7 @@ function scriptedFace(overrides: {
         ],
       }))),
       models: vi.fn(() => Promise.resolve(ok({ groups: [], failures: [] }))),
+      discoverModels: discover,
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(ok({ writable: true, hasDocument: false, namespaces: wireNamespaces() }))),
@@ -180,13 +183,13 @@ function scriptedFace(overrides: {
       unset,
     },
   }
-  return { face, update, replace, mutate, set, unset }
+  return { face, update, replace, mutate, set, unset, discover }
 }
 
 type WireFace = ConstructorParameters<typeof ModelsSettingsStore>[0]
 
 async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
-  const { face, update, replace, mutate, set, unset } = scripted
+  const { face, update, replace, mutate, set, unset, discover } = scripted
   const mirror = new SettingsDescribeMirror(face as never)
   const controller = new ModelsSettingsStore(face as unknown as WireFace, settingsSchema, mirror)
   await controller.load()
@@ -198,7 +201,7 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
     t,
   }
   const view = render(<ModelsSection {...injected} />)
-  return { view, face, update, replace, mutate, set, unset, controller, mirror }
+  return { view, face, update, replace, mutate, set, unset, discover, controller, mirror }
 }
 
 async function mountSection(overrides: Parameters<typeof scriptedFace>[0] = {}) {
@@ -444,6 +447,65 @@ describe('ModelsSection', () => {
     })
   })
 
+  it('asks the DeepSeek adapter for its live listing from the customized fold', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [{ id: 'deepseek-v4-flash', name: 'Flash' }],
+    })))
+    await mountDeepSeekCard({ discover })
+    fireEvent.click(screen.getByText(en.customized))
+    expect(screen.getByText(en.fetchModels)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await waitFor(() => { expect(discover).toHaveBeenCalled() })
+    expect(discover).toHaveBeenCalledWith({
+      settingsNs: 'llm-deepseek',
+      provider: 'deepseek-official',
+      baseURL: 'https://base',
+    })
+  })
+
+  it('asks the Kimi adapter for its live listing from the public endpoint', async () => {
+    const KimiConfig = Schema.object({
+      apiKeyEnv: Schema.string().role('credential-ref'),
+      baseURL: Schema.string(),
+      models: Schema.array(Schema.object({
+        id: Schema.string().required(),
+        name: Schema.string(),
+      })),
+    })
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'k3' }] })))
+    const { face } = scriptedFace({ discover })
+    const namespace: SettingsNamespaceView = {
+      ns: 'llm-kimi',
+      schema: JSON.parse(JSON.stringify(KimiConfig.toJSON())) as unknown,
+      value: { apiKeyEnv: 'KIMI_API_KEY' },
+      applies: 'live',
+      secrets: [],
+      revision: 0,
+    }
+    const { ProviderEditor } = await import('../src/client/ProviderEditor.tsx')
+    render(<ProviderEditor
+      provider="kimi-for-coding"
+      displayName="Kimi for Code"
+      namespace={namespace}
+      schema={settingsSchema}
+      settingsPath={[]}
+      api={face as never}
+      t={t}
+      readOnly={false}
+      onClose={() => {}}
+    />)
+    fireEvent.click(screen.getByText(en.customized))
+    expect(screen.getByLabelText<HTMLInputElement>(en.baseUrl).placeholder)
+      .toBe('https://api.kimi.com/coding/v1')
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await waitFor(() => { expect(discover).toHaveBeenCalled() })
+    expect(discover).toHaveBeenCalledWith({
+      settingsNs: 'llm-kimi',
+      provider: 'kimi-for-coding',
+      baseURL: 'https://api.kimi.com/coding/v1',
+    })
+  })
+
   it('materializes inherited models and adds an arbitrary DeepSeek id', async () => {
     const { mutate } = await mountDeepSeekCard({
       mutate: vi.fn(() => Promise.resolve(ok(wireNamespaces()[0]))),
@@ -460,7 +522,7 @@ describe('ModelsSection', () => {
     fireEvent.change(ids[2] as HTMLInputElement, { target: { value: 'private-preview' } })
     fireEvent.change(names[2] as HTMLInputElement, { target: { value: 'Private Preview' } })
     // Only row 3 is open, so its capacity is addressed by its own label.
-    fireEvent.change(screen.getByLabelText(`${en.contextWindow} 3`), { target: { value: '131072' } })
+    fireEvent.change(screen.getByLabelText(`${en.modelContextWindow} 3`), { target: { value: '131072' } })
     fireEvent.click(screen.getByText(en.apply))
 
     await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
@@ -555,7 +617,7 @@ describe('ModelsSection', () => {
     fireEvent.click(screen.getByText(en.customized))
     expandRow(1)
     expandRow(2)
-    const windows = capacityInputs(en.contextWindow)
+    const windows = capacityInputs(en.modelContextWindow)
     // The inherited 1000000 reads back short.
     expect((windows[0] as HTMLInputElement).value).toBe('1M')
 
@@ -593,7 +655,7 @@ describe('ModelsSection', () => {
     fireEvent.click(screen.getByText(en.customized))
     expandRow(1)
     expandRow(2)
-    const windows = capacityInputs(en.contextWindow)
+    const windows = capacityInputs(en.modelContextWindow)
     fireEvent.change(windows[0] as HTMLInputElement, { target: { value: '1 gazillion' } })
     // Blurring a row that is not the edited one leaves the buffer alone.
     fireEvent.blur(windows[1] as HTMLInputElement)
@@ -657,7 +719,7 @@ describe('ModelsSection', () => {
     fireEvent.click(screen.getByText(en.customized))
     expandRow(1)
     expandRow(2)
-    const windows = capacityInputs(en.contextWindow)
+    const windows = capacityInputs(en.modelContextWindow)
     fireEvent.change(windows[0] as HTMLInputElement, { target: { value: 'not a number' } })
     fireEvent.blur(windows[0] as HTMLInputElement)
     fireEvent.change(windows[1] as HTMLInputElement, { target: { value: '2M' } })
@@ -669,7 +731,7 @@ describe('ModelsSection', () => {
   it('re-keys the typed text around a removed row', async () => {
     await mountDeepSeekCard()
     fireEvent.click(screen.getByText(en.customized))
-    const windows = (): HTMLInputElement[] => capacityInputs(en.contextWindow)
+    const windows = (): HTMLInputElement[] => capacityInputs(en.modelContextWindow)
     const removeRow = (at: number): void => {
       fireEvent.click(screen.getAllByLabelText(new RegExp(en.removeModel))[at] as HTMLElement)
     }
@@ -706,14 +768,14 @@ describe('ModelsSection', () => {
     })
     fireEvent.click(screen.getByText(en.customized))
     expandRow(1)
-    const windows = capacityInputs(en.contextWindow)
+    const windows = capacityInputs(en.modelContextWindow)
     fireEvent.change(windows[0] as HTMLInputElement, { target: { value: 'garbage' } })
     fireEvent.blur(windows[0] as HTMLInputElement)
     fireEvent.click(screen.getByText(en.resetModels))
 
     // Reset collapses every row, so the restored capacity needs opening again.
     expandRow(1)
-    const restored = capacityInputs(en.contextWindow)
+    const restored = capacityInputs(en.modelContextWindow)
     expect((restored[0] as HTMLInputElement).value).toBe('1M')
 
     // Reset put the draft back where it started, so Apply writes nothing at
@@ -731,18 +793,18 @@ describe('ModelsSection', () => {
     expandRow(1)
     expandRow(2)
     // The profile's own cap is the placeholder both rows inherit.
-    expect(capacityInputs(en.maxTokens).map(input => input.placeholder)).toEqual(['256K', '256K'])
+    expect(capacityInputs(en.modelMaxTokens).map(input => input.placeholder)).toEqual(['256K', '256K'])
 
-    fireEvent.change(screen.getByLabelText(`${en.maxTokens} 2`), { target: { value: '64K' } })
-    fireEvent.blur(screen.getByLabelText(`${en.maxTokens} 2`))
-    expect(screen.getByLabelText<HTMLInputElement>(`${en.maxTokens} 2`).value).toBe('64K')
+    fireEvent.change(screen.getByLabelText(`${en.modelMaxTokens} 2`), { target: { value: '64K' } })
+    fireEvent.blur(screen.getByLabelText(`${en.modelMaxTokens} 2`))
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelMaxTokens} 2`).value).toBe('64K')
 
     // Dropping the row above carries the cap text down with its own row.
     fireEvent.click(screen.getAllByLabelText(new RegExp(en.removeModel))[0] as HTMLElement)
-    expect(screen.getByLabelText<HTMLInputElement>(`${en.maxTokens} 1`).value).toBe('64K')
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelMaxTokens} 1`).value).toBe('64K')
     // The disclosure closes on a second press.
     expandRow(1)
-    expect(screen.queryByLabelText(`${en.maxTokens} 1`)).toBeNull()
+    expect(screen.queryByLabelText(`${en.modelMaxTokens} 1`)).toBeNull()
 
     fireEvent.click(screen.getByText(en.apply))
     await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
@@ -807,7 +869,7 @@ describe('ModelsSection', () => {
 
     const names = screen.getAllByLabelText(new RegExp(en.modelName))
     expandRow(1)
-    const windows = capacityInputs(en.contextWindow)
+    const windows = capacityInputs(en.modelContextWindow)
     fireEvent.change(names[0] as HTMLInputElement, { target: { value: '' } })
     fireEvent.change(windows[0] as HTMLInputElement, { target: { value: '' } })
     fireEvent.click(screen.getByText(en.apply))

@@ -96,7 +96,7 @@ describe('/permission command', () => {
     expect(inject.mock.calls[0]?.[0]).toMatchObject({
       content: [{
         type: 'text',
-        text: 'The approval policy changed from "ask" to "never" (changed by the user).',
+        text: 'The approval policy changed from "ask" to "always" (changed by the user).',
       }],
     })
     const run = session.events.find(event => event.type === 'command/run')

@@ -24,9 +24,10 @@ const SUMMARY_CLOSE_TAG = '</compacted-summary>'
 /**
  * The summarization directive, delivered as the FINAL user message after the
  * replayed conversation rather than as a distinct summarizer system prompt.
- * Keeping the conversation's own system prompt, tools, and message prefix in
- * front of it makes the auxiliary call a genuine prefix of the last routed
- * request, so the provider's KV cache is reused instead of invalidated.
+ * The conversation's own system prompt and message prefix stay in front of it
+ * so the auxiliary call reuses the provider's KV cache for that prefix. Tools
+ * are omitted from the call: a model that can tool-call often does so instead
+ * of writing the checkpoint, which produces no usable summary.
  */
 const COMPACTION_INSTRUCTION = [
   'You are now acting as a compaction engine for this AI coding assistant. Condense the conversation ABOVE into a structured checkpoint that lets another model resume the work with no loss of essential context.',
@@ -71,14 +72,15 @@ const CHECKPOINT_PREAMBLE =
 
 /**
  * The replayed conversation surface the summarizer condenses. Reproducing the
- * last routed request's system prompt, tools, and leading messages verbatim
- * lets the auxiliary call reuse the provider's warm prefix cache; the trailing
- * compaction instruction is then the only novel input.
+ * last routed request's system prompt and leading messages lets the auxiliary
+ * call reuse the provider's warm prefix cache; the trailing compaction
+ * instruction is then the only novel input. Recorded tool schemas stay on this
+ * input for region reconstruction; the LLM call itself does not advertise them.
  */
 export interface SummarizationInput {
   /** The conversation's own system prompt, reused for prefix-cache alignment; absent for a system-less request. */
   readonly system?: string
-  /** The conversation's tool schemas, reused for prefix-cache alignment; absent when the request carried none. */
+  /** Tool schemas of the shadowed request; recorded here, not sent on the summarizer call. */
   readonly tools?: readonly ToolSchema[]
   /** The shadowed region, in surface order, that precedes the compaction instruction. */
   readonly messages: readonly Message[]
@@ -109,11 +111,12 @@ export type SummaryResult = {
 
 /**
  * Run the default cache-reusing `ctx.llm.stream()` summarization call: replay
- * the conversation prefix, then append the compaction instruction as the final
- * user message so the provider's warm prefix cache is reused.
+ * the conversation prefix (without tools), then append the compaction
+ * instruction as the final user message so the provider's warm prefix cache is
+ * reused for system and messages.
  * @param ctx - context providing the LLM service.
  * @param config - resolved backend configuration.
- * @param input - replayed conversation prefix (system, tools, and leading messages) to condense.
+ * @param input - replayed conversation prefix (system and leading messages) to condense.
  * @param agent - supplies routed-model history, fallback model, and session id.
  * @param signal - optional cancellation forwarded to the adapter.
  * @returns safe text-only summary blocks and the exact call envelope and output.
@@ -155,7 +158,6 @@ export async function summarizeWithLlm(
     model: target.model,
     messages,
     ...input.system === undefined ? {} : { system: input.system },
-    ...input.tools === undefined ? {} : { tools: [...input.tools] },
     maxTokens: config.maxTokens,
     sessionId: agent.session.id,
     purpose: 'compaction',
@@ -213,12 +215,20 @@ function finishError(finish: FinishReason): Error | undefined {
   }
 }
 
-/** Reject visual output and keep only text before synthesizing a user message. */
+/**
+ * Reject visual output and keep only text before synthesizing a user message.
+ * Models that must think (K2.7 Code, K3) often emit the checkpoint only as
+ * reasoning with an empty visible text slot; that reasoning is the summary.
+ */
 function summaryText(
   blocks: readonly ContentBlock[],
 ): Array<Extract<ContentBlock, { type: 'text' }>> {
   if (contentHasImage(blocks)) {
     throw new LlmError('compaction summary cannot contain image output', 'UNSUPPORTED_CONTENT')
   }
-  return blocks.filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+  const text = blocks.filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+  if (text.some(block => block.text.trim().length > 0)) return text
+  return blocks
+    .filter((block): block is Extract<ContentBlock, { type: 'reasoning' }> => block.type === 'reasoning')
+    .map(block => ({ type: 'text' as const, text: block.text }))
 }

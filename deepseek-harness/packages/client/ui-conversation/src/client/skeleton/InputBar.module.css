@@ -274,7 +274,7 @@
   /* 2px moved from the bottom pad to the top: the whole control row sits 2px
      lower in the card (it read too high against the textarea) while the card
      height and the controls' own centering stay untouched. */
-  padding: 2px 8px 6px;
+  padding: 4px 10px 10px;
   min-width: 0;
   /* Size container so the chips inside can collapse to icon-only when the
      card runs out of row width (PermissionSelect @container rule). Anonymous
@@ -303,7 +303,9 @@
 }
 
 .trailing {
-  flex: none;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   /* Wrap keeps the left mode chips and the right controls apart when the card
      runs out of row width: the trailing group (model + send) moves to its own
      line instead of the left group shrinking until its chip overlaps the
@@ -311,6 +313,15 @@
      wrapped line; on a single line space-between already pins it right. */
   margin-left: auto;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.modelRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 10px 10px;
 }
 
 /* Attach circle (figma + control): 28px, selector fill, primary glyph. */

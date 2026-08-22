@@ -83,6 +83,7 @@ export function InputBar({
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
   placeholder, accessory, overlay, leftItems, rightItems, footer,
+  useSessions,
 }: InputBarProps) {
   const input = useInput(s => s)
   const notice = useNotices(s => s)
@@ -92,6 +93,9 @@ export function InputBar({
   const running = useSession(s => s.running) ?? false
   const subagent = useSession(s => s.subagent) ?? null
   const removed = useSession(s => s.removed) ?? false
+  const workflow = useSessions(s => (
+    sessionId === undefined ? false : s.byId[sessionId]?.agentPreset === 'workflow'
+  ))
   // Plan mode swaps the textarea placeholder (the projection is the folded
   // host value; owner-prop placeholders — hero, session-unavailable — win).
   const planActive = useProjection('plan', plan => plan !== undefined && (plan.pending ? !plan.active : plan.active))
@@ -791,7 +795,7 @@ export function InputBar({
           </div>
           <div className={css.trailing}>
             {rightItems}
-            {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
+            {workflow ? null : renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
             {interruptible && (
               <Tooltip label={t('input.stop')} side="top" delayMs={500}>
@@ -831,6 +835,11 @@ export function InputBar({
             </Tooltip>
           </div>
         </div>
+        {workflow ? (
+          <div className={css.modelRow}>
+            {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
+          </div>
+        ) : null}
       </div>
       {footer}
     </div>

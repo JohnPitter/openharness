@@ -93,6 +93,7 @@ interface BenchOptions {
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
+  agentPreset?: string
 }
 
 /** One pending queue row (the runtime snapshot shape, as the dock tests build it). */
@@ -156,7 +157,19 @@ function bench(over?: BenchOptions) {
     SessionProvider: ({ children }) => children(SID),
     useSession: bindSnapshotSelector(session),
     useSessions: bindSnapshotSelector(createSnapshotStore({
-      ids: [], byId: {}, current: undefined, phase: 'ready',
+      ids: [SID],
+      byId: {
+        [SID]: {
+          id: SID,
+          displayTitle: 's1',
+          running: false,
+          blank: false,
+          updatedAt: 0,
+          ...over?.agentPreset === undefined ? {} : { agentPreset: over.agentPreset },
+        },
+      },
+      current: SID,
+      phase: 'ready',
       subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
     })),
     useWorkspaces: bindSnapshotSelector(createSnapshotStore({
@@ -1631,6 +1644,15 @@ describe('command launcher chrome and control seats', () => {
     const liveControls = live.slotCalls.filter(call => call.key !== 'conversation.input.attachments')
     expect(liveControls.every(c => !(c.owner as { locked: boolean }).locked)).toBe(true)
     expect(attachmentOwner(live.slotCalls).canAcceptDrop).toBe(true)
+  })
+
+  it('puts the workflow dual model pickers on their own row under the tools', () => {
+    const { view } = bench({
+      agentPreset: 'workflow',
+      modelEntry: <i data-testid="model-entry" />,
+    })
+    const model = view.getByTestId('model-entry')
+    expect(model.parentElement?.className).toMatch(/modelRow/)
   })
 
   it('disabled locks the Access chip and command launcher (running does not)', () => {

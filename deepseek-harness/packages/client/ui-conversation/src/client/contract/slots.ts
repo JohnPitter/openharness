@@ -421,6 +421,11 @@ export interface ChatNodeOwnerProps {
   openFile: (path: string) => void
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
+  /**
+   * Queue a continue prompt after a terminal turn failure or max-tokens cut.
+   * Undefined when the renderer should not offer the action.
+   */
+  continueTurn?: (() => Promise<void>) | undefined
   /** Render a historical image group through the attachment slot. */
   renderMessageImages: RenderMessageImages
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
@@ -775,6 +780,8 @@ export interface ChatViewInjected {
   }
   /** Fork through the completed turn ending at the eligible message `seq`, then open the child. */
   forkAt: (seq: number) => void
+  /** Queue a continue prompt so a failed or truncated turn can resume. */
+  continueTurn: () => Promise<void>
   /**
    * Prose file-mention vocabulary for one closing message, from the optional
    * {@link ChatFileMentions} service (resolved lazily per call, so composing

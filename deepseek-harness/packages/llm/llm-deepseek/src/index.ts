@@ -40,6 +40,7 @@ import {
   DeepSeekAdapter,
 } from './adapter.ts'
 import type { DeepSeekCatalogModel, DeepSeekConnectionOptions } from './adapter.ts'
+import { discoverModels } from './discovery.ts'
 
 export {
   DEFAULT_CONTEXT_WINDOW,
@@ -442,6 +443,22 @@ export function apply(ctx: Context, config: Config): void {
   ctx.llm.registerConfigurableProviders([
     { provider: PROVIDER, displayName: 'DeepSeek', settingsNs: NS, settingsPath: [] },
   ])
+  ctx.llm.registerModelDiscovery(NS, request => {
+    const connection = options()
+    return discoverModels(
+      request,
+      async () => {
+        try {
+          return await resolveApiKey(connection)
+        } catch (error: unknown) {
+          if (error instanceof LlmError && error.code === 'MISSING_CREDENTIAL') return undefined
+          throw error
+        }
+      },
+      connection.baseURL,
+      connection.models,
+    )
+  })
   // Route effects bind to this apply fiber via the stable `ctx` reference,
   // even when a swap runs inside the scoped settings callback below.
   const registration = ctx.llm.registerAdapter([PROVIDER], adapter)

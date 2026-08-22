@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
 import type {
   ModelRetryNode, TurnErrorNode, UserMessageNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { JsonBlock, MessageText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, JsonBlock, MessageText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { CompactionItem } from './CompactionItem.tsx'
@@ -112,34 +112,72 @@ function ModelRetryItem({ node, active, t }: {
   )
 }
 
-/** Persistent, turn-positioned feedback for a terminal failure. */
-function TurnErrorItem({ node, t }: {
-  node: TurnErrorNode
+function ContinueWorkButton({
+  continueTurn, disabled, t,
+}: {
+  continueTurn: () => Promise<void>
+  disabled: boolean
   t: ChatViewSlotProps['t']
 }) {
+  const [pending, setPending] = useState(false)
   return (
-    <div className={css.turnErrorRow} role="status">
+    <Button
+      variant="outline"
+      size="sm"
+      className={css.continueButton}
+      disabled={disabled || pending}
+      onClick={() => {
+        setPending(true)
+        void continueTurn()
+          .catch(() => {
+            // Session promptError owns the visible send failure.
+          })
+          .finally(() => { setPending(false) })
+      }}
+    >
+      {t('message.continue')}
+    </Button>
+  )
+}
+
+/** Persistent, turn-positioned feedback for a terminal failure. */
+function TurnErrorItem({ node, t, continueTurn, busy }: {
+  node: TurnErrorNode
+  t: ChatViewSlotProps['t']
+  continueTurn?: (() => Promise<void>) | undefined
+  busy: boolean
+}) {
+  return (
+    <div className={css.turnErrorRow}>
       <StateDot state="error" className={css.turnErrorDot} />
-      <div className={css.turnErrorCopy}>
+      <div className={css.turnErrorCopy} role="status">
         <span className={css.turnErrorTitle}>{t('message.turnError')}</span>
         <span className={css.turnErrorMessage}>{node.message}</span>
       </div>
+      {continueTurn !== undefined && (
+        <ContinueWorkButton continueTurn={continueTurn} disabled={busy} t={t} />
+      )}
       {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}
     </div>
   )
 }
 
 /** Persistent, turn-positioned notice for a turn ended at the output-token cap. */
-function TurnMaxTokensItem({ t }: {
+function TurnMaxTokensItem({ t, continueTurn, busy }: {
   t: ChatViewSlotProps['t']
+  continueTurn?: (() => Promise<void>) | undefined
+  busy: boolean
 }) {
   return (
-    <div className={css.turnErrorRow} role="status">
+    <div className={css.turnErrorRow}>
       <StateDot state="warning" className={css.turnErrorDot} />
-      <div className={css.turnErrorCopy}>
+      <div className={css.turnErrorCopy} role="status">
         <span className={css.maxTokensTitle}>{t('message.maxTokens')}</span>
         <span className={css.turnErrorMessage}>{t('message.maxTokens.hint')}</span>
       </div>
+      {continueTurn !== undefined && (
+        <ContinueWorkButton continueTurn={continueTurn} disabled={busy} t={t} />
+      )}
     </div>
   )
 }
@@ -327,13 +365,19 @@ export const RetryNodeView = memo(function RetryNodeView({ node, t }: ChatNodeVi
 })
 
 /** Terminal turn-error keyed Chat renderer. */
-export const TurnErrorNodeView = memo(function TurnErrorNodeView({ node, t }: ChatNodeViewProps<'turn-error'>) {
-  return <TurnErrorItem node={node.data} t={t} />
+export const TurnErrorNodeView = memo(function TurnErrorNodeView({
+  node, t, continueTurn, useSession,
+}: ChatNodeViewProps<'turn-error'>) {
+  const running = useSession(s => s.running)
+  return <TurnErrorItem node={node.data} t={t} continueTurn={continueTurn} busy={running} />
 })
 
 /** Max-tokens turn-end notice keyed Chat renderer. */
-export const TurnMaxTokensNodeView = memo(function TurnMaxTokensNodeView({ t }: ChatNodeViewProps<'turn-max-tokens'>) {
-  return <TurnMaxTokensItem t={t} />
+export const TurnMaxTokensNodeView = memo(function TurnMaxTokensNodeView({
+  t, continueTurn, useSession,
+}: ChatNodeViewProps<'turn-max-tokens'>) {
+  const running = useSession(s => s.running)
+  return <TurnMaxTokensItem t={t} continueTurn={continueTurn} busy={running} />
 })
 
 /** Explicit unknown-surface keyed Chat renderer. */

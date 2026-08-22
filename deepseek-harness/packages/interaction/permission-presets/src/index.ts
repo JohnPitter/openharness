@@ -113,7 +113,7 @@ const knobStateSchema: zod.ZodType<KnobState> = zod.object({
     zod.literal('workspace-write'),
     zod.literal('danger-full-access'),
   ]).nullable(),
-  approval: zod.union([zod.literal('ask'), zod.literal('never')]).nullable(),
+  approval: zod.union([zod.literal('ask'), zod.literal('never'), zod.literal('always')]).nullable(),
 }).strict()
 
 /** State for the empty log: every knob at its composition default. */
@@ -157,7 +157,7 @@ export interface Config {
   /**
    * The preset table: name → knob bundle. Defaults to `workspace-write`
    * (workspace-write + ask) and `danger-full-access` (danger-full-access +
-   * never). The name `custom` is reserved for the derived not-a-preset state.
+   * always). The name `custom` is reserved for the derived not-a-preset state.
    */
   presets?: Record<string, PresetSpec>
   /**
@@ -186,8 +186,8 @@ export class PermissionPresetService extends Service {
         name: 'workspace-write', description: 'Write inside the workspace and permitted temporary directories; wider retries require approval.',
       },
       'danger-full-access': {
-        sandbox: 'danger-full-access', approval: 'never',
-        name: 'danger-full-access', description: 'Full file access without approval prompts.',
+        sandbox: 'danger-full-access', approval: 'always',
+        name: 'danger-full-access', description: 'Full file, process, and host access without approval prompts, including privileged operations.',
       },
     }),
     defaultPreset: z.string(),
@@ -389,7 +389,7 @@ export class PermissionPresetService extends Service {
    * @param name - the preset to switch to; unknown names throw.
    */
   set(session: Session, name: string): void {
-    this.apply(session, name, (policy) =>{  setApprovalPolicy(session, policy) })
+    this.apply(session, name, (policy) => { setApprovalPolicy(session, policy) })
   }
 
   /** Apply one preset with the caller-selected live or initialization policy writer. */

@@ -178,7 +178,8 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     const errorStatus = page.getByRole('status').filter({ hasText: 'This turn failed' })
     await errorStatus.waitFor({ timeout: 10_000 })
     expect(await errorStatus.textContent()).toContain('API key is invalid')
-    expect(await errorStatus.textContent()).toContain('AUTH')
+    expect(await page.getByText('AUTH', { exact: true }).textContent()).toBe('AUTH')
+    expect(await page.getByRole('button', { name: 'Continue' }).isEnabled()).toBe(true)
     expect(await page.locator('body').textContent()).not.toContain('sk-preview-secret')
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
     await compareOrRefreshGolden(ERROR_EXPECTED, snapshot, MODE)
@@ -270,7 +271,8 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     const errorStatus = page.getByRole('status').filter({ hasText: 'This turn failed' })
     await errorStatus.waitFor({ timeout: 10_000 })
     expect(await errorStatus.textContent()).toContain('upstream 503')
-    expect(await errorStatus.textContent()).toContain('SERVER')
+    expect(await page.getByText('SERVER', { exact: true }).textContent()).toBe('SERVER')
+    expect(await page.getByRole('button', { name: 'Continue' }).isEnabled()).toBe(true)
     // The settled retry chain stays alongside the terminal row as recovery
     // context; the golden pins both.
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)

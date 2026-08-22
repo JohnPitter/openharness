@@ -487,10 +487,9 @@ function completeCompaction(
 
 /**
  * Reconstruct the last routed request's cacheable prefix for the shadowed
- * region: its system prompt and tool schemas, then the region's own derived
- * messages in surface order. The summarizer appends only the compaction
- * instruction after this, so the call is a genuine prefix of the conversation
- * and reuses the provider's KV cache.
+ * region: its system prompt and the region's own derived messages in surface
+ * order, plus the tool schemas for the recorded input. The summarizer call
+ * omits tools and appends the compaction instruction after the messages.
  * @param session - session supplying the request header and per-node projection.
  * @param shadowedSeqs - the surface-node seqs, in order, being compacted.
  * @returns the replayed conversation prefix to condense.

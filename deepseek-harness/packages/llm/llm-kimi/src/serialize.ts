@@ -85,8 +85,10 @@ function k2ToggleEffort(effort: NonNullable<GenerateOptions['reasoningEffort']>)
 function resolveThinking(options: GenerateOptions, defaults: RequestDefaults): ResolvedThinking {
   const family = reasoningFamilyOf(options.model)
   if (family === 'k3') {
-    // K3 always thinks. Titles still pay for reasoning, so use the cheapest legal effort.
-    if (options.purpose === 'session-title') return { reasoningEffort: 'low' }
+    // K3 always thinks. Titles and compaction still pay for reasoning, so use the cheapest legal effort.
+    if (options.purpose === 'session-title' || options.purpose === 'compaction') {
+      return { reasoningEffort: 'low' }
+    }
     const raw = options.reasoningEffort === undefined
       ? defaults.reasoningEffort ?? 'high'
       : String(options.reasoningEffort)
@@ -95,7 +97,9 @@ function resolveThinking(options: GenerateOptions, defaults: RequestDefaults): R
   if (family === 'k2-always') {
     return { thinking: 'enabled' }
   }
-  if (options.purpose === 'session-title') return { thinking: 'disabled' }
+  if (options.purpose === 'session-title' || options.purpose === 'compaction') {
+    return { thinking: 'disabled' }
+  }
   const effort = options.reasoningEffort === undefined
     ? defaults.reasoningEffort
     : k2ToggleEffort(options.reasoningEffort)
@@ -224,8 +228,8 @@ export function serializeRequest(
       parameters: tool.parameters,
     },
   }))
-  // A short title budget must produce visible text; conversation and
-  // compaction calls continue to inherit the adapter's thinking defaults.
+  // Title and compaction budgets must produce visible text; conversation
+  // calls keep the adapter's thinking defaults.
   const resolvedThinking = resolveThinking(options, defaults)
 
   return {

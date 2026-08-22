@@ -120,6 +120,22 @@ async function bench() {
   })
   new TestRemote(ctx)
   ctx.provide('settingsNav', { bind: () => () => {}, openSection: () => {} })
+  ctx.provide('settingsScope', {
+    bind: () => ({
+      getSnapshot: () => ({
+        status: 'ready' as const,
+        value: { enabled: true },
+        base: undefined,
+        user: undefined,
+        revision: 1,
+        writable: true,
+        mode: 'host' as const,
+      }),
+      subscribe: () => () => {},
+      set: async () => {},
+      unset: async () => {},
+    }),
+  })
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   await ctx.plugin(function probe() {}).await()

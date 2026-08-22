@@ -88,6 +88,10 @@ export interface ModelListEditorProps {
   t: (key: keyof typeof en) => string
   /** Disable every control (read-only deployment or a pending write). */
   disabled: boolean
+  /** Profile context-window fallback shown as the empty-field placeholder. */
+  defaultContextWindow?: number
+  /** Profile output-cap fallback shown as the empty-field placeholder. */
+  defaultMaxTokens?: number
 }
 
 /** Disclosure chevron; rotates to point down while its row is open. */
@@ -187,6 +191,26 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   /** What a capacity field shows: the buffer while typing, else the stored count. */
   const capacityText = (model: ModelDraft, index: number, field: CapacityField): string =>
     editing.get(bufferKey(index, field)) ?? capacitySpelling(numberOf(model, field))
+
+  /** Drop a readable buffer so the stored count's canonical spelling shows. */
+  const settleCapacity = (index: number, field: CapacityField): void => {
+    const key = bufferKey(index, field)
+    const typed = editing.get(key)
+    if (typed === undefined) return
+    const parsed = parseCapacity(typed)
+    if (parsed !== undefined && Number.isNaN(parsed)) return
+    setEditing((current) => {
+      const next = new Map(current)
+      next.delete(key)
+      return next
+    })
+  }
+
+  /** Empty-field hint: the profile fallback when the card supplied one. */
+  const capacityHint = (field: CapacityField): string => {
+    const fallback = field === 'contextWindow' ? props.defaultContextWindow : props.defaultMaxTokens
+    return fallback === undefined ? CAPACITY_HINT[field] : formatCapacity(fallback)
+  }
 
   /** Drop one row's entries and shift the rows after it down, in one pass. */
   const reindexOnRemove = (
@@ -325,7 +349,11 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               type="button"
               className={styles['linkButton']}
               disabled={disabled}
-              onClick={props.onReset}
+              onClick={() => {
+                setEditing(new Map())
+                setExpanded(new Set())
+                props.onReset?.()
+              }}
             >
               {t('resetModels')}
             </button>
@@ -357,6 +385,10 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               aria-label={`${t('modelId')} ${index + 1}`}
               disabled={disabled}
               onChange={(event) => { patch(index, { id: event.target.value }) }}
+              onBlur={(event) => {
+                const trimmed = event.target.value.trim()
+                if (trimmed !== event.target.value) patch(index, { id: trimmed })
+              }}
             />
             <input
               className={styles['input']}
@@ -413,10 +445,11 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
                     type="text"
                     inputMode="numeric"
                     value={capacityText(model, index, 'contextWindow')}
-                    placeholder={CAPACITY_HINT.contextWindow}
+                    placeholder={capacityHint('contextWindow')}
                     aria-label={`${t('modelContextWindow')} ${index + 1}`}
                     disabled={disabled}
                     onChange={(event) => { editCapacity(index, 'contextWindow', event.target.value) }}
+                    onBlur={() => { settleCapacity(index, 'contextWindow') }}
                   />
                 </label>
                 <label className={styles['modelField']}>
@@ -426,10 +459,11 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
                     type="text"
                     inputMode="numeric"
                     value={capacityText(model, index, 'maxTokens')}
-                    placeholder={CAPACITY_HINT.maxTokens}
+                    placeholder={capacityHint('maxTokens')}
                     aria-label={`${t('modelMaxTokens')} ${index + 1}`}
                     disabled={disabled}
                     onChange={(event) => { editCapacity(index, 'maxTokens', event.target.value) }}
+                    onBlur={() => { settleCapacity(index, 'maxTokens') }}
                   />
                 </label>
               </div>

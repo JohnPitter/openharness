@@ -1245,7 +1245,7 @@ describe('default one-shot summarizer', () => {
     }, agent(conversation(1), MODEL))
 
     expect(adapter.lastOptions?.system).toBe('REPLAYED SYSTEM')
-    expect(adapter.lastOptions?.tools).toEqual(tools)
+    expect(adapter.lastOptions?.tools).toBeUndefined()
     const messages = adapter.lastOptions?.messages ?? []
     expect(messages[0]).toEqual(prefix)
     const last = messages.at(-1)?.content[0]
@@ -1390,10 +1390,18 @@ describe('default one-shot summarizer', () => {
     },
   )
 
-  it('rejects empty or reasoning-only successful output', async () => {
-    const { compact } = await summarizerHarness([{ type: 'reasoning', text: 'private' }])
+  it('rejects empty successful output', async () => {
+    const { compact } = await summarizerHarness([])
     await expect(compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL)))
       .rejects.toThrow(/no text summary content/)
+  })
+
+  it('uses reasoning as the summary when the model emitted no visible text', async () => {
+    const { compact } = await summarizerHarness([{ type: 'reasoning', text: 'checkpoint from thinking' }])
+    await expect(compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL)))
+      .resolves.toMatchObject({
+        summary: [{ type: 'text', text: 'checkpoint from thinking' }],
+      })
   })
 
   it('rejects image summary output instead of silently dropping it', async () => {

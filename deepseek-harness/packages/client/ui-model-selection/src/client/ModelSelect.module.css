@@ -5,9 +5,22 @@
 
 .roles {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  flex: 1 1 100%;
   min-width: 0;
+  max-width: 100%;
+}
+
+.roles .root {
+  flex: 1 1 calc(50% - 6px);
+  min-width: min(148px, 100%);
+}
+
+.roles .trigger {
+  max-width: none;
+  width: 100%;
 }
 
 /* Figma 313:14108 ToggleButton: 13/20 medium secondary label, 4px gap,

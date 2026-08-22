@@ -8,7 +8,7 @@
 
 ## 预设表
 
-预设是一个表键，映射到一个沙箱／审批组合，外加可选的客户端展示信息；默认预设表自带 `workspace-write`（`workspace-write` + `ask`）和 `danger-full-access`（`danger-full-access` + `never`）。
+预设是一个表键，映射到一个沙箱／审批组合，外加可选的客户端展示信息；默认预设表自带 `workspace-write`（`workspace-write` + `ask`）和 `danger-full-access`（`danger-full-access` + `always`）。
 
 ```ts type-equiv
 /** One preset's sandbox/approval bundle and optional client presentation. */

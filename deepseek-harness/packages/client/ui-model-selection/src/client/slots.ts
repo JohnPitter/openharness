@@ -29,4 +29,10 @@ export interface ModelSelectInjected {
     load: () => void
     select: (selection: ModelSelection) => Promise<boolean>
   }
+  /** Host-persisted J-space construction protocol toggle. Absent when the namespace is not exposed. */
+  jspace?: {
+    subscribe: (listener: () => void) => () => void
+    getEnabled: () => boolean
+    set: (enabled: boolean) => Promise<void>
+  }
 }

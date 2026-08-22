@@ -1,10 +1,10 @@
 /**
  * ModelSelect: the composer's named model seat (`conversation.input.model`).
  * Two-level selection per figma 496:26454's MenuDropdown: the root menu is
- * the Model / Effort row pair (label + current value + a right chevron),
+ * the Model / Effort / J-space row set (label + current value + a right chevron),
  * each drilling into its own list — the provider-grouped model list over
- * the shared directory, and the effort levels. The trigger (313:14108's
- * ToggleButton) shows both: model name + effort in the caption tone.
+ * the shared directory, the effort levels, and the construction-protocol
+ * toggle. The trigger (313:14108's ToggleButton) shows both: model name + effort in the caption tone.
  * Data and submission ride the SAME per-session ModelDirectory as the
  * /model popup; exact-model reasoning metadata and the selected effort come
  * from the Host rather than a client-owned vocabulary. A rejected selection
@@ -32,7 +32,7 @@ import css from './ModelSelect.module.css'
 const IDLE_WORKER: WorkerModelState = { current: null, status: 'idle', error: null }
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
-type Pane = 'root' | 'model' | 'effort'
+type Pane = 'root' | 'model' | 'effort' | 'jspace'
 
 /** One dynamic effort row; undefined means preserve the provider default. */
 interface EffortChoice {
@@ -90,7 +90,7 @@ export function ModelSelect(props: SeatProps) {
  * One model/effort dropdown. Workflow mode mounts two of these.
  */
 function ModelPicker(
-  { locked, available, directory, load, select, t, role, currentOverride, selectOverride }:
+  { locked, available, directory, load, select, t, role, currentOverride, selectOverride, jspace }:
   PickerProps,
 ) {
   const state = useSyncExternalStore(
@@ -152,6 +152,10 @@ function ModelPicker(
         ...effort.description === undefined ? {} : { description: effort.description },
       })),
     ], [reasoning, t])
+  const jspaceEnabled = useSyncExternalStore(
+    jspace === undefined ? () => () => {} : fn => jspace.subscribe(fn),
+    () => jspace?.getEnabled() ?? true,
+  )
   const busy = state.status === 'selecting'
 
   const reload = (): void => {
@@ -239,6 +243,19 @@ function ModelPicker(
     void (selectOverride ?? select)(selection).then(settleSelection)
   }
 
+  const showJspace = jspace !== undefined && role !== 'worker'
+  const jspaceLabel = showJspace
+    ? (jspaceEnabled ? t('jspace.on') : t('jspace.off'))
+    : undefined
+
+  const chooseJspace = (enabled: boolean): void => {
+    if (jspace === undefined || jspaceEnabled === enabled) {
+      close(true)
+      return
+    }
+    void jspace.set(enabled).then(() => { close(true) })
+  }
+
   const chooseEffort = (effort: string | undefined): void => {
     if (current === null) return
     if (current.reasoningEffort === effort) {
@@ -257,7 +274,11 @@ function ModelPicker(
   const roleLabel = role === undefined ? undefined : t(`role.${role}`)
   const modelLabel = currentChoice?.model.name ?? t('trigger.fallback')
   const labeledModel = roleLabel === undefined ? modelLabel : `${roleLabel} · ${modelLabel}`
-  const triggerLabel = effortLabel === undefined ? labeledModel : `${labeledModel} · ${effortLabel}`
+  const triggerLabel = [
+    labeledModel,
+    ...role === undefined && effortLabel !== undefined ? [effortLabel] : [],
+    ...role === undefined && jspaceLabel !== undefined ? [jspaceLabel] : [],
+  ].join(' · ')
   const triggerAria = currentChoice === undefined
     ? t('trigger.selectAria')
     : roleLabel === undefined
@@ -295,10 +316,11 @@ function ModelPicker(
         }}
       >
         <span className={css.triggerLabel}>{labeledModel}</span>
-        {currentChoice?.model.contextWindow !== undefined && (
+        {role === undefined && currentChoice?.model.contextWindow !== undefined && (
           <span className={css.triggerEffort}>{formatTokens(currentChoice.model.contextWindow)}</span>
         )}
-        {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
+        {role === undefined && effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
+        {role === undefined && jspaceLabel !== undefined && <span className={css.triggerEffort}>{jspaceLabel}</span>}
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
 
@@ -321,6 +343,13 @@ function ModelPicker(
                 <button ref={itemRef()} type="button" role="menuitem" className={css.cell} onClick={() => { setPane('effort') }}>
                   <span className={css.cellLabel}>{t('menu.effort')}</span>
                   <span className={css.cellValue}>{effortLabel}</span>
+                  <IconChevronRightOutline14 className={css.cellChevron} />
+                </button>
+              )}
+              {showJspace && (
+                <button ref={itemRef()} type="button" role="menuitem" className={css.cell} onClick={() => { setPane('jspace') }}>
+                  <span className={css.cellLabel}>{t('menu.jspace')}</span>
+                  <span className={css.cellValue}>{jspaceLabel}</span>
                   <IconChevronRightOutline14 className={css.cellChevron} />
                 </button>
               )}
@@ -399,6 +428,31 @@ function ModelPicker(
             </>
           )}
 
+          {pane === 'jspace' && jspace !== undefined && (
+            <>
+              {([true, false] as const).map(enabled => (
+                <button
+                  ref={itemRef()}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={jspaceEnabled === enabled}
+                  className={clsx(css.option, jspaceEnabled === enabled && css.selected)}
+                  key={enabled ? 'on' : 'off'}
+                  onClick={() => { chooseJspace(enabled) }}
+                >
+                  <span className={css.optionCopy}>
+                    <span className={css.modelName}>{enabled ? t('jspace.on') : t('jspace.off')}</span>
+                    <span className={css.description}>
+                      {enabled ? t('jspace.onDescription') : t('jspace.offDescription')}
+                    </span>
+                  </span>
+                  <span className={css.check}>
+                    {jspaceEnabled === enabled ? <IconCheckOutline16 /> : null}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
           {pane === 'effort' && (
             <>
               {state.error !== null && lastActionRef.current === 'load' && (
