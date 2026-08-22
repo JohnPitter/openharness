@@ -2,8 +2,13 @@
 
 package sidecar
 
-import "os/exec"
+import (
+	"os/exec"
+	"syscall"
+)
 
-func hideConsole(cmd *exec.Cmd) {}
+func hideConsole(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+}
 
 func killSidecarNodes(root string) {}

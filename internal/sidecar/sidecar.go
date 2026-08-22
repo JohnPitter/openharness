@@ -27,12 +27,20 @@ import (
 // stampFile marks a complete extraction so a later launch can skip unzip.
 const stampFile = ".openharness-stamp"
 
+// sidecarJob é a cerca de processo do sidecar (job object no Windows, pgid no POSIX).
+type sidecarJob interface {
+	killAndClose()
+}
+
 // Manager gerencia a extração e o processo do harness.
 type Manager struct {
-	Root  string // %LOCALAPPDATA%\openharness
-	cmd   *exec.Cmd
-	URL   string
-	Phase atomic.Value // string: "extracting" | "starting" | ""
+	Root    string // %LOCALAPPDATA%\openharness
+	cmd     *exec.Cmd
+	job     sidecarJob
+	mu      sync.Mutex
+	stopped bool
+	URL     string
+	Phase   atomic.Value // string: "extracting" | "starting" | ""
 }
 
 func NewManager() (*Manager, error) {
@@ -433,15 +441,26 @@ func exitWithoutURL(waitErr error, stderr string) string {
 
 // Start extrai (se preciso) e sobe `dsh web` em porta livre, retornando a URL.
 func (m *Manager) Start(ctx context.Context) (string, error) {
+	m.mu.Lock()
+	if m.stopped {
+		m.mu.Unlock()
+		return "", fmt.Errorf("harness encerrado")
+	}
+	m.mu.Unlock()
 	dir, err := m.ensureExtracted()
 	if err != nil {
 		return "", fmt.Errorf("extração do runtime: %w", err)
 	}
-	m.Phase.Store("starting")
 	nodePath := filepath.Join(dir, "node.exe")
 	binPath := filepath.Join(dir, "dsh-runtime", "lib", "bin.js")
 
-	m.cmd = exec.CommandContext(ctx, nodePath, binPath, "web", "--no-open", "--host", "127.0.0.1", "--port", "0")
+	m.mu.Lock()
+	if m.stopped {
+		m.mu.Unlock()
+		return "", fmt.Errorf("harness encerrado")
+	}
+	m.Phase.Store("starting")
+	m.cmd = exec.Command(nodePath, binPath, "web", "--no-open", "--host", "127.0.0.1", "--port", "0")
 	m.cmd.Dir = filepath.Join(dir, "dsh-runtime")
 	hideConsole(m.cmd)
 	m.cmd.Env = append(os.Environ(),
@@ -449,13 +468,17 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 	)
 	stdout, err := m.cmd.StdoutPipe()
 	if err != nil {
+		m.mu.Unlock()
 		return "", err
 	}
 	var stderr bytes.Buffer
 	m.cmd.Stderr = &stderr
 	if err := m.cmd.Start(); err != nil {
+		m.mu.Unlock()
 		return "", fmt.Errorf("falha ao iniciar dsh: %w", err)
 	}
+	m.job = attachSidecarJob(m.cmd.Process)
+	m.mu.Unlock()
 
 	urlCh := make(chan string, 1)
 	errCh := make(chan error, 1)
@@ -474,31 +497,60 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 
 	select {
 	case url := <-urlCh:
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.stopped {
+			m.stopLocked()
+			return "", fmt.Errorf("harness encerrado")
+		}
 		m.URL = url
 		return url, nil
 	case err := <-errCh:
 		return "", err
 	case <-time.After(120 * time.Second):
+		m.Stop()
 		return "", fmt.Errorf("timeout aguardando o harness subir")
 	case <-ctx.Done():
+		m.Stop()
 		return "", ctx.Err()
 	}
 }
 
-// Stop encerra o processo sidecar e espera o Windows soltar as DLLs nativas.
+// Stop encerra o sidecar, a árvore de filhos e qualquer processo ainda vivo
+// sob o runtime extraído. É idempotente: fechar a janela no meio do boot
+// marca stopped para o Start não deixar órfão depois.
 func (m *Manager) Stop() {
-	if m.cmd == nil || m.cmd.Process == nil {
-		return
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.stopped = true
+	m.stopLocked()
+}
+
+func (m *Manager) stopLocked() {
+	pid := 0
+	if m.cmd != nil && m.cmd.Process != nil {
+		pid = m.cmd.Process.Pid
 	}
-	_ = m.cmd.Process.Kill()
-	done := make(chan struct{})
-	go func() {
-		_, _ = m.cmd.Process.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
+	if m.job != nil {
+		m.job.killAndClose()
+		m.job = nil
 	}
+	if m.cmd != nil && m.cmd.Process != nil {
+		_ = m.cmd.Process.Kill()
+		done := make(chan struct{})
+		go func() {
+			_, _ = m.cmd.Process.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+		}
+	}
+	if pid > 0 {
+		killProcessTree(pid)
+	}
+	killSidecarNodes(m.Root)
 	m.cmd = nil
+	m.URL = ""
 }

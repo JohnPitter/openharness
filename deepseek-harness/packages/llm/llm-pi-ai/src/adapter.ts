@@ -146,6 +146,55 @@ function profileOptions(
   }
 }
 
+/** OpenAI-family wires that accept `prompt_cache_key` for session prefix cache. */
+const PROMPT_CACHE_KEY_APIS = new Set<string>([
+  'openai-completions',
+  'openai-responses',
+  'openai-codex-responses',
+  'azure-openai-responses',
+])
+
+const PROMPT_CACHE_KEY_MAX_LENGTH = 64
+
+function clampPromptCacheKey(key: string): string {
+  const chars = Array.from(key)
+  return chars.length <= PROMPT_CACHE_KEY_MAX_LENGTH
+    ? key
+    : chars.slice(0, PROMPT_CACHE_KEY_MAX_LENGTH).join('')
+}
+
+/**
+ * Pin OpenAI-compatible bodies to the session so gateways (Zen, Z.AI, custom
+ * baseURLs) reuse the same prefix cache DeepSeek gets from implicit matching
+ * plus a session header. pi-ai only emits `prompt_cache_key` for api.openai.com
+ * or `cacheRetention: long`; this fills the gap without sending `24h` retention
+ * that third-party endpoints often reject.
+ */
+function pinSessionPromptCache(
+  payload: unknown,
+  model: Model<Api>,
+  sessionId: string,
+): unknown {
+  if (!PROMPT_CACHE_KEY_APIS.has(model.api)) return undefined
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return undefined
+  const body = payload as Record<string, unknown>
+  const key = clampPromptCacheKey(sessionId)
+  if (body.prompt_cache_key === key) return undefined
+  return { ...body, prompt_cache_key: key }
+}
+
+function sessionCacheOptions(
+  sessionId: GenerateOptions['sessionId'],
+  cacheRetention: ResolvedPiAiProviderProfile['cacheRetention'],
+): Pick<SimpleStreamOptions, 'sessionId' | 'onPayload'> {
+  if (sessionId === undefined || cacheRetention === 'none') return {}
+  const id = String(sessionId)
+  return {
+    sessionId: id,
+    onPayload: (payload, model) => pinSessionPromptCache(payload, model, id),
+  }
+}
+
 /**
  * The profile default this exact model can actually take, for DESCRIBING it.
  * A configured level the model does not support yields none rather than
@@ -493,7 +542,7 @@ export class PiAiAdapter extends LlmAdapter {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
-        ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
+        ...sessionCacheOptions(options.sessionId, profile.cacheRetention),
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.

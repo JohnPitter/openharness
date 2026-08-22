@@ -137,6 +137,18 @@ describe('PiAiAdapter provider routing', () => {
       thinking: { type: 'enabled' },
       reasoning_effort: 'max',
     })
+    expect(server.requests[0]).not.toHaveProperty('prompt_cache_key')
+  })
+
+  it('pins prompt_cache_key from sessionId on OpenAI-compatible gateways', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url)
+    await assemble(ctx, {
+      model: 'deepseek-v4-flash',
+      messages: [],
+      sessionId: 'session-for-cache' as never,
+    })
+    expect(server.requests[0]).toMatchObject({ prompt_cache_key: 'session-for-cache' })
   })
 
   it('uses a dynamic request effort and reports unsupported efforts before network I/O', async () => {

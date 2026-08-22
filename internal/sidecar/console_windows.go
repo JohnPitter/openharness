@@ -16,8 +16,9 @@ func hideConsole(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNoWindow}
 }
 
-// killSidecarNodes encerra node.exe cujo executável vive sob Root (runtime
-// extraído). Sem isso o overlay/unlink do libvips falha com Access is denied.
+// killSidecarNodes encerra qualquer processo cujo executável vive sob Root
+// (node.exe do runtime e helpers extraídos). Sem isso o overlay/unlink do
+// libvips falha com Access is denied, e o fechar da janela deixa órfãos.
 func killSidecarNodes(root string) {
 	prefix := root
 	if !strings.HasSuffix(prefix, string(os.PathSeparator)) {
@@ -25,7 +26,7 @@ func killSidecarNodes(root string) {
 	}
 	script := `
 $prefix = $env:OPENHARNESS_SIDECAR_PREFIX
-Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | ForEach-Object {
+Get-CimInstance Win32_Process | ForEach-Object {
   if ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
     Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
   }

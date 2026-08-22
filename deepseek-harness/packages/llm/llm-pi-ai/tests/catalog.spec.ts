@@ -1201,8 +1201,9 @@ describe('OpenHarness shipped catalog routes', () => {
         displayName: 'Claude Code',
         apiKeyEnv: 'CLAUDE_CODE_OAUTH_TOKEN',
         catalog: 'anthropic',
+        cacheRetention: 'long',
       },
-      'openai-codex': { displayName: 'Codex', apiKeyEnv: 'CODEX_ACCESS_TOKEN' },
+      'openai-codex': { displayName: 'Codex', apiKeyEnv: 'CODEX_ACCESS_TOKEN', cacheRetention: 'long' },
       zai: {
         displayName: 'GLM Coding Plan',
         apiKeyEnv: 'ZAI_API_KEY',
@@ -1236,7 +1237,9 @@ describe('OpenHarness shipped catalog routes', () => {
     })
     expect([...resolved.keys()]).toEqual(['claude-code', 'openai-codex', 'zai', 'opencode'])
     expect(resolved.get('claude-code')?.displayName).toBe('Claude Code')
+    expect(resolved.get('claude-code')?.cacheRetention).toBe('long')
     expect(resolved.get('openai-codex')?.displayName).toBe('Codex')
+    expect(resolved.get('openai-codex')?.cacheRetention).toBe('long')
     expect(resolved.get('zai')?.displayName).toBe('GLM Coding Plan')
     const claudeCodeIds = (resolved.get('claude-code')?.piProvider.getModels() ?? []).map(model => model.id)
     expect(claudeCodeIds.length).toBeGreaterThan(0)
