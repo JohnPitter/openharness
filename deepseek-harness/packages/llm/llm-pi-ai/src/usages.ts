@@ -281,7 +281,7 @@ export function parseZaiUsage(body: unknown): LlmAccountUsage {
   const root = asMap(body)
   const data = asMap(root?.data) ?? root
   const items = data?.limits
-  if (!Array.isArray(items)) throw new Error('Invalid GLM usage response')
+  if (data === undefined || !Array.isArray(items)) throw new Error('Invalid GLM usage response')
   const windows = items
     .map(zaiLimitWindow)
     .filter((window): window is LlmAccountUsageWindow => window !== undefined)
