@@ -1646,13 +1646,15 @@ describe('command launcher chrome and control seats', () => {
     expect(attachmentOwner(live.slotCalls).canAcceptDrop).toBe(true)
   })
 
-  it('puts the workflow dual model pickers on their own row under the tools', () => {
+  it('keeps the workflow dual model pickers on the same toolbar row as the access chip', () => {
     const { view } = bench({
       agentPreset: 'workflow',
       modelEntry: <i data-testid="model-entry" />,
     })
     const model = view.getByTestId('model-entry')
-    expect(model.parentElement?.className).toMatch(/modelRow/)
+    const add = view.getByLabelText('命令')
+    expect(model.parentElement?.className).toMatch(/modes/)
+    expect(add.closest('[class*="row"]')?.contains(model)).toBe(true)
   })
 
   it('disabled locks the Access chip and command launcher (running does not)', () => {

@@ -5,22 +5,20 @@
 
 .roles {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
-  flex: 1 1 100%;
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 100%;
 }
 
 .roles .root {
-  flex: 1 1 calc(50% - 6px);
-  min-width: min(148px, 100%);
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .roles .trigger {
-  max-width: none;
+  max-width: min(220px, 32cqw);
   width: 100%;
 }
 
