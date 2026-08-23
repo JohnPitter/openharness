@@ -1,8 +1,8 @@
-/** Locale bundles for the agent-preset settings row, hero chip, header label, and management section. */
+/** Locale bundles for the agent-preset settings row, hero chip, header control, and management section. */
 
 /** Locale keys these surfaces render. */
 export type AgentPresetSettingsKey =
-  | 'title' | 'description' | 'loading' | 'error' | 'userTrust' | 'seatHint' | 'headerHint'
+  | 'title' | 'description' | 'loading' | 'error' | 'userTrust' | 'seatHint' | 'headerHint' | 'headerBusy'
   | 'nav' | 'sectionIntro' | 'builtIn' | 'setDefault' | 'view'
   | 'presetStandardName' | 'presetStandardDescription'
   | 'presetCodeName' | 'presetCodeDescription'
@@ -27,7 +27,8 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   error: 'Could not load agent presets.',
   userTrust: 'Custom',
   seatHint: 'Agent preset for the session you are about to start',
-  headerHint: 'The agent preset this session runs, fixed when it started',
+  headerHint: 'The agent preset this session runs',
+  headerBusy: 'Wait until this turn finishes to switch preset',
   nav: 'Agent presets',
   sectionIntro:
     'A preset is the plugin composition one session\'s agent runs — its tools, prompt, and capabilities. '
@@ -96,7 +97,8 @@ export const pt = {
   error: 'Não foi possível carregar os presets de agente.',
   userTrust: 'Personalizado',
   seatHint: 'Preset de agente da sessão que você está prestes a iniciar',
-  headerHint: 'O preset de agente que esta sessão executa, fixado no início',
+  headerHint: 'O preset de agente que esta sessão executa',
+  headerBusy: 'Espere o turno terminar para trocar o preset',
   nav: 'Presets de agente',
   sectionIntro:
     'Um preset é a composição de plugins que o agente de uma sessão executa — suas ferramentas, prompt e capacidades. '
@@ -165,7 +167,8 @@ export const es = {
   error: 'No se pudieron cargar los presets de agente.',
   userTrust: 'Personalizado',
   seatHint: 'Preset de agente de la sesión que estás a punto de iniciar',
-  headerHint: 'El preset de agente que ejecuta esta sesión, fijado al iniciar',
+  headerHint: 'El preset de agente que ejecuta esta sesión',
+  headerBusy: 'Espera a que termine el turno para cambiar el preset',
   nav: 'Presets de agente',
   sectionIntro:
     'Un preset es la composición de plugins que ejecuta el agente de una sesión: sus herramientas, prompt y capacidades. '
@@ -234,7 +237,8 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   error: '无法加载 Agent 预设。',
   userTrust: '自定义',
   seatHint: '即将开始的这个会话所用的 Agent 预设',
-  headerHint: '本会话运行的 Agent 预设，开始时即固定',
+  headerHint: '本会话运行的 Agent 预设',
+  headerBusy: '等本轮结束后再切换预设',
   nav: 'Agent 预设',
   sectionIntro: '预设即一个会话的 Agent 所运行的插件组装 —— 它的工具、提示词与能力。复制一份既有预设改成自己的，或用「创造模式」让 Agent 帮你创建。',
   builtIn: '内置',

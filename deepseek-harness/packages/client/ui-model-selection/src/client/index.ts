@@ -6,8 +6,9 @@
  * and submit through `session.selectModel` via the same directory instance,
  * so the host-reported current selection is the single fact both surfaces echo
  * — a switch made in either entry is what the other shows next. The sidebar
- * usage chip reads that same directory plus token-meter projections and opens
- * Models settings through `ctx.settingsNav`. Failures
+ * Remote chip and usage chip read that foot; the usage chip uses the same
+ * directory plus token-meter projections and opens Models settings through
+ * `ctx.settingsNav`. Failures
  * ride each entry's own retry surface (popup shell error/retry; seat menu
  * inline error) without forking the state. Addressed subagent sessions expose
  * neither selection entry because those Agent-bound RPCs would activate persisted
@@ -33,6 +34,7 @@ import { ModelSelect } from './ModelSelect.tsx'
 import { WorkerModelStore } from './worker-store.ts'
 import type { UsageStatusChipInjected } from './usage-slots.ts'
 import { UsageStatusChip } from './UsageStatusChip.tsx'
+import { RemoteChip } from './RemoteChip.tsx'
 import { UsagesSection } from './UsagesSection.tsx'
 import type { UsagesSectionInjected } from './UsagesSection.tsx'
 import { currentDirectorySource } from './usage-directory.ts'
@@ -216,6 +218,12 @@ export function apply(ctx: ClientContext): void {
     }, ModelSelect))
 
     const directory = currentDirectorySource(sessions, models)
+    scope.slots.inject('sidebar.footer.action', () => scope.slots.register({
+      name: 'sidebar.footer.action',
+      id: 'lan-remote',
+      order: -20,
+      locale: NS,
+    }, RemoteChip))
     scope.slots.inject('sidebar.footer.action', () => scope.slots.register({
       name: 'sidebar.footer.action',
       id: 'usage-status',

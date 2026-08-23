@@ -1,6 +1,6 @@
 /**
  * Registration: the General row, the settings section, the new-session chip,
- * and the header label all come from one apply, and each defers until the slot
+ * and the header control all come from one apply, and each defers until the slot
  * it fills has been declared. A pushed settings change refreshes the surfaces
  * that are already showing, so a default set from one converges the other.
  */
@@ -104,8 +104,9 @@ async function bench() {
           return Promise.resolve({ rpcId: 'r', result: { ok: true as const, value: { opened: true as const } } })
         },
         remove: () => Promise.resolve({ rpcId: 'r', result: { ok: true as const, value: {} } }),
-        select: (payload: { agentPreset: string }) => {
+        select: (payload: { sessionId?: string; agentPreset: string }) => {
           calls.push(`select:${payload.agentPreset}`)
+          if (payload.sessionId !== undefined) calls.push(`select-session:${payload.sessionId}`)
           return Promise.resolve({ rpcId: 'r', result: { ok: true as const, value: { agentPreset: payload.agentPreset } } })
         },
       },
@@ -484,7 +485,7 @@ describe('ui-agent-preset apply', () => {
     expect(calls.filter(call => call === 'select:minimal')).toHaveLength(spent)
   })
 
-  it('gives the header label the same roster the General row reads', async () => {
+  it('gives the header control the same roster the General row reads', async () => {
     const { ctx, slots } = await bench()
     declareRoot(slots)
     declareConversation(slots)
@@ -493,16 +494,57 @@ describe('ui-agent-preset apply', () => {
     ctx.provide('workspaces', workspacesDouble() as never)
     await ctx.plugin({ inject: [...inject, 'conversation', 'sessions', 'workspaces'], apply }).await()
     const label = (slots.entries('conversation.session.header.actions')[0]!
-      .inject as unknown as () => AgentPresetLabelInjected)()
+      .inject as unknown as (sessionId: string) => AgentPresetLabelInjected)('s1')
     const row = (slots.entries('settings.general.item')[0]!
       .inject as unknown as () => AgentPresetRowInjected)()
 
     await label.load()
 
-    // One roster behind both: the label resolves a name the settings row's own
+    // One roster behind both: the header resolves a name the settings row's own
     // load already fetched, rather than issuing a second read per session.
     expect(label.hooks.agentPresets).toBe(row.hooks.agentPreset)
     expect(label.hooks.agentPresets.getSnapshot().options).toEqual([{ id: 'standard', trust: 'system' }])
+  })
+
+  it('recomposes the named session from the header control', async () => {
+    const { ctx, slots, calls } = await bench()
+    declareRoot(slots)
+    declareConversation(slots)
+    ctx.provide('conversation', {} as never)
+    const sessions = sessionsDouble({ byId: { s1: { id: 's1', blank: false, agentPreset: 'standard' } } })
+    ctx.provide('sessions', sessions as never)
+    ctx.provide('workspaces', workspacesDouble() as never)
+    await ctx.plugin({ inject: [...inject, 'conversation', 'sessions', 'workspaces'], apply }).await()
+    const label = (slots.entries('conversation.session.header.actions')[0]!
+      .inject as unknown as (sessionId: string) => AgentPresetLabelInjected)('s1')
+
+    await label.select('minimal')
+
+    expect(calls).toContain('select:minimal')
+    expect(calls).toContain('select-session:s1')
+    expect(sessions.list.getSnapshot().byId.s1?.agentPreset).toBe('minimal')
+  })
+
+  it('surfaces a refused header switch', async () => {
+    const { ctx, slots } = await bench()
+    declareRoot(slots)
+    declareConversation(slots)
+    ctx.provide('conversation', {} as never)
+    ctx.provide('sessions', sessionsDouble({ byId: {} }) as never)
+    ctx.provide('workspaces', workspacesDouble() as never)
+    ;(ctx.get('connection') as { api: { agentPresets: { select: unknown } } }).api.agentPresets.select =
+      () => Promise.resolve({
+        rpcId: 'r',
+        result: {
+          ok: false as const,
+          error: { code: 'agent-preset-locked', message: 'wait until it finishes', details: {} },
+        },
+      })
+    await ctx.plugin({ inject: [...inject, 'conversation', 'sessions', 'workspaces'], apply }).await()
+    const label = (slots.entries('conversation.session.header.actions')[0]!
+      .inject as unknown as (sessionId: string) => AgentPresetLabelInjected)('s1')
+
+    await expect(label.select('minimal')).rejects.toThrow('wait until it finishes')
   })
 
   it('stages the creator preset and starts a session from the section', async () => {

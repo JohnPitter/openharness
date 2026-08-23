@@ -12,7 +12,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PermissionSettingsState } from './settings-store.ts'
 import type { PermissionSettingsKey } from './locales.ts'
-import { FULL_ACCESS_PRESET } from './presentation.ts'
+import { displayPermissionPreset, FULL_ACCESS_PRESET } from './presentation.ts'
 import css from './PermissionRow.module.css'
 
 /** Registration-side business face for the host-backed preference. */
@@ -58,9 +58,12 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
   if (state.status === 'unavailable') return null
   const selected = state.options.find(option => option.id === state.currentValue)
   const busy = state.status === 'loading' || state.status === 'saving' || confirmingFullAccess
-  const label = selected?.label
-    ?? (busy ? t('loading') : t('unavailable'))
+  const labelOf = (id: string, fallback: string): string => displayPermissionPreset(id, fallback, t)
+  const label = selected === undefined
+    ? (busy ? t('loading') : t('unavailable'))
+    : labelOf(selected.id, selected.label)
   const description: string = state.error ?? t('description')
+  const fullAccessName = t('preset.fullAccess')
 
   return (
     <>
@@ -72,7 +75,7 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
         <Menu
           open={open}
           onClose={() => { setOpen(false) }}
-          items={state.options.map(option => ({ id: option.id, label: option.label }))}
+          items={state.options.map(option => ({ id: option.id, label: labelOf(option.id, option.label) }))}
           selectedId={state.currentValue}
           onSelect={(id) => {
             setOpen(false)
@@ -103,11 +106,11 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
       </div>
       <RiskConfirmation
         open={confirmingFullAccess}
-        title={t('confirm.title')}
-        description={t('confirm.description')}
+        title={t('confirm.title', { name: fullAccessName })}
+        description={t('confirm.description', { name: fullAccessName })}
         acknowledgeLabel={t('confirm.acknowledge')}
         cancelLabel={t('confirm.cancel')}
-        confirmLabel={t('confirm.enable')}
+        confirmLabel={t('confirm.enable', { name: fullAccessName })}
         acknowledged={acknowledged}
         disabled={!state.writable || state.status === 'saving'}
         onAcknowledgedChange={setAcknowledged}

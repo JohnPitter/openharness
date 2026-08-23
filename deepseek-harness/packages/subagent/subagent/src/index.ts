@@ -67,6 +67,7 @@ import { listChildren as listSubagentChildren, listDescendants as listSubagentDe
 import type { SubagentDescendantListEntry, SubagentListEntry } from './list-children.ts'
 import { snapshotSubagentDescriptor } from './descriptor.ts'
 import { subagentIdentityProjectionDefinition, subagentTimingProjectionDefinition } from './projection.ts'
+import { restrictWorkflowOrchestrator } from './child-agent.ts'
 
 export * from './out-of-process.ts'
 export { AssistantOutputFold, finalAssistantOutput } from './assistant-output.ts'
@@ -107,7 +108,10 @@ export {
   childSessionMeta,
   resolveChildAgentOptions,
   resolveChildDepth,
+  restrictWorkflowOrchestrator,
   SubagentDepthError,
+  WORKFLOW_ORCHESTRATOR_WORK_TOOLS,
+  WORKFLOW_WORKER_PERSONA,
 } from './child-agent.ts'
 export type { ChildComposition, DelegatedPolicyOverrides } from './child-agent.ts'
 export type {
@@ -198,6 +202,7 @@ export class SubagentRuntime extends Service {
       projectionCtx.sessionProjections.register(subagentTimingProjectionDefinition)
       projectionCtx.sessionProjections.register(subagentIdentityProjectionDefinition)
     })
+    ctx.on('agent/created', ({ agent }) => { restrictWorkflowOrchestrator(agent) })
   }
 
   /**

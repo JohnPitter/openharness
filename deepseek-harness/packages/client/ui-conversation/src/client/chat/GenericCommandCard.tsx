@@ -39,7 +39,7 @@ export function GenericCommandCard({ node, t, runningSummary }: GenericCommandCa
   // and the dispatched line's own `/` and arguments only restate what the
   // settlement text says (`permission · preset workspace-write`). A
   // cross-window node whose run page fell out of the window has no name.
-  const title = node.name ?? t('command.title')
+  const title = node.name === 'compact' ? t('command.compact') : (node.name ?? t('command.title'))
   const state = stateOf(node.outcome)
   const body = text !== undefined && text.includes('\n') ? text : null
   const open = expanded && body !== null

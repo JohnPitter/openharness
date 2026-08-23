@@ -275,4 +275,20 @@ describe('ModelSelect J-space toggle', () => {
     fireEvent.click(screen.getByRole('button', { name: /选择工人/ }))
     expect(screen.queryByRole('menuitem', { name: /J-space/ })).toBeNull()
   })
+
+  it('opens Model as the first root menu row', () => {
+    const directory = createSnapshotStore(state())
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    const items = screen.getAllByRole('menuitem').map(item => item.textContent)
+    expect(items[0]).toMatch(/模型/)
+    expect(screen.queryByRole('menuitem', { name: /远程/ })).toBeNull()
+  })
 })

@@ -21,3 +21,11 @@ export function HarnessState() {
 export function RestartHarness() {
   return window['go']['app']['App']['RestartHarness']();
 }
+
+export function EnableRemote() {
+  return window['go']['app']['App']['EnableRemote']();
+}
+
+export function DisableRemote() {
+  return window['go']['app']['App']['DisableRemote']();
+}

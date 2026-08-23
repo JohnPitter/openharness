@@ -71,7 +71,7 @@
 </div>
 <script type="module">
   import { WindowMinimise, WindowToggleMaximise, Quit } from '/wailsjs/runtime/runtime.js'
-  import { HarnessState, RestartHarness, AppVersion, CheckForUpdate, ApplyUpdate } from '/wailsjs/go/app/App.js'
+  import { HarnessState, RestartHarness, AppVersion, CheckForUpdate, ApplyUpdate, EnableRemote, DisableRemote } from '/wailsjs/go/app/App.js'
 
   document.getElementById('btn-min').onclick = () => WindowMinimise()
   document.getElementById('btn-max').onclick = () => WindowToggleMaximise()
@@ -82,9 +82,30 @@
   const frame = document.getElementById('frame')
 
   // O harness (iframe) avisa o tema resolvido; a titlebar acompanha.
-  window.addEventListener('message', (e) => {
-    if (e.source === frame.contentWindow && e.data?.type === 'openharness:color-scheme') {
+  window.addEventListener('message', async (e) => {
+    if (e.source !== frame.contentWindow) return
+    if (e.data?.type === 'openharness:color-scheme') {
       document.documentElement.dataset.harnessScheme = e.data.scheme === 'light' ? 'light' : 'dark'
+      return
+    }
+    if (e.data?.type === 'openharness:remote-enable') {
+      try {
+        const access = await EnableRemote()
+        frame.contentWindow.postMessage({
+          type: 'openharness:remote-ready',
+          url: access.url,
+          qrDataUrl: access.qrDataUrl,
+        }, '*')
+      } catch (err) {
+        frame.contentWindow.postMessage({
+          type: 'openharness:remote-ready',
+          error: String(err),
+        }, '*')
+      }
+      return
+    }
+    if (e.data?.type === 'openharness:remote-disable') {
+      DisableRemote()
     }
   })
 

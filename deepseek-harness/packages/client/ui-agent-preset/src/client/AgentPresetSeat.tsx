@@ -2,11 +2,10 @@
  * The agent-preset chip on the new-session screen, beside the workspace
  * picker.
  *
- * It lives here rather than in the composer because the choice is only
- * available before a conversation starts: once a turn has run, the session's
- * history was produced under that preset's tools and the host refuses to swap
- * them. A control that spends most of its life disabled belongs on the screen
- * where it still works.
+ * It lives here rather than in the composer because this screen precedes the
+ * session the pick applies to. A live session switches from the header
+ * control ({@link AgentPresetLabel}); this chip only stages the next blank
+ * one.
  *
  * The menu opens on the staged choice, which starts as the deployment default.
  * Picking stages; the choice reaches a session when one becomes current.

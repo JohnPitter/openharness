@@ -2,9 +2,8 @@
 /**
  * The three conversation-adjacent surfaces: the General-settings row naming the
  * default for later sessions, the new-session chip naming the next one's, and
- * the session header's read-only label. The split is the host's rule — a
- * session's history is produced under its preset's tools, so the choice is
- * only ever offered before one starts.
+ * the session header's live switch. The General row and the chip stay
+ * before-the-fact; the header recomposes the session it names.
  */
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -71,10 +70,16 @@ function renderSeat(state: Partial<AgentPresetSeatState> = {}) {
 }
 
 function renderLabel(
-  summary: { blank: boolean; agentPreset?: string } | undefined,
+  summary: {
+    blank: boolean
+    agentPreset?: string
+    running?: boolean
+    origin?: 'subagent'
+  } | undefined,
   roster: Partial<AgentPresetSettingsState> = {},
+  select: ReturnType<typeof vi.fn> = vi.fn(() => Promise.resolve()),
 ) {
-  // The chip and the label read the same roster, metadata included.
+  // The chip and the header read the same roster, metadata included.
   const store = createSnapshotStore<AgentPresetSettingsState>({
     ...ROW_READY, options: SEAT_READY.options, ...roster,
   })
@@ -82,12 +87,13 @@ function renderLabel(
   const load = vi.fn(() => Promise.resolve())
   const view = render(<AgentPresetLabel {...({
     load,
+    select,
     sessionId: 's1',
     useSessions: bindSnapshotSelector(sessions),
     useAgentPresets: bindSnapshotSelector(store),
     t: (key: keyof typeof en) => en[key],
   } as unknown as AgentPresetLabelProps)} />)
-  return { load, view }
+  return { load, select, view }
 }
 
 describe('the General-settings row', () => {
@@ -365,20 +371,23 @@ describe('the chip introduce cue', () => {
   })
 })
 
-describe('the session-header label', () => {
-  it('names the preset the session runs, and never offers a switch', async () => {
+describe('the session-header control', () => {
+  it('names the preset the session runs and offers a switch', async () => {
     const { load } = renderLabel({ blank: false, agentPreset: 'standard' })
 
     await waitFor(() => { expect(load).toHaveBeenCalledTimes(1) })
-    // A control here would promise a switch the host refuses outright.
-    expect(screen.queryByRole('button')).toBeNull()
-    expect(screen.getByTitle(en.presetStandardDescription).textContent).toBe(en.presetStandardName)
+    expect(screen.getByRole('button').textContent).toContain(en.presetStandardName)
+    expect(screen.getByRole('button').getAttribute('title')).toBe(en.headerHint)
+
+    fireEvent.click(screen.getByRole('button'))
+    expect(screen.getByText(en.presetStandardDescription)).toBeTruthy()
   })
 
   it('falls back to the id, and to the generic hint, when metadata is absent', () => {
     renderLabel({ blank: true, agentPreset: 'mine' })
 
-    expect(screen.getByTitle(en.headerHint).textContent).toBe('mine')
+    expect(screen.getByRole('button').textContent).toContain('mine')
+    expect(screen.getByRole('button').getAttribute('title')).toBe(en.headerHint)
   })
 
   it('shows the id until the roster resolves it', () => {
@@ -386,7 +395,88 @@ describe('the session-header label', () => {
 
     // The session's own summary is the authority on which preset it runs; the
     // roster only supplies the display name, and its arrival is a later frame.
-    expect(screen.getByTitle(en.headerHint).textContent).toBe('standard')
+    expect(screen.getByRole('button').textContent).toContain('standard')
+    expect(screen.getByRole('button')).toHaveProperty('disabled', true)
+  })
+
+  it('writes the picked preset and closes the menu', async () => {
+    const { select } = renderLabel({ blank: false, agentPreset: 'standard' })
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('mine'))
+
+    expect(select).toHaveBeenCalledWith('mine')
+    await waitFor(() => {
+      expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+    })
+  })
+
+  it('ignores a pick that is already the session\'s preset', () => {
+    const { select } = renderLabel({ blank: false, agentPreset: 'standard' })
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText(en.presetStandardName, { selector: '[class*="itemName"]' }))
+
+    expect(select).not.toHaveBeenCalled()
+  })
+
+  it('locks the trigger while a turn is in flight', () => {
+    renderLabel({ blank: false, agentPreset: 'standard', running: true })
+
+    expect(screen.getByRole('button')).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button').getAttribute('title')).toBe(en.headerBusy)
+  })
+
+  it('locks the trigger while a switch is in flight', () => {
+    const select = vi.fn(() => new Promise<void>(() => { /* pending */ }))
+    renderLabel({ blank: false, agentPreset: 'standard' }, {}, select)
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('mine'))
+
+    expect(screen.getByRole('button')).toHaveProperty('disabled', true)
+  })
+
+  it('shows a refused switch on the trigger', async () => {
+    const select = vi.fn(() => Promise.reject(new Error('wait until it finishes')))
+    renderLabel({ blank: false, agentPreset: 'standard' }, {}, select)
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('mine'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button').getAttribute('title')).toBe('wait until it finishes')
+    })
+  })
+
+  it('stringifies a refused switch that is not an Error', async () => {
+    const select = vi.fn(() => Promise.reject('locked'))
+    renderLabel({ blank: false, agentPreset: 'standard' }, {}, select)
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('mine'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button').getAttribute('title')).toBe('locked')
+    })
+  })
+
+  it('closes on an outside dismissal', () => {
+    renderLabel({ blank: false, agentPreset: 'standard' })
+    fireEvent.click(screen.getByRole('button'))
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('keeps a child session as a name, not a picker', () => {
+    renderLabel({ blank: false, agentPreset: 'standard', origin: 'subagent' })
+
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByTitle(en.presetStandardDescription).textContent).toBe(en.presetStandardName)
+  })
+
+  it('falls back to the generic hint on a child session with no description', () => {
+    renderLabel({ blank: false, agentPreset: 'mine', origin: 'subagent' })
+
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByTitle(en.headerHint).textContent).toBe('mine')
   })
 
   it('renders nothing, and reads no roster, when the session records no preset', async () => {

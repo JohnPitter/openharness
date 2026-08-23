@@ -24,7 +24,7 @@ The hand-rolled DeepSeek adapter accepts optional `contextWindow` on each config
 
 ### Compact-basic resolves a target spec
 
-Compact-basic owns consumer policy. Top-level fields define defaults; `modelPolicies` contains partial overrides keyed by the exact `{ provider, model }` pair. Duplicate targets and unknown or invalid fields fail plugin load. `thresholdRatio` defaults to `0.8`, and retention defaults to `retainRatio: 0.16`; callers may use an absolute `retainTokens` instead, but the two retention forms are mutually exclusive. After inheritance, a ratio retention that is not below its threshold ratio also fails plugin load because no model capacity can make that policy valid.
+Compact-basic owns consumer policy. Top-level fields define defaults; `modelPolicies` contains partial overrides keyed by the exact `{ provider, model }` pair. Duplicate targets and unknown or invalid fields fail plugin load. `thresholdRatio` defaults to `0.8`, and retention defaults to `retainRatio: 0.16`; callers may use an absolute `retainTokens` instead, but the two retention forms are mutually exclusive. After inheritance, a ratio retention that is not below its threshold ratio also fails plugin load because no model capacity can make that policy valid. When a settings provider is loaded, the live `compaction-basic` section overlays `auto` and replaces `thresholdRatio` with `thresholdPercent / 100` (`25`, `50`, `75`, or `100`; default `75`) at event time; compositions without settings keep the plugin Config.
 
 For proactive pressure, compaction-basic reads the latest durable request route, resolves its adapter capacity and exact-target policy, and scales ratios into a `ResolvedCompactSpec`. It performs this resolution on every check, so a provider or model switch in one session changes capacity and policy immediately. An absolute retained budget that is not below the scaled threshold fails when the target capacity first makes that comparison possible.
 
@@ -36,7 +36,7 @@ An adapter that lacks capacity metadata remains a valid LLM route. Manual proact
 
 ## Testing
 
-Service tests cover detached context metadata, invalid adapter output, catalog independence, and default absence. Adapter tests cover DeepSeek exact/default/unlisted resolution, invalid capacities, and pi-ai exact descriptor resolution. Compact tests cover ratio scaling, exact provider/model overrides, load-time rejection of invalid merged ratios, runtime absolute-budget validation, same-model-id provider switches, target-specific warning suppression, and capacity-independent overflow recovery. Loader fixtures reject the removed token-meter capacity setting, and examples configure capacity on adapters.
+Service tests cover detached context metadata, invalid adapter output, catalog independence, and default absence. Adapter tests cover DeepSeek exact/default/unlisted resolution, invalid capacities, and pi-ai exact descriptor resolution. Compact tests cover ratio scaling, exact provider/model overrides, load-time rejection of invalid merged ratios, runtime absolute-budget validation, same-model-id provider switches, target-specific warning suppression, capacity-independent overflow recovery, and the live `compaction-basic` settings overlay. Loader fixtures reject the removed token-meter capacity setting, and examples configure capacity on adapters.
 
 ## Alternatives considered
 

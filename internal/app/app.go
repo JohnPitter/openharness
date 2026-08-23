@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"openharness/internal/remote"
 	"openharness/internal/sidecar"
 	"openharness/internal/update"
 )
@@ -14,6 +15,7 @@ import (
 type App struct {
 	ctx     context.Context
 	manager *sidecar.Manager
+	remote  remote.Server
 	url     string
 	err     string
 }
@@ -44,6 +46,7 @@ func (a *App) Startup(ctx context.Context) {
 }
 
 func (a *App) Shutdown(ctx context.Context) {
+	a.remote.Stop()
 	a.manager.Stop()
 }
 
@@ -68,6 +71,7 @@ func (a *App) RestartHarness() error {
 		return fmt.Errorf("app ainda não iniciado")
 	}
 	a.manager.Stop()
+	a.remote.Stop()
 	a.err = ""
 	a.url = ""
 	m, err := sidecar.NewManager()
@@ -99,4 +103,17 @@ func (a *App) CheckForUpdate() (update.Info, error) {
 // ApplyUpdate downloads the latest exe, swaps it, and relaunches.
 func (a *App) ApplyUpdate() error {
 	return update.Apply()
+}
+
+// EnableRemote publishes the harness on the public internet behind a random URL and QR.
+func (a *App) EnableRemote() (remote.Access, error) {
+	if a.url == "" {
+		return remote.Access{}, fmt.Errorf("harness ainda não está pronto")
+	}
+	return a.remote.Start(a.url)
+}
+
+// DisableRemote closes the public tunnel and the local proxy.
+func (a *App) DisableRemote() {
+	a.remote.Stop()
 }

@@ -6,6 +6,7 @@ import { readCardModel } from './models/read-card-model.ts'
 import { searchCardModel } from './models/search-card-model.ts'
 import { terminalBlockLabels, terminalCardModel } from './models/terminal-card-model.ts'
 import { resultText } from './models/tool-call-model.ts'
+import { localizeToolOutput } from './models/localize-tool-copy.ts'
 import { webCardModel } from './models/web-card-model.ts'
 import css from './ToolDetails.module.css'
 
@@ -56,7 +57,7 @@ export function ToolDetails({
   if (!('kind' in block)) return <div className={css.empty}>{t('details.running')}</div>
   return (
     <pre className={css.code} data-error={block.isError || undefined}>
-      {resultText(block)}
+      {localizeToolOutput(resultText(block), t)}
     </pre>
   )
 }

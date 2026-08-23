@@ -34,6 +34,12 @@ import type {
   ModelCompactPolicyConfig,
   ResolvedConfig,
 } from './types.ts'
+import {
+  overlayAutomaticEnabled,
+  overlayThresholdRatio,
+  readCompactionUserSettings,
+  registerCompactionUserSettings,
+} from './user-settings.ts'
 
 export type {
   BasicCompactionConfig,
@@ -44,6 +50,15 @@ export type {
   ResolvedRetention,
   ResolvedTargetPolicy,
 } from './types.ts'
+export {
+  COMPACTION_SETTINGS_NAMESPACE,
+  COMPACTION_THRESHOLD_PERCENTS,
+  DEFAULT_COMPACTION_AUTO,
+  DEFAULT_COMPACTION_THRESHOLD_PERCENT,
+  CompactionUserSettingsSchema,
+  type CompactionThresholdPercent,
+  type CompactionUserSettings,
+} from './user-settings.ts'
 
 /** The region transaction's view of this service's dynamically dispatched summarizer. */
 type RegionSummarize = (input: SummarizationInput, agent: Agent, signal?: AbortSignal) => Promise<SummaryResult>
@@ -126,7 +141,13 @@ export class BasicCompactionEngine extends CompactionEngine {
   constructor(ctx: Context, config: BasicCompactionConfig = {}) {
     super(ctx)
     this.config = resolveConfig(config)
+    registerCompactionUserSettings(ctx)
     if (this.config.auto) this._registerAutomaticCompaction()
+  }
+
+  /** Live overlay wins when the settings namespace is registered; otherwise plugin Config. */
+  private automaticEnabled(): boolean {
+    return overlayAutomaticEnabled(this.config.auto, readCompactionUserSettings(this.ctx))
   }
 
   /**
@@ -148,7 +169,7 @@ export class BasicCompactionEngine extends CompactionEngine {
       { agent, signal },
       next,
     ): Promise<PreStepDecision> => {
-      if (!signal.aborted) {
+      if (!signal.aborted && this.automaticEnabled()) {
         try {
           const result = await this.compactIfNeeded(agent, 'pressure', signal)
           if (result !== null) logResult(result, 'step pressure')
@@ -180,6 +201,7 @@ export class BasicCompactionEngine extends CompactionEngine {
       { agent, failure, signal },
       next,
     ) => {
+      if (!this.automaticEnabled()) return next()
       if (failure.code !== CONTEXT_WINDOW_EXCEEDED_CODE || signal.aborted) return next()
       this.overflowAgents.set(agent.session, agent)
       const target = routedTarget(agent.session)
@@ -249,7 +271,8 @@ export class BasicCompactionEngine extends CompactionEngine {
    * Compact for replayed step-boundary pressure or one provider-confirmed context
    * overflow. Both triggers price the latest durable routed request envelope;
    * overflow bypasses the normal threshold and retained-tail policy so it can
-   * force one useful balanced reduction.
+   * force one useful balanced reduction. A registered `compaction-basic` settings
+   * section overlays `thresholdRatio` for pressure; it does not change overflow.
    * @param agent - agent whose latest durable routed request is measured.
    * @param trigger - normal step-boundary pressure or context-overflow recovery.
    * @param signal - live turn cancellation signal forwarded to summarization.
@@ -262,6 +285,7 @@ export class BasicCompactionEngine extends CompactionEngine {
   ): Promise<CompactionResult | null> {
     const target = routedTarget(agent.session)
     if (target === undefined) return null
+    const overlay = readCompactionUserSettings(this.ctx)
     const policy = resolveTargetPolicy(this.config, target)
     const meter = this.ctx.tokenMeter
     let measurement = meter.measure(agent.session)
@@ -300,7 +324,10 @@ export class BasicCompactionEngine extends CompactionEngine {
         + 'configure contextWindow on that adapter model',
       )
     }
-    const spec = resolveCompactSpec(policy, context.contextWindow)
+    const spec = resolveCompactSpec(
+      { ...policy, thresholdRatio: overlayThresholdRatio(policy.thresholdRatio, overlay) },
+      context.contextWindow,
+    )
     if (measurement.totalTokens < spec.thresholdTokens) return null
 
     // Once pressure qualifies, land the model-free pass before choosing a

@@ -7,8 +7,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex: 1 1 100%;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
 }

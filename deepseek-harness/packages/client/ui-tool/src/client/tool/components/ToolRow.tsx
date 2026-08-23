@@ -29,6 +29,7 @@ import { CHAT_READ_MAX_LINES, type ReadCardModel } from '../models/read-card-mod
 import { CHAT_SEARCH_MAX_LINES, type SearchCardModel } from '../models/search-card-model.ts'
 import { terminalBlockLabels, type TerminalCardModel } from '../models/terminal-card-model.ts'
 import type { ToolRowState, ToolRowVariant } from '../models/tool-call-model.ts'
+import { localizeDisplayedError, localizeToolOutput } from '../models/localize-tool-copy.ts'
 import css from './ToolRow.module.css'
 
 export interface ToolRowProps {
@@ -164,7 +165,9 @@ export function ToolRow({
   const status = stateStatus(state, t)
   // An error row's collapsed summary IS the failure: the first error line in
   // the error color outranks both the args summary and a terminal description.
-  const failureLine = state === 'error' ? errorSummary ?? null : null
+  const failureLine = state === 'error' && errorSummary != null && errorSummary !== ''
+    ? localizeDisplayedError(errorSummary, t)
+    : state === 'error' ? errorSummary ?? null : null
   const summaryText = failureLine ?? summary
   // The failure line replaces the summary wholesale, so a suffix derived from
   // the call args has nothing left to sit beside.
@@ -271,7 +274,7 @@ export function ToolRow({
                           <div className={css.ioCard}>
                             {cardBody !== null && (
                               <div className={css.ioSection}>
-                                <span className={css.ioLabel}>IN</span>
+                                <span className={css.ioLabel}>{t('tool.io.in')}</span>
                                 <span className={css.ioText}>{cardBody}</span>
                               </div>
                             )}
@@ -280,9 +283,9 @@ export function ToolRow({
                             )}
                             {outputText !== null && (
                               <div className={css.ioSection}>
-                                <span className={css.ioLabel}>OUT</span>
+                                <span className={css.ioLabel}>{t('tool.io.out')}</span>
                                 <span className={css.ioText} data-error={state === 'error' || undefined}>
-                                  {outputText}
+                                  {localizeToolOutput(outputText, t)}
                                 </span>
                               </div>
                             )}
@@ -297,7 +300,7 @@ export function ToolRow({
               onClick={inspect}
             >
               <IconInspectOutline12 />
-              Inspect
+              {t('tool.inspect')}
             </button>
           )}
         </div>

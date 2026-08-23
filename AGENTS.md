@@ -19,12 +19,14 @@ internal/
                         %LOCALAPPDATA%\openharness\dsh-home
   sidecar/assets/       node.exe + dsh-runtime.zip (embed via go:embed; NÃO
                         commitar — ver .gitignore; gerados pelo pipeline abaixo)
-  app/                  bindings Wails: HarnessState (polling {url}|{error}),
-                        RestartHarness, shutdown mata o sidecar
+  app/                  bindings Wails: HarnessState, RestartHarness,
+                        EnableRemote / DisableRemote (túnel + QR)
+  remote/               proxy em 127.0.0.1 + túnel HTTPS público com cookie
+                        de token; o celular abre o harness como no desktop
 frontend/dist/          shell estático (sem build step): titlebar própria
                         (logo, --wails-draggable, min/max/close via runtime
                         Wails) + iframe full-bleed para a URL do harness
-build/appicon.png       logo gerada (anel aberto + nós); windows/icon.ico idem
+build/appicon.png       mascote (cabeça no anel azul + nós verdes); windows/icon.ico idem
 ```
 
 ## Pipeline do runtime embutido
@@ -68,11 +70,10 @@ pnpm --filter @deepseek-ai/dsh-web-frontend run build
 
 Arquivos da marca:
 
-- `apps/web/index.html` (title), `apps/web/public/favicon.svg` (anel aberto +
-  nós), `apps/web/public/manifest.webmanifest`
+- `apps/web/index.html` (title), `apps/web/public/favicon.svg` (mascote em
+  tile carvão), `apps/web/public/manifest.webmanifest`
 - `packages/client/ui-primitives/src/BrandWordmark.tsx` e `FishLogo.tsx`
-  (wordmark/ícone; `includeMark=false` usa viewBox `28 0 24 24` para o nome
-  sentar ao lado do mark slotted)
+  (mascote; `includeMark=false` deixa o box vazio para o nome slotted)
 - `packages/client/ui-brand-official/src/client/` (`OfficialBrandMark` /
   `OfficialBrandName` nos slots sidebar/hero)
 - `packages/client/ui-conversation/src/client/locales.ts` (`hero.headline`)
@@ -156,6 +157,15 @@ go vet ./...  # lint
   `CLAUDE_CODE_OAUTH_TOKEN` / `OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN` /
   `ZAI_API_KEY` / `OPENCODE_API_KEY`.
 - Auto-update consulta as GitHub Releases públicas; não precisa de token.
+- **Remote** (sidebar, acima do modelo em uso): opt-in. O exe publica um HTTPS
+  público (túnel Cloudflare Quick Tunnel a partir de `127.0.0.1`) com um token
+  no QR; o celular usa o harness completo (todas as sessões) de qualquer rede,
+  enquanto o PC estiver ligado e o OpenHarness aberto. Quem tiver o link tem o
+  mesmo poder que o desktop. Precisa de internet no PC; a primeira vez baixa
+  `cloudflared` para `%LOCALAPPDATA%\openharness\cloudflared`.
+- **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell); o
+  Trabalhador recolhe informação e aplica as modificações, no modelo escolhido
+  no chip da direita.
 - O SQLite de sessão do rc.8 (v2) **não** lê o storage antigo: dados em
   `%LOCALAPPDATA%\openharness\dsh-home` de um exe rc.5 podem quebrar. Se a UI
   não subir sessões, apague (ou renomeie) essa pasta e reabra o app.

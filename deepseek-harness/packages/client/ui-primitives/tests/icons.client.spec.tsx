@@ -55,27 +55,31 @@ describe('ic_ds_ icon set', () => {
 })
 
 describe('FishLogo', () => {
-  it('renders the ring in a square 24 box so rail icons share one geometry', () => {
+  it('renders the mascot in a square 24 box so rail icons share one geometry', () => {
     const { container } = render(<primitives.FishLogo />)
     const svg = container.querySelector('svg')!
     expect(svg.getAttribute('width')).toBe('24')
     expect(svg.getAttribute('height')).toBe('24')
     expect(svg.getAttribute('viewBox')).toBe('0 0 24 24')
-    expect(container.querySelectorAll('path')).toHaveLength(1)
-    expect(container.innerHTML).toContain('currentColor')
+    expect(container.querySelectorAll('circle').length).toBeGreaterThan(2)
+    expect(container.innerHTML).toContain('#4F8CFF')
+    expect(container.innerHTML).toContain('#7DDB6A')
     expect(container.innerHTML).not.toContain('M0 0L23.16')
   })
 })
 
 describe('BrandWordmark', () => {
-  it('can render the name artwork with or without its leading mark', () => {
+  it('can render the mascot with or without its leading mark', () => {
     const view = render(<primitives.BrandWordmark />)
     const svg = view.container.querySelector('svg')!
-    expect(svg.getAttribute('width')).toBe('52')
-    expect(svg.getAttribute('viewBox')).toBe('0 0 52 24')
+    expect(svg.getAttribute('width')).toBe('24')
+    expect(svg.getAttribute('viewBox')).toBe('0 0 24 24')
+    expect(view.container.innerHTML).toContain('#4F8CFF')
 
     view.rerender(<primitives.BrandWordmark includeMark={false} />)
-    expect(svg.getAttribute('width')).toBe('24')
-    expect(svg.getAttribute('viewBox')).toBe('28 0 24 24')
+    const empty = view.container.querySelector('svg')!
+    expect(empty.getAttribute('width')).toBe('24')
+    expect(empty.getAttribute('viewBox')).toBe('0 0 24 24')
+    expect(empty.innerHTML).toBe('')
   })
 })

@@ -48,7 +48,7 @@
   gap: 12px;
   width: 100%;
   max-width: var(--dsh-composer-card-max-width);
-  padding-top: 10px;
+  padding: 10px 0 16px;
   /* Input stroke: black/0.10 light, white/0.06 dark (figma darkmode note says
      the input border is one notch weaker than buttons) — exactly the
      l2-darkmode-thin pair. Fill: the input surface token (elevated in dark). */
@@ -274,7 +274,7 @@
   /* 2px moved from the bottom pad to the top: the whole control row sits 2px
      lower in the card (it read too high against the textarea) while the card
      height and the controls' own centering stay untouched. */
-  padding: 4px 10px 10px;
+  padding: 4px 14px 10px;
   min-width: 0;
   /* Size container so the chips inside can collapse to icon-only when the
      card runs out of row width (PermissionSelect @container rule). Anonymous
@@ -320,8 +320,10 @@
 .modelRow {
   display: flex;
   align-items: center;
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
-  padding: 0 10px 10px;
+  padding: 4px 14px 0;
 }
 
 /* Attach circle (figma + control): 28px, selector fill, primary glyph. */

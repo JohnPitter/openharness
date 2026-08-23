@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
 import { SettingsSchemaService } from '@deepseek-ai/dsh-client-ui-settings/src/client/schema.ts'
 import { PermissionRow, type PermissionRowProps } from '../src/client/PermissionRow.tsx'
@@ -47,8 +47,7 @@ function ok<T>(value: T) {
   return { rpcId: 'test', result: { ok: true as const, value } }
 }
 
-const dictionary: Record<string, string> = en
-const t: PermissionRowProps['t'] = key => dictionary[key] ?? key
+const t: PermissionRowProps['t'] = makeTranslate(en) as PermissionRowProps['t']
 const runtime = {
   useSessions: (() => { throw new Error('unused') }) as never,
   useWorkspaces: (() => { throw new Error('unused') }) as never,

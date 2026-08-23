@@ -20,7 +20,7 @@ export type ToolRowVariant = 'search' | 'read' | 'bash' | 'write' | 'edit' | 'co
 /** Row state semantic; colors self-supplied via StateDot (design gives none). */
 export type ToolRowState = 'running' | 'ok' | 'error' | 'stopped'
 
-/** Figma row titles per variant (design literals, not translatable copy). */
+/** Figma row titles per variant (English fallbacks; render sites localize). */
 export const VARIANT_TITLES: Record<ToolRowVariant, string> = {
   search: 'Search', read: 'Read', bash: 'Bash',
   write: 'Write', edit: 'Edit', code: 'Code', others: 'Tool call',

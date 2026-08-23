@@ -17,7 +17,7 @@ export function CompactionCommandCard({ node, compaction, t }: CompactionCommand
     return (
       <CompactionItem
         node={compaction}
-        title="compact"
+        title={t('command.compact')}
         fallbackSummary={node.outcome?.text ?? null}
         t={t}
       />

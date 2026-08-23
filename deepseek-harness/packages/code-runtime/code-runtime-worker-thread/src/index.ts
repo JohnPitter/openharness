@@ -107,7 +107,25 @@ const WORKER_PATH = fileURLToPath(new URL(new URL(import.meta.url).pathname.ends
 
 /** Render an unknown thrown value as a message, `Error` or not. */
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  try {
+    if (error instanceof Error) return error.message
+    if (typeof error === 'string') return error
+    if (typeof error === 'object' && error !== null) {
+      if ('message' in error && typeof error.message === 'string') return error.message
+      if ('kind' in error && typeof error.kind === 'string') {
+        return 'reason' in error && typeof error.reason === 'string' && error.reason !== ''
+          ? `${error.kind}: ${error.reason}`
+          : error.kind
+      }
+      const json = JSON.stringify(error)
+      if (typeof json === 'string' && json !== '{}' && json !== 'null') return json
+    }
+    const text = String(error)
+    return text === '[object Object]' ? 'aborted' : text
+  } catch {
+    // Hostile toJSON / getters: abort reporting must still produce a string.
+    return 'aborted'
+  }
 }
 
 /** Resolve after a worker pipe emits all queued data, or closes/errors during termination. */
@@ -294,7 +312,7 @@ export class WorkerThreadCodeRuntime extends CodeRuntime {
     if (this.disposed) throw new Error('dsh-code-runtime-worker-thread: run() after disposal')
     const bindings = this.validateBindings(request)
     if (request.signal?.aborted) {
-      return this.failureBeforeWorker({ kind: 'abort', message: String(request.signal.reason) })
+      return this.failureBeforeWorker({ kind: 'abort', message: messageOf(request.signal.reason) })
     }
 
     let code: string
@@ -544,7 +562,7 @@ export class WorkerThreadCodeRuntime extends CodeRuntime {
         finish(() => output.failure([...logs, ...strayLogs], { kind: 'timeout', message: `wall-clock ceiling reached (${this.config.maxWallMs}ms)` }))
       }, this.config.maxWallMs)
       const onAbort = (): void => {
-        finish(() => output.failure([...logs, ...strayLogs], { kind: 'abort', message: String(request.signal?.reason) }))
+        finish(() => output.failure([...logs, ...strayLogs], { kind: 'abort', message: messageOf(request.signal?.reason) }))
       }
       request.signal?.addEventListener('abort', onAbort, { once: true })
 

@@ -51,22 +51,25 @@ function selectOf(session: SessionFace | undefined): PermissionSelect | undefine
 }
 
 /** Flatten the projection select into popup rows; `custom` is display state, never a target. */
-function optionsOf(value: PermissionSelect, t: (key: string) => string): SelectOption[] {
+function optionsOf(
+  value: PermissionSelect,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): SelectOption[] {
   return value.options
     .filter(option => option.value !== 'custom')
     .map(option => ({
       id: option.value,
-      label: displayPermissionPreset(option.value, option.name),
+      label: displayPermissionPreset(option.value, option.name, t),
       ...(option.description !== undefined ? { detail: option.description } : {}),
       ...(option.value === value.currentValue ? { active: true } : {}),
       ...(option.value === FULL_ACCESS_PRESET
         ? {
           confirmation: {
-            title: t('confirm.title'),
-            description: t('confirm.description'),
+            title: t('confirm.title', { name: t('preset.fullAccess') }),
+            description: t('confirm.description', { name: t('preset.fullAccess') }),
             acknowledgeLabel: t('confirm.acknowledge'),
             cancelLabel: t('confirm.cancel'),
-            confirmLabel: t('confirm.enable'),
+            confirmLabel: t('confirm.enable', { name: t('preset.fullAccess') }),
           },
         }
         : {}),
@@ -86,34 +89,10 @@ export function apply(ctx: ClientContext): void {
   /* jscpd:ignore-start */
   ctx.effect(() => {
     const disposers = [
-      ctx.locale.register(ACCESS_NS, 'zh', {
-        'confirm.title': accessZh['confirm.title'],
-        'confirm.description': accessZh['confirm.description'],
-        'confirm.acknowledge': accessZh['confirm.acknowledge'],
-        'confirm.cancel': accessZh['confirm.cancel'],
-        'confirm.enable': accessZh['confirm.enable'],
-      }),
-      ctx.locale.register(ACCESS_NS, 'en', {
-        'confirm.title': accessEn['confirm.title'],
-        'confirm.description': accessEn['confirm.description'],
-        'confirm.acknowledge': accessEn['confirm.acknowledge'],
-        'confirm.cancel': accessEn['confirm.cancel'],
-        'confirm.enable': accessEn['confirm.enable'],
-      }),
-      ctx.locale.register(ACCESS_NS, 'pt', {
-        'confirm.title': accessPt['confirm.title'],
-        'confirm.description': accessPt['confirm.description'],
-        'confirm.acknowledge': accessPt['confirm.acknowledge'],
-        'confirm.cancel': accessPt['confirm.cancel'],
-        'confirm.enable': accessPt['confirm.enable'],
-      }),
-      ctx.locale.register(ACCESS_NS, 'es', {
-        'confirm.title': accessEs['confirm.title'],
-        'confirm.description': accessEs['confirm.description'],
-        'confirm.acknowledge': accessEs['confirm.acknowledge'],
-        'confirm.cancel': accessEs['confirm.cancel'],
-        'confirm.enable': accessEs['confirm.enable'],
-      }),
+      ctx.locale.register(ACCESS_NS, 'zh', accessZh),
+      ctx.locale.register(ACCESS_NS, 'en', accessEn),
+      ctx.locale.register(ACCESS_NS, 'pt', accessPt),
+      ctx.locale.register(ACCESS_NS, 'es', accessEs),
     ]
     return () => { for (const dispose of disposers) dispose() }
   }, 'ui-permission: Full access confirmation dictionaries')

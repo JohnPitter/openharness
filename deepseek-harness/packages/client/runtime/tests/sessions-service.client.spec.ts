@@ -80,11 +80,24 @@ describe('list store projection', () => {
     // A confirmed switch moves the preset alone: the row keeps its updatedAt,
     // title, running, and blank bits, so an identity guard blind to the preset
     // would serve the old row forever — and every reader (the hero chip's own
-    // no-op check, the header label) would keep the composition it replaced.
+    // no-op check, the header control) would keep the composition it replaced.
     b.svc.noteAgentPreset(sid('s1'), 'minimal')
     await Promise.resolve()
 
     expect(b.svc.list.getSnapshot().byId[sid('s1')]?.agentPreset).toBe('minimal')
+  })
+
+  it('reprojects a started session whose composition switched and nothing else moved', async () => {
+    const b = bench()
+    await feedList(b, [{ id: 's1', blank: false, running: false, agentPreset: 'standard' }])
+    expect(b.svc.list.getSnapshot().byId[sid('s1')]?.agentPreset).toBe('standard')
+
+    b.svc.noteAgentPreset(sid('s1'), 'minimal')
+    await Promise.resolve()
+
+    expect(b.svc.list.getSnapshot().byId[sid('s1')]).toMatchObject({
+      agentPreset: 'minimal', blank: false, running: false,
+    })
   })
 
   it('reflects live increments (host stream via manager) into the store', async () => {

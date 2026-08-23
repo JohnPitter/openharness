@@ -12,11 +12,19 @@ export function displayPresetName(name: string): string {
 }
 
 /**
- * Render a permission preset under its product label.
+ * Render a permission preset under its locale product label.
  * @param value - preset machine value.
  * @param name - host-supplied preset name.
- * @returns the Full access product label or the conventional display name.
+ * @param t - locale lookup for the known product labels; absent keeps English fallbacks.
+ * @returns the locale product label, or the conventional display name.
  */
-export function displayPermissionPreset(value: string, name: string): string {
-  return value === FULL_ACCESS_PRESET ? 'Full access' : displayPresetName(name)
+export function displayPermissionPreset(
+  value: string,
+  name: string,
+  t?: (key: 'preset.fullAccess' | 'preset.readOnly' | 'preset.workspaceWrite') => string,
+): string {
+  if (value === FULL_ACCESS_PRESET) return t?.('preset.fullAccess') ?? 'Full access'
+  if (t !== undefined && value === 'read-only') return t('preset.readOnly')
+  if (t !== undefined && value === 'workspace-write') return t('preset.workspaceWrite')
+  return displayPresetName(name)
 }

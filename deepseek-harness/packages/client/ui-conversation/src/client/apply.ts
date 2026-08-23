@@ -27,6 +27,11 @@ import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
+import {
+  CompactionAutoRow, CompactionThresholdRow,
+} from './settings/CompactionSettingsRows.tsx'
+import type { CompactionSettingsInjected } from './settings/CompactionSettingsRows.tsx'
+import { CompactionSettingsPolicy } from './settings/compaction-policy.ts'
 import { ChatView } from './chat/ChatView.tsx'
 import { StatsLine } from './chat/StatsLine.tsx'
 import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
@@ -39,6 +44,9 @@ import { en, es, NS, pt, zh, type ConversationKey } from './locales.ts'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
+import {
+  COMPACTION_SETTINGS_NAMESPACE, type CompactionUserSettings,
+} from '../compaction-settings.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -133,6 +141,17 @@ export function apply(ctx: Context): void {
   const submissionPolicy = new ComposerSubmissionPolicy(
     ctx.settingsScope.bind<ConversationSettings>({ namespace: CONVERSATION_SETTINGS_NAMESPACE }),
   )
+  const compactionPolicy = new CompactionSettingsPolicy(
+    ctx.settingsScope.bind<CompactionUserSettings>({ namespace: COMPACTION_SETTINGS_NAMESPACE }),
+  )
+  const compactionInjected = (): CompactionSettingsInjected => ({
+    hooks: {
+      compactionAuto: compactionPolicy.auto,
+      compactionThreshold: compactionPolicy.thresholdPercent,
+    },
+    setCompactionAuto: (auto) => { compactionPolicy.setAuto(auto) },
+    setCompactionThreshold: (percent) => { compactionPolicy.setThresholdPercent(percent) },
+  })
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -144,6 +163,22 @@ export function apply(ctx: Context): void {
       setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
     }),
   }, EnterBehaviorRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'compaction-auto',
+    order: 21,
+    locale: NS,
+    inject: compactionInjected,
+  }, CompactionAutoRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'compaction-threshold',
+    order: 22,
+    locale: NS,
+    inject: compactionInjected,
+  }, CompactionThresholdRow))
 
   // Chat semantic reader positions by session, surviving view switches and
   // width reflow when the tab ring remounts the view. Deliberately not

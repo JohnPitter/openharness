@@ -38,9 +38,11 @@ Every setting is optional. Top-level policy fields are defaults for every routed
 | `compactionRetries` | no (default `1`) | Extra attempts after the first when pressure remains above threshold. |
 | `maxOverflowRetries` | no (default `1`) | Maximum retries after canonical context-window overflow; `0` disables recovery only. |
 | `modelPolicies` | no (default `[]`) | Exact `{ provider, model, ...partialPolicy }` overrides; matching uses both fields and does not depend on `listModels()`. |
-| `auto` | no (default `true`) | Register step-boundary pressure and overflow-recovery listeners. Set `false` for manual-only. |
+| `auto` | no (default `true`) | Register step-boundary pressure and overflow-recovery listeners. Set `false` for manual-only. A registered `compaction-basic` settings section overlays this at event time. |
 
 Every `modelPolicies` entry accepts the policy fields above except `auto` and `modelPolicies` itself. If an entry supplies either retention field, it replaces the default policy's retention choice; otherwise retention is inherited. Summarization provider/model remain a pair inside each entry.
+
+When a settings provider is loaded, the first engine registers namespace `compaction-basic` with `auto` (default `true`) and `thresholdPercent` (`25`, `50`, `75`, or `100`; default `75`, the closest allowed fraction to Config `thresholdRatio` `0.8`). Pressure uses `thresholdPercent / 100` in place of the routed Config `thresholdRatio`. Turning `auto` off skips both automatic listeners at the next step or overflow; `/compact` and `compactNow()` stay available. Compositions without settings keep the plugin Config, including `thresholdRatio: 0.8`.
 
 An adapter may return no capacity for a valid dynamic route, and resolved capacity may expose an invalid absolute retention budget. Manual pressure checks then throw a target-specific configuration error; the automatic listener warns once for that exact target and continues with full history. Unrelated operational failures remain independently visible. Canonical provider overflow still attempts recovery because the provider has already established that compaction is necessary.
 

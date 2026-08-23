@@ -26,6 +26,7 @@ import type { CodeSdkLanguage } from './code-mode.ts'
 import { renderToolsSdk } from './ts-types.ts'
 import type { ToolSdkSchema } from './ts-types.ts'
 import { renderToolsSdkPy } from './py-types.ts'
+import { formatThrownMessage } from './thrown-message.ts'
 
 /**
  * Language → SDK-section renderer. The registry looks up the loaded
@@ -599,26 +600,8 @@ export type PostToolDecision =
   | { kind: 'accept'; value: JsonValue; content?: never; additionalContexts?: UserMessage[] }
   | { kind: 'block'; feedback: ContentBlock[]; additionalContexts?: UserMessage[] }
 
-/**
- * Best-effort human-readable message from an arbitrary thrown value: Error
- * instances use `.message`; non-Error objects with a string `message`
- * property (e.g. `throw { message: 'denied' }`) use it too; everything else
- * is stringified.
- */
 function errorMessage(error: unknown): string {
-  try {
-    if (error instanceof Error) return error.message
-    if (typeof error === 'object' && error !== null
-      && 'message' in error && typeof error.message === 'string') {
-      return error.message
-    }
-    return String(error)
-  } catch {
-    // A hostile thrown value can trap `instanceof`, property access, or string
-    // coercion. Error normalization is the outermost safety boundary, so its
-    // fallback must itself be total.
-    return '<unprintable thrown value>'
-  }
+  return formatThrownMessage(error)
 }
 
 /** Derive one failure message from policy feedback without changing its rendered blocks. */

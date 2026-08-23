@@ -214,12 +214,39 @@ describe('WorkerThreadCodeRuntime — budgets and containment (real workers)', (
     expect(result.error).toEqual({ kind: 'abort', message: 'user-cancel' })
   }, 15_000)
 
-  it('reports a pre-aborted signal without spawning', async () => {
+  it('reports a pre-aborted object cancel cause without spawning', async () => {
     const { runtime } = await setup()
     const controller = new AbortController()
-    controller.abort('too-late')
+    controller.abort({ kind: 'user' })
     const result = await runtime.run({ program: 'return 1', bindings: [], signal: controller.signal })
-    expect(result.error).toEqual({ kind: 'abort', message: 'too-late' })
+    expect(result.error).toEqual({ kind: 'abort', message: 'user' })
+  })
+
+  it('renders pre-abort reasons as printable messages without spawning', async () => {
+    const { runtime } = await setup()
+    const cases: Array<[unknown, string]> = [
+      [new Error('boom'), 'boom'],
+      [{ message: 'denied' }, 'denied'],
+      [{ message: 1 }, '{"message":1}'],
+      [{ kind: 'hook', reason: 'policy' }, 'hook: policy'],
+      [{ kind: 'hook', reason: '' }, 'hook'],
+      [{ code: 7 }, '{"code":7}'],
+      [{ toJSON: () => null }, 'aborted'],
+      [{}, 'aborted'],
+      [42, '42'],
+      [null, 'null'],
+      [new Proxy({}, {
+        getPrototypeOf: () => { throw new Error('prototype trap') },
+        has: () => { throw new Error('has trap') },
+        get: () => { throw new Error('get trap') },
+      }), 'aborted'],
+    ]
+    for (const [reason, message] of cases) {
+      const controller = new AbortController()
+      controller.abort(reason)
+      const result = await runtime.run({ program: 'return 1', bindings: [], signal: controller.signal })
+      expect(result.error).toEqual({ kind: 'abort', message })
+    }
   })
 
   it('applies the outer-output cap to failures before worker startup', async () => {

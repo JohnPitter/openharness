@@ -1,8 +1,7 @@
 /**
- * A session's agent preset is fixed at creation. The gateway records the
- * resolved id on the header and refuses to adopt the identity under a different
- * one, because the session's history was produced under that preset's tools:
- * rebuilding it differently would replay tool calls the new agent cannot make.
+ * A session's agent preset can change after creation. The gateway records the
+ * resolved id on the header at create, then an `agent-preset/selected` event
+ * for each later switch, and refuses a swap only while a turn is in flight.
  */
 
 import { mkdtempSync, realpathSync } from 'node:fs'
@@ -43,6 +42,7 @@ function roster(ids: readonly string[], userIds: readonly string[] = []): unknow
   const trustOf = (id: string): 'system' | 'user' => (userIds.includes(id) ? 'user' : 'system')
   const presetOf = (id: string): object =>
     ({ id, trust: trustOf(id), path: `/presets/${id}/agent.cordis.yml` })
+  const composed = new WeakMap<Context, string>()
   return {
     defaultId: ids[0],
     list: () => Promise.resolve(ids.map(presetOf)),
@@ -51,7 +51,11 @@ function roster(ids: readonly string[], userIds: readonly string[] = []): unknow
       if (!ids.includes(wanted)) return Promise.reject(new UnknownPresetError(wanted, ids))
       return Promise.resolve(presetOf(wanted))
     },
-    mount: (_ctx: Context, id?: string) => Promise.resolve(presetOf(id ?? ids[0] ?? '')),
+    mount: (ctx: Context, id?: string) => {
+      const resolved = id ?? ids[0] ?? ''
+      composed.set(ctx, resolved)
+      return Promise.resolve(presetOf(resolved))
+    },
     // What a real mount leaves behind: a service instance only the agent that
     // mounted it can be used to address. The doubles are per agent so a test
     // can tell "this session's" from "some session's".
@@ -71,10 +75,12 @@ function roster(ids: readonly string[], userIds: readonly string[] = []): unknow
       if (!ids.includes(id)) return Promise.reject(new UnknownPresetError(id, ids))
       return Promise.resolve()
     },
-    recompose: (_ctx: Context, id: string) => {
+    recompose: (ctx: Context, id: string) => {
       if (!ids.includes(id)) return Promise.reject(new UnknownPresetError(id, ids))
+      composed.set(ctx, id)
       return Promise.resolve({ id, trust: 'system', path: `/presets/${id}.yml` })
     },
+    composedPreset: (ctx: Context) => composed.get(ctx),
     // The standing scope key a cold transcript read resolves presenters in.
     standingKeyFor: (id?: string) => {
       const wanted = id ?? ids[0] ?? ''
@@ -411,9 +417,9 @@ describe('agentPreset.select', () => {
     const { api, ctx } = await harness(['standard', 'minimal'])
     await api.sessions.create(request({ sessionId: SessionId('sel-race'), agentPreset: 'standard' }))
 
-    // Both pass the blank check; unserialized, the second unmount finds no
-    // record because the first already removed it, and two compositions end up
-    // in one agent layer. The client's busy flag is not enforcement.
+    // Both pass the idle check; unserialized, the second rebind races the
+    // first and two compositions parent one agent. The client's busy flag is
+    // not enforcement.
     const [first, second] = await Promise.all([
       api.agentPresets.select(request({ sessionId: SessionId('sel-race'), agentPreset: 'minimal' })),
       api.agentPresets.select(request({ sessionId: SessionId('sel-race'), agentPreset: 'standard' })),
@@ -427,15 +433,32 @@ describe('agentPreset.select', () => {
     expect(resolveSessionPreset(session)).toBe('standard')
   })
 
-  it('refuses once the conversation has started', async () => {
+  it('recomposes after a turn has already run', async () => {
     const { api, ctx } = await harness(['standard', 'minimal'])
     await api.sessions.create(request({ sessionId: SessionId('sel-2'), agentPreset: 'standard' }))
-    // One turn is enough: the history from here on was produced under
-    // `standard`'s tools, and a swap would strand those tool calls.
     ctx.sessions.get(SessionId('sel-2'))?.append('turn/start', { turn: 0 })
+    ctx.sessions.get(SessionId('sel-2'))?.append('turn/end', { turn: 0, reason: { kind: 'completed' } })
 
     const response = await api.agentPresets.select(
       request({ sessionId: SessionId('sel-2'), agentPreset: 'minimal' }))
+
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) throw new Error('unreachable')
+    expect(response.result.value.agentPreset).toBe('minimal')
+    const session = ctx.sessions.get(SessionId('sel-2'))
+    if (session === undefined) throw new Error('unreachable')
+    expect(resolveSessionPreset(session)).toBe('minimal')
+  })
+
+  it('refuses while the agent is running a turn', async () => {
+    const { api, ctx } = await harness(['standard', 'minimal'])
+    await api.sessions.create(request({ sessionId: SessionId('sel-busy'), agentPreset: 'standard' }))
+    const agent = ctx.agents.get(SessionId('sel-busy'))
+    if (agent === undefined) throw new Error('unreachable')
+    Object.defineProperty(agent, 'status', { configurable: true, get: () => 'running' })
+
+    const response = await api.agentPresets.select(
+      request({ sessionId: SessionId('sel-busy'), agentPreset: 'minimal' }))
 
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('unreachable')

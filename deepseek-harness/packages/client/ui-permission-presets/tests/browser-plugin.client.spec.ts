@@ -20,7 +20,6 @@ import {
   PermissionRow, type PermissionRowInjected,
 } from '../src/client/PermissionRow.tsx'
 import { apply, inject } from '../src/client/index.ts'
-import { accessEn } from '../src/client/locales.ts'
 
 const sid = (k: string): SessionId => k as SessionId
 
@@ -132,7 +131,7 @@ describe('ui-permission browser plugin', () => {
     expect(again.map(option => option.label)).toEqual(['Read Only', 'Workspace Write', 'Full access'])
     expect(again.find(option => option.id === 'danger-full-access')?.confirmation).toEqual({
       title: 'Enable Full access?',
-      description: accessEn['confirm.description'],
+      description: 'Full access reduces confirmation steps and lets the agent perform more actions directly, including sensitive operations, file changes, or external commands. Only use it when you trust the current task.',
       acknowledgeLabel: 'I understand the risks and want to continue',
       cancelLabel: 'Cancel',
       confirmLabel: 'Enable Full access',

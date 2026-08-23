@@ -184,10 +184,62 @@ export function applyChildComposition(
   childCtx.get('agentPresets')?.composeFrom(childCtx, parent.ctx)
   // Order 120: after the sandbox:policy (110) and approval:policy (115) sentences.
   childCtx.systemPrompt.context({ name: 'subagent:delegation', order: 120, text: SUBAGENT_DELEGATION_CONTEXT })
-  if (composition.persona !== undefined) {
-    childCtx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: composition.persona })
+  const persona = composition.persona ?? workflowWorkerPersona(parent)
+  if (persona !== undefined) {
+    childCtx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: persona })
   }
   if (composition.toolFilter !== undefined) childCtx.tools.restrict(composition.toolFilter)
+}
+
+/**
+ * Worker persona for an in-process child of a workflow-mode orchestrator.
+ * Shadows the parent's coordinator persona so the child gathers information
+ * and applies changes instead of planning.
+ */
+export const WORKFLOW_WORKER_PERSONA
+  = 'You are the worker for this delegated task. Gather information (grep, glob, read, web search) '
+    + 'and apply the modifications (edit, write, shell, tests). Do not redesign the overall solution; '
+    + 'execute the task you were given and report what you found and what you changed.'
+
+/** Tools a workflow orchestrator must not see or call; workers keep them through the standing mount. */
+export const WORKFLOW_ORCHESTRATOR_WORK_TOOLS = [
+  'bash',
+  'pwsh',
+  'read',
+  'write',
+  'edit',
+  'read_image',
+  'glob',
+  'grep',
+  'web_search',
+  'web_fetch',
+  'job_output',
+  'job_list',
+  'job_kill',
+] as const
+
+/**
+ * Hide information-gathering and mutation tools from a root workflow agent.
+ * Children join the same standing mount as siblings rather than nesting under
+ * this agent's scope, so they keep the full catalog. No-ops when the agent is
+ * not a depth-0 workflow session or those tools are not registered.
+ * Must not throw: `agent/created` listeners that throw veto publication.
+ * @param agent - the agent that just published.
+ */
+export function restrictWorkflowOrchestrator(agent: Agent): void {
+  if (delegationDepthOf(agent) !== 0) return
+  if (agent.ctx.get('agentPresets')?.composedPreset(agent.ctx) !== 'workflow') return
+  const tools = agent.ctx.get('tools')
+  if (tools === undefined) return
+  const visible = new Set(tools.schemas(agent).map(schema => schema.name))
+  const deny = WORKFLOW_ORCHESTRATOR_WORK_TOOLS.filter(name => visible.has(name))
+  if (deny.length === 0) return
+  agent.ctx.tools.restrict({ deny })
+}
+
+function workflowWorkerPersona(parent: Agent): string | undefined {
+  if (parent.ctx.get('agentPresets')?.composedPreset(parent.ctx) !== 'workflow') return undefined
+  return WORKFLOW_WORKER_PERSONA
 }
 
 /** Policy seeded onto a child session's log at the delegation boundary. */

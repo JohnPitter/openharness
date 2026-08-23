@@ -522,10 +522,9 @@ serviceFor<K extends string & keyof Context>(agent: { ctx: Context }, name: K): 
 /**
  * Re-link one agent to a different preset's standing composition.
  *
- * Only valid while the agent has produced nothing: swapping tools mid
- * conversation would leave logged tool calls the new composition cannot
- * make. The CALLER owns that check — this method does not read session
- * history.
+ * The CALLER owns whether the agent is idle enough to swap — this method
+ * does not read session history or agent status. Historical tool calls stay
+ * in the log; later turns use the new composition.
  *
  * The swap is a parent re-link, not an unmount: standing mounts are shared
  * and permanent, so the old composition stays for its other agents and the

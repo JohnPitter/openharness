@@ -64,9 +64,9 @@ export interface ISessions {
   refreshSubagents(parentSessionId: SessionId): Promise<void>
 
   /**
-   * Record the composition one session now runs. The agent-preset seat calls
-   * this after a successful blank-session switch, so the header label moves
-   * with the composition instead of waiting for the next full list refresh.
+   * Record the composition one session now runs. The agent-preset chip and
+   * header control call this after a successful switch, so the list row
+   * moves with the composition instead of waiting for the next full refresh.
    * @param sessionId - the switched session.
    * @param agentPreset - the preset id the host confirmed.
    */

@@ -937,14 +937,6 @@ async function catalogChild(
   }
 }
 
-/**
- * The requested preset differs from the one this session already runs.
- *
- * A session's composition is fixed at creation: its history was produced under
- * that preset's tools, so adopting the identity under a different one would
- * replay tool calls the rebuilt agent cannot make. Naming a different preset
- * is therefore a caller error rather than a switch.
- */
 /** The roster is absent: this deployment composes no agent presets at all. */
 function noRoster(agentPreset: string): RpcError {
   return {
@@ -1064,10 +1056,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
   /**
    * Serializes `agentPreset.select` per session. Two concurrent selects both
-   * pass the blank check, and the second `unmountPresetFor` then finds nothing
-   * to unmount because the first already removed the record — leaving two
-   * compositions registered into one agent layer. The client's `busy` flag is
-   * not enforcement: the wire is reachable directly.
+   * pass the idle check, and without a queue the second rebind races the
+   * first — two compositions must not parent the same agent at once. The
+   * client's `busy` flag is not enforcement: the wire is reachable directly.
    */
   const presetSwitches = new Map<SessionId, Promise<unknown>>()
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
@@ -3036,9 +3027,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         })
       },
 
-      // Recomposing is limited to a blank session because a started
-      // conversation's history was produced under its preset's tools; the
-      // agent and the session survive, only the composition is swapped.
+      // The agent and the session survive; only the standing composition is
+      // swapped. A turn in flight still holds the previous tool set, so the
+      // swap waits until the agent is idle.
       async select(request) {
         const { sessionId, agentPreset } = request.payload
         const presets = ctx.get('agentPresets')
@@ -3053,12 +3044,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         if ('error' in found) return err(request, found.error)
         const { agent } = found
         const swap = async (): Promise<RpcResponse<{ agentPreset: string }>> => {
-          // Re-read inside the queue: an earlier switch may have run, and a
-          // conversation may have started, since this request arrived.
-          if (!sessionBlank(agent.session)) {
+          // Re-read inside the queue: an earlier switch may have run, or a
+          // turn may have started, since this request arrived.
+          if (presets.composedPreset(agent.ctx) === agentPreset) {
+            return ok(request, { agentPreset })
+          }
+          if (agent.status === 'running') {
             return err(request, {
               code: 'agent-preset-locked',
-              message: `session "${sessionId}" has already started; its agent preset is fixed`,
+              message: `session "${sessionId}" is running a turn; wait until it finishes`,
               details: { sessionId, agentPreset },
             })
           }

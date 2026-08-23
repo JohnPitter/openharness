@@ -43,3 +43,11 @@
   - button "Queue":
     - text: Queue
     - img
+  - text: Automatic compaction Compact history when context fills. /compact remains available when off.
+  - button "On":
+    - text: On
+    - img
+  - text: Compaction threshold Compact when estimated tokens reach this fraction of the model context window
+  - button "75%":
+    - text: 75%
+    - img

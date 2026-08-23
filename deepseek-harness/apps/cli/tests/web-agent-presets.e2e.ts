@@ -626,7 +626,7 @@ describe('a switch survives the session', () => {
       setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'standard').then(() => undefined),
     })
     try {
-      // The api-proxy's select does exactly this pair while the session is blank.
+      // The api-proxy's select does exactly this pair after a switch commits.
       await ctx.agentPresets.recompose(handle.agent.ctx, 'minimal')
       handle.agent.session.append('agent-preset/selected', { agentPreset: 'minimal' })
 
@@ -640,7 +640,7 @@ describe('a switch survives the session', () => {
 
   it('rebuilds a switched session from the log, not the creation header', () => {
     // The exact shape a resume reads back from disk: the header says standard,
-    // the log records the switch the user made while the session was blank.
+    // the log records the switch the user made.
     const rebuilt = resolveSessionPreset({
       header: { version: 0, id: SessionId('x'), createdAt: 0, agentPreset: 'standard' },
       events: [
@@ -650,7 +650,7 @@ describe('a switch survives the session', () => {
     })
 
     // Reading the header alone would compose the creation-time preset over a
-    // history another one produced — the replay the blank-only lock prevents.
+    // history another one produced — the replay resolveSessionPreset prevents.
     expect(rebuilt).toBe('minimal')
   })
 })

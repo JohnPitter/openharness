@@ -97,9 +97,23 @@ async function bench() {
     inject: ((sessionId: SessionId) => ModelSelectInjected) | undefined
     locale: string | undefined
   }>()
+  const footers: Array<{ id?: string; order?: number; locale?: string }> = []
   ctx.provide('slots', {
     inject(_name: string, callback: () => () => void) { return callback() },
-    register(options: { name: string; locale?: string; inject?: (sessionId: SessionId) => ModelSelectInjected }) {
+    register(options: {
+      name: string
+      id?: string
+      order?: number
+      locale?: string
+      inject?: (sessionId: SessionId) => ModelSelectInjected
+    }) {
+      if (options.name === 'sidebar.footer.action') {
+        footers.push({
+          ...options.id === undefined ? {} : { id: options.id },
+          ...options.order === undefined ? {} : { order: options.order },
+          ...options.locale === undefined ? {} : { locale: options.locale },
+        })
+      }
       seats.set(options.name, { inject: options.inject, locale: options.locale })
       return () => { seats.delete(options.name) }
     },
@@ -149,6 +163,7 @@ async function bench() {
     contribution: () => contribution!,
     seat: () => seats.get('conversation.input.model')!,
     footer: () => seats.get('sidebar.footer.action'),
+    footers,
     hostCurrent: () => current,
     setHostCurrent: (selection: ModelSelection) => { current = selection },
     address: (id: SessionId) => { addressed.add(id) },
@@ -160,13 +175,16 @@ async function bench() {
 const projection = (id: string) => ({ sessionId: sid(id) })
 
 describe('ui-model-selection dual entry', () => {
-  it('registers the /model contribution, the composer model seat, and the sidebar usage chip', async () => {
+  it('registers the /model contribution, the composer model seat, and the sidebar remote then usage chips', async () => {
     const b = await bench()
     expect(b.contribution().name).toBe('model')
     expect(b.contribution().ui.kind).toBe('popupSelect')
     expect(b.seat().inject).toBeTypeOf('function')
     expect(b.seat().locale).toBe('model')
     expect(b.footer()?.locale).toBe('model')
+    expect(b.footers.map(row => row.id)).toEqual(['lan-remote', 'usage-status'])
+    expect(b.footers[0]?.order).toBe(-20)
+    expect(b.footers[1]?.order).toBe(-10)
   })
 
   it('popup options mark the host current active with the provider group in the detail', async () => {

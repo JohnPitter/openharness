@@ -1,14 +1,14 @@
 /**
  * Agent-preset surface plugin, browser half — four surfaces over one roster:
  * a General-settings row for the default preset, a chip on the new-session
- * screen for the session about to start, a read-only label in the session
- * header, and a settings section that manages the roster (copy, delete,
- * default, and the way into a preset's own files).
+ * screen for the session about to start, a control in the session header that
+ * switches this session's composition, and a settings section that manages
+ * the roster (copy, delete, default, and the way into a preset's own files).
  *
- * A running session keeps the composition it began with (the host refuses to
- * adopt an existing session under a different preset). That is what splits
- * the choice from the display: the General row and the hero chip are both
- * before-the-fact, while the header only reports what a session already runs.
+ * A live session can switch composition; the host refuses only while a turn
+ * is in flight. Child sessions join the parent's mount and keep a name only.
+ * The General row and the hero chip remain before-the-fact (default and the
+ * next blank session); the header applies to the session it names.
  */
 
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
@@ -97,7 +97,7 @@ export function apply(ctx: ClientContext): void {
   // render and simply hides the button while no flow exists.
   let creatorDraft: (() => void) | undefined
 
-  // The new-session chip and the header label: one controller, because the
+  // The new-session chip and the header control: one conversation scope, because the
   // staged choice belongs to the flow rather than to any one session.
   ctx.inject(['slots', 'conversation', 'sessions', 'workspaces'], (scope: ClientContext) => {
     const api = (scope.get('connection') as ConnectionHandle).api
@@ -122,9 +122,14 @@ export function apply(ctx: ClientContext): void {
       introduced: () => { seat.introduced() },
     })
 
-    const labelInjected = (): AgentPresetLabelInjected => ({
+    const labelInjected = (sessionId: string): AgentPresetLabelInjected => ({
       hooks: { agentPresets: controller.store },
       load: () => controller.load(),
+      select: async (id: string) => {
+        const response = await api.agentPresets.select({ sessionId: sessionId as never, agentPreset: id })
+        if (!response.result.ok) throw new Error(response.result.error.message)
+        scope.sessions.noteAgentPreset(sessionId as never, response.result.value.agentPreset)
+      },
     })
 
     scope.effect(() => {

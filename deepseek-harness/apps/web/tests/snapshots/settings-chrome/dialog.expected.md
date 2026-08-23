@@ -43,3 +43,11 @@
   - button "排队发送":
     - text: 排队发送
     - img
+  - text: 自动压缩 在上下文接近上限时压缩历史。关闭后仍可使用 /compact。
+  - button "开启":
+    - text: 开启
+    - img
+  - text: 压缩阈值 估计用量达到模型上下文窗口的该比例时压缩
+  - button "75%":
+    - text: 75%
+    - img

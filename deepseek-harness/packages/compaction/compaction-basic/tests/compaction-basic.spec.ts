@@ -3,6 +3,15 @@ import { Context } from '@deepseek-ai/cordis'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
+import {
+  COMPACTION_SETTINGS_NAMESPACE,
+  DEFAULT_COMPACTION_AUTO,
+  DEFAULT_COMPACTION_THRESHOLD_PERCENT,
+} from '@deepseek-ai/dsh-compaction-basic'
+import {
+  asCompactionUserSettings,
+  registerCompactionUserSettings,
+} from '@deepseek-ai/dsh-compaction-basic/src/user-settings.ts'
 import { selectCompactableRange } from '@deepseek-ai/dsh-compaction-basic/src/region.ts'
 import type { SummarizationInput, SummaryResult } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { CompactionId, toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
@@ -26,9 +35,18 @@ import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import { agentEvents, type Agent, type RequestErrorAction } from '@deepseek-ai/dsh-agent'
 import ToolResultPruner from '@deepseek-ai/dsh-compaction-tool-result-pruner'
+import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 
 const SIGNAL = new AbortController().signal
 const MODEL = 'test-model'
+
+class MemorySettings extends SettingsProvider {
+  readonly writable = true
+  protected load(): Promise<Record<string, unknown>> { return Promise.resolve({}) }
+  protected persist(_ns: SettingsNamespace, _section: Record<string, unknown>): Promise<void> {
+    return Promise.resolve()
+  }
+}
 
 class ContextAdapter extends LlmAdapter {
   constructor(private readonly contextWindow: number) {
@@ -1884,5 +1902,68 @@ describe('automatic listener and loader composition', () => {
     await preStep(ctx, agent(session, MODEL))
     expect(session.events.some(event => event.type === 'compaction/start')).toBe(false)
     expect(await recover(ctx, agent(session, MODEL), overflow())).toBe(false)
+  })
+
+  it('drops overlay values that are not a resolved compaction section', () => {
+    expect(asCompactionUserSettings(undefined)).toBeUndefined()
+    expect(asCompactionUserSettings(null)).toBeUndefined()
+    expect(asCompactionUserSettings('nope')).toBeUndefined()
+    expect(asCompactionUserSettings({ auto: true })).toBeUndefined()
+    expect(asCompactionUserSettings({ auto: 'yes', thresholdPercent: 75 })).toBeUndefined()
+    expect(asCompactionUserSettings({ auto: true, thresholdPercent: 80 })).toBeUndefined()
+    expect(asCompactionUserSettings({ auto: false, thresholdPercent: 50 }))
+      .toEqual({ auto: false, thresholdPercent: 50 })
+  })
+
+  it('waits to register the overlay until a settings provider appears', async () => {
+    const ctx = createContext()
+    void service({ auto: false }, ctx)
+    expect(ctx.get('settings')).toBeUndefined()
+    await ctx.plugin(MemorySettings).await()
+    const ns = settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)
+    expect(ctx.settings.get(ns)).toEqual({
+      auto: DEFAULT_COMPACTION_AUTO,
+      thresholdPercent: DEFAULT_COMPACTION_THRESHOLD_PERCENT,
+    })
+  })
+
+  it('registers the live overlay once and applies threshold and auto at event time', async () => {
+    const ctx = createContext()
+    await ctx.plugin(MemorySettings).await()
+    const compact = service({ auto: false, thresholdRatio: 0.8, retainTokens: 400 }, ctx)
+    expect(() => registerCompactionUserSettings(ctx)).not.toThrow()
+    const ns = settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)
+    expect(ctx.settings.get(ns)).toEqual({
+      auto: DEFAULT_COMPACTION_AUTO,
+      thresholdPercent: DEFAULT_COMPACTION_THRESHOLD_PERCENT,
+    })
+    await expect(ctx.settings.update(ns, { thresholdPercent: 80 })).rejects.toThrow()
+
+    await ctx.settings.update(ns, { thresholdPercent: 25 })
+    await expect(compactIfNeeded(compact, conversation(4)))
+      .rejects.toThrow(/less than threshold tokens 250/)
+
+    await ctx.settings.update(ns, { thresholdPercent: 100 })
+    await expect(compactIfNeeded(compact, conversation(1))).resolves.toBeNull()
+  })
+
+  it('skips automatic pressure and overflow recovery when the overlay disables auto', async () => {
+    const ctx = createContext(10_000)
+    await ctx.plugin(MemorySettings).await()
+    const compact = new TestCompactionEngine(ctx, {
+      thresholdRatio: 0.5,
+      retainTokens: 180,
+    })
+    const ns = settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)
+    await ctx.settings.update(ns, { auto: false })
+    const compactIfNeededSpy = vi.spyOn(compact, 'compactIfNeeded')
+    const pressured = conversation(4)
+    await preStep(ctx, agent(pressured, MODEL))
+    expect(compactIfNeededSpy).not.toHaveBeenCalled()
+    expect(pressured.events.some(event => event.type === 'compaction/start')).toBe(false)
+
+    const overflowSession = conversation(3)
+    expect(await recover(ctx, agent(overflowSession, MODEL), overflow())).toBe(false)
+    expect(overflowSession.events.some(event => event.type === 'compaction/summary')).toBe(false)
   })
 })

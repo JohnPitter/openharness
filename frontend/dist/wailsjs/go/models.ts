@@ -1,3 +1,24 @@
+export namespace remote {
+	
+	export class Access {
+	    url: string;
+	    qrDataUrl: string;
+	    active: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Access(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.qrDataUrl = source["qrDataUrl"];
+	        this.active = source["active"];
+	    }
+	}
+
+}
+
 export namespace update {
 	
 	export class Info {
