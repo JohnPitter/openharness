@@ -70,7 +70,7 @@ interface AskUserQuestionItem {
 
 ## 提问请求
 
-`AskUserQuestionRequest` 是跨包请求。`questions` 是数组，这样 UI 可以在一个流程中呈现相关提示，同时保持每个回答有稳定的 id。如提供 `agent`，它必须与存活调用方是同一实例；只有当当前注册表将该实例识别为运行时根时，交互 seam 才会接纳该 agent。
+`AskUserQuestionRequest` 是跨包请求。`questions` 是数组，这样 UI 可以在一个流程中呈现相关提示，同时保持每个回答有稳定的 id。如提供 `agent`，它必须与存活调用方是同一实例。交互 seam 只在用户正在回答的运行时根上等待人类 UI；被委托的调用方会自动选定推荐（否则第一项）选项，或在批次没有选项时以 `DELEGATED_CALLER` 失败。
 
 ```ts type-equiv
 /** Request for a human answer. */

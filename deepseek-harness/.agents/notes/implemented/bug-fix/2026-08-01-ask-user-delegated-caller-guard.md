@@ -12,9 +12,9 @@ Durable session lineage cannot decide whether an answerer exists. A child sessio
 
 ## Decision
 
-When `AskUserQuestionRequest.agent` is present, `UserQuestionService.ask()` authenticates the exact live agent through `ctx.agents` and admits it only when `ctx.agents.roots()` contains that instance. A missing registry or stale same-id object fails with `CALLER_NOT_LIVE`; a live agent owned by another live agent fails with `DELEGATED_CALLER`. The check runs after the existing aborted and empty-batch guards and before intent validation or provider dispatch, so an owned child never creates a UI wait.
+When `AskUserQuestionRequest.agent` is present, `UserQuestionService.ask()` authenticates the exact live agent through `ctx.agents`. A human UI wait is only for a runtime root the user is answering. A delegated caller never creates that wait: [subagent option auto-selection](../feature/2026-08-23-subagent-ask-user-auto-recommended.md) returns the recommended (else first) option, and an optionless batch still fails with `DELEGATED_CALLER`. A missing registry or stale same-id object fails with `CALLER_NOT_LIVE`. The check runs after the existing aborted and empty-batch guards and before provider dispatch.
 
-Runtime ownership is the authority. A lineage-bearing session resumed without an owner is a runtime root and may ask; a live child remains ineligible even when its durable `delegationDepth` is zero. Agentless programmatic calls retain the existing provider path.
+Runtime ownership is the primary authority. A continuable child may still be a registry root (created from a manager scope with no initiator); those stay delegated while `origin` is `subagent` and the durable parent session is live. A lineage-bearing session resumed without an owner and without a live parent is a runtime root and may ask. Agentless programmatic calls retain the existing provider path.
 
 The shared failure text is consumer-neutral and actionable: the child includes the unresolved question or decision in its final result. The parent already receives that result through the delegation contract and can decide whether to ask the human. Neither the service nor a child claims an upward messaging or answer-forwarding capability that does not exist.
 
@@ -32,8 +32,8 @@ This safety boundary is independent of the browser's composer election. The prop
 
 ## Consequences
 
-Runtime-owned child calls fail fast with a stable structured error instead of hanging. Exact live roots and agentless programmatic calls remain eligible, including resumed sessions with historical child lineage. `ask_user_question` and `exit_plan_mode` receive the same neutral corrective guidance, while their model-visible schemas and system-prompt prefixes remain unchanged; only the appended error result differs, so existing KV-cache prefixes remain reusable.
+Runtime-owned and live-parent continuable child calls never wait on a UI. Option questions resolve through auto-selection; optionless questions fail fast with a stable structured error. Exact live roots with no live parent, and agentless programmatic calls, remain eligible for a human answer, including resumed sessions with historical child lineage. `ask_user_question` and `exit_plan_mode` share this seam.
 
 ## Testing
 
-Service tests cover a zero-depth live child, a depth-one resumed runtime root, a missing registry, a stale same-id object, and provider non-invocation on every rejection. Tool and plan-mode tests prove both consumers surface the neutral `DELEGATED_CALLER` result and never reach the provider. The keyless assembled snapshot delegates to a child that attempts `ask_user_question`, pins the child's error tool result and final handoff, and proves the parent completes instead of waiting for an answer.
+Service tests cover a zero-depth live child (optionless `DELEGATED_CALLER` and option auto-selection), a continuable subagent root with a live parent, a depth-one resumed runtime root, a missing registry, a stale same-id object, and provider non-invocation on every rejection or auto-answer. Tool and plan-mode tests prove optionless consumers surface the neutral `DELEGATED_CALLER` result. The keyless assembled snapshot delegates to a child that attempts an optionless `ask_user_question`, pins the child's error tool result and final handoff, and proves the parent completes instead of waiting for an answer.

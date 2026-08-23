@@ -12,9 +12,9 @@ Status: implemented
 
 ## 决策
 
-如果存在 `AskUserQuestionRequest.agent`，`UserQuestionService.ask()` 会通过 `ctx.agents` 验证该 agent 就是注册表中的存活实例，并且只在 `ctx.agents.roots()` 包含该实例时才允许调用。缺失注册表或传入仅 id 相同的陈旧对象时，以 `CALLER_NOT_LIVE` 失败；存活 agent 归属于另一个存活 agent 时，以 `DELEGATED_CALLER` 失败。该检查位于现有的已中止和空批次守卫之后、意图校验或提供方分派之前，因此归属于其他 agent 的子级绝不会触发 UI 等待。
+如果存在 `AskUserQuestionRequest.agent`，`UserQuestionService.ask()` 会通过 `ctx.agents` 验证该 agent 就是注册表中的存活实例。人类 UI 等待只发生在用户正在回答的运行时根上。被委托的调用方绝不会创建该等待：[subagent 选项自动选定](../feature/2026-08-23-subagent-ask-user-auto-recommended.zh.md) 返回推荐（否则第一项）选项，没有选项的批次仍以 `DELEGATED_CALLER` 失败。缺失注册表或传入仅 id 相同的陈旧对象时，以 `CALLER_NOT_LIVE` 失败。该检查位于现有的已中止和空批次守卫之后、提供方分派之前。
 
-以运行时所有权为权限依据。携带谱系的会话在无所有者的情况下恢复时就是运行时根，可以提问；存活子级即使持久化 `delegationDepth` 为零，仍无资格提问。不带 agent 的程序化调用继续沿用现有提供方路径。
+以运行时所有权为主要权限依据。continuable 子级仍可能是注册表根（从没有 initiator 的 manager 作用域创建）；在 `origin` 为 `subagent` 且持久化父会话仍存活时，它们仍视为被委托。携带谱系的会话在无所有者且没有存活父级的情况下恢复时就是运行时根，可以提问。不带 agent 的程序化调用继续沿用现有提供方路径。
 
 共享失败文本与具体消费方无关，并给出可执行指引：子级把尚未解决的问题或决策写入最终结果。委托约定本就会把该结果传给父级，父级可据此决定是否询问人类。服务和子级都不会宣称存在实际上并不存在的向上消息传递或回答转发能力。
 
@@ -32,8 +32,8 @@ Status: implemented
 
 ## 影响
 
-运行时中归属于其他 agent 的子级调用会以稳定的结构化错误快速失败，而不是挂起。注册表中的确切存活根和不带 agent 的程序化调用仍有资格提问，包括带有历史子级谱系的已恢复会话。`ask_user_question` 与 `exit_plan_mode` 会收到相同的中性纠正指引，而其模型可见 schema 和系统提示词前缀保持不变；只有追加的错误结果发生变化，因此现有 KV Cache 前缀仍可复用。
+运行时中归属于其他 agent 的子级，以及父会话仍存活的 continuable 子级，都不会等待 UI。带选项的问题通过自动选定解决；没有选项的问题以稳定的结构化错误快速失败。没有存活父级的确切存活根，以及不带 agent 的程序化调用，仍有资格获得人类回答，包括带有历史子级谱系的已恢复会话。`ask_user_question` 与 `exit_plan_mode` 共用此 seam。
 
 ## 测试
 
-服务测试覆盖持久化深度为零的存活子级、深度为一的已恢复运行时根、缺失注册表、仅 id 相同的陈旧对象，以及每次拒绝都不调用提供方。工具与 plan-mode 测试证明两个消费方都会呈现中性的 `DELEGATED_CALLER` 结果，且绝不触达提供方。无密钥组装快照委托一个尝试调用 `ask_user_question` 的子级，固定其错误工具结果和最终交接，并证明父级可以完成，而不是一直等待回答。
+服务测试覆盖持久化深度为零的存活子级（无选项的 `DELEGATED_CALLER` 与带选项的自动选定）、带存活父级的 continuable subagent 根、深度为一的已恢复运行时根、缺失注册表、仅 id 相同的陈旧对象，以及每次拒绝或自动选定都不调用提供方。工具与 plan-mode 测试证明无选项消费方会呈现中性的 `DELEGATED_CALLER` 结果。无密钥组装快照委托一个尝试无选项 `ask_user_question` 的子级，固定其错误工具结果和最终交接，并证明父级可以完成，而不是一直等待回答。

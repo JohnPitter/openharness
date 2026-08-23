@@ -13,7 +13,7 @@ User-interaction Service Definition. It owns `ctx.userQuestions`, the service a 
 
 ### Key Types
 
-- `AskUserQuestionRequest` — `{ questions: [{ id, question, detail?, header?, options?, multiSelect?, intent? }], agent?, signal? }`; `detail` supplies supporting text that providers render with the question without turning it into an option label. When present, `agent` must be the registry's exact live runtime root.
+- `AskUserQuestionRequest` — `{ questions: [{ id, question, detail?, header?, options?, multiSelect?, intent? }], agent?, signal? }`; `detail` supplies supporting text that providers render with the question without turning it into an option label. When present, `agent` must be the registry's exact live instance.
 - `AskUserQuestionOption` — `{ label, description? }`.
 - `AskUserQuestionIntent` — `{ kind: 'plan-review', approve }`; the tagged presentation intent below.
 - `AskUserQuestionAnswer` — `{ answers: [{ id, selected, custom? }] }`.
@@ -22,7 +22,7 @@ User-interaction Service Definition. It owns `ctx.userQuestions`, the service a 
 
 For a single-select question, `custom` overrides the selected choice and `selected` is empty. For a multi-select question, `custom` may supplement the labels in `selected`. A UI may preserve a skipped item as `{ id, selected: [] }`, keeping the existing answer shape while retaining other answers in the batch.
 
-When a request carries an agent, `ask()` authenticates its exact identity through the live `AgentRegistry` and admits only a runtime root. Durable lineage is not authority: a session with historical delegation depth may ask after it is resumed as a new runtime root, while a live child owned by another agent is rejected even if its durable depth is zero. Agentless programmatic requests retain the existing provider path.
+When a request carries an agent, `ask()` authenticates its exact identity through the live `AgentRegistry`. A human UI wait is for a runtime root the user is answering. A delegated caller — a live child owned by another agent, or a continuable `origin: 'subagent'` agent whose parent session is still live — never waits: `ask()` selects the option labeled `(Recommended)` (or the first option) and returns. Optionless batches still fail with `DELEGATED_CALLER`. Durable lineage is not authority on its own: a session with historical child lineage may ask after it is resumed as a new runtime root with no live parent. Agentless programmatic requests retain the existing provider path.
 
 ### Presentation intent
 
@@ -34,7 +34,7 @@ This is the Service Definition package. Consumers such as `@deepseek-ai/dsh-tool
 
 ## Model Experience
 
-Indirectly, through `dsh-tool-ask-user`, which retains a successful provider answer as compact JSON or one of these failures: `Error: ask_user_question was aborted before the user answered`, `Error: ask_user_question requires at least one question`, `Error: human interaction requires the exact live calling agent when an agent is supplied`, `Error: human interaction is unavailable while the calling agent is owned by another live agent; include the unresolved question or decision in the child agent's final result`, `Error: no user-questions provider is registered`, or `Error: <message>`. Waiting for the human adds no tokens.
+Indirectly, through `dsh-tool-ask-user`, which retains a successful provider or auto-selected delegated answer as compact JSON or one of these failures: `Error: ask_user_question was aborted before the user answered`, `Error: ask_user_question requires at least one question`, `Error: human interaction requires the exact live calling agent when an agent is supplied`, `Error: human interaction is unavailable while the calling agent is owned by another live agent; include the unresolved question or decision in the child agent's final result`, `Error: no user-questions provider is registered`, or `Error: <message>`. Waiting for the human adds no tokens. Auto-selected delegated answers add no tokens either.
 
 #### KV Cache effect
 

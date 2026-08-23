@@ -3,6 +3,8 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import UserQuestionService, {
   UserQuestionError,
+  autoAnswerDelegatedQuestions,
+  isRecommendedOptionLabel,
   type AskUserQuestionRequest,
   type UserQuestionProvider,
 } from '@deepseek-ai/dsh-user-questions'
@@ -18,11 +20,15 @@ function provider(answer = 'approved'): UserQuestionProvider & { seen: AskUserQu
   }
 }
 
-function stubAgent(id: string, delegationDepth = 0): Agent {
+function stubAgent(
+  id: string,
+  delegationDepth = 0,
+  header: { origin?: 'subagent'; parentSession?: string } = {},
+): Agent {
   const agentId = id as Agent['id']
   return {
     id: agentId,
-    session: { id: agentId, header: { delegationDepth } },
+    session: { id: agentId, header: { delegationDepth, ...header } },
   } as unknown as Agent
 }
 
@@ -111,6 +117,78 @@ describe('UserQuestionService', () => {
       name: 'UserQuestionError',
       code: 'DELEGATED_CALLER',
       message: "human interaction is unavailable while the calling agent is owned by another live agent; include the unresolved question or decision in the child agent's final result",
+    })
+    expect(p.ask).not.toHaveBeenCalled()
+  })
+
+  it('auto-selects the recommended option for a live runtime-owned agent', async () => {
+    const ctx = new Context()
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(UserQuestionService)
+    const p = { ask: vi.fn(async () => ({ answers: [] })) }
+    ctx.userQuestions.registerProvider(p)
+    const root = stubAgent('root', 0)
+    const child = stubAgent('child', 1)
+    ctx.agents.enter(root, undefined)
+    ctx.agents.enter(child, root)
+
+    await expect(ctx.userQuestions.ask({
+      questions: [{
+        id: 'pkg',
+        question: 'Which package manager?',
+        options: [{ label: 'npm' }, { label: 'pnpm (Recommended)' }],
+      }],
+      agent: child,
+    })).resolves.toEqual({
+      answers: [{ id: 'pkg', selected: ['pnpm (Recommended)'] }],
+    })
+    expect(p.ask).not.toHaveBeenCalled()
+  })
+
+  it('auto-selects the first option when a delegated caller marks none as recommended', async () => {
+    const ctx = new Context()
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(UserQuestionService)
+    const p = { ask: vi.fn(async () => ({ answers: [] })) }
+    ctx.userQuestions.registerProvider(p)
+    const root = stubAgent('root', 0)
+    const child = stubAgent('child', 1)
+    ctx.agents.enter(root, undefined)
+    ctx.agents.enter(child, root)
+
+    await expect(ctx.userQuestions.ask({
+      questions: [{
+        id: 'pkg',
+        question: 'Which package manager?',
+        options: [{ label: 'pnpm' }, { label: 'npm' }],
+      }],
+      agent: child,
+    })).resolves.toEqual({
+      answers: [{ id: 'pkg', selected: ['pnpm'] }],
+    })
+    expect(p.ask).not.toHaveBeenCalled()
+  })
+
+  it('auto-selects recommended options for a continuable subagent root while its parent is live', async () => {
+    const ctx = new Context()
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(UserQuestionService)
+    const p = { ask: vi.fn(async () => ({ answers: [] })) }
+    ctx.userQuestions.registerProvider(p)
+    const root = stubAgent('root', 0)
+    const child = stubAgent('child', 1, { origin: 'subagent', parentSession: 'root' })
+    ctx.agents.enter(root, undefined)
+    ctx.agents.enter(child, undefined)
+
+    await expect(ctx.userQuestions.ask({
+      questions: [{
+        id: 'pkg',
+        question: 'Which package manager?',
+        options: [{ label: 'pnpm (Recommended)' }, { label: 'npm' }],
+      }],
+      agent: child,
+    })).resolves.toEqual({
+      answers: [{ id: 'pkg', selected: ['pnpm (Recommended)'] }],
     })
     expect(p.ask).not.toHaveBeenCalled()
   })
@@ -218,5 +296,36 @@ describe('UserQuestionService', () => {
 
     expect(result.answers).toEqual([{ id: 'plain', selected: ['Approve'] }])
     expect(p.seen[0]?.questions[1]?.intent).toEqual(intent)
+  })
+})
+
+describe('autoAnswerDelegatedQuestions', () => {
+  it('recognises English and Chinese recommendation suffixes', () => {
+    expect(isRecommendedOptionLabel('Fast (Recommended)')).toBe(true)
+    expect(isRecommendedOptionLabel('稳妥（推荐）')).toBe(true)
+    expect(isRecommendedOptionLabel('稳妥 (推荐)')).toBe(true)
+    expect(isRecommendedOptionLabel('Plain')).toBe(false)
+  })
+
+  it('selects every recommended label on a multi-select question', () => {
+    expect(autoAnswerDelegatedQuestions([{
+      id: 'targets',
+      question: 'Choose targets',
+      multiSelect: true,
+      options: [
+        { label: 'Code (Recommended)' },
+        { label: 'Docs' },
+        { label: 'Tests (Recommended)' },
+      ],
+    }])).toEqual({
+      answers: [{ id: 'targets', selected: ['Code (Recommended)', 'Tests (Recommended)'] }],
+    })
+  })
+
+  it('returns undefined when any question has no options', () => {
+    expect(autoAnswerDelegatedQuestions([
+      { id: 'pkg', question: 'Which?', options: [{ label: 'pnpm (Recommended)' }] },
+      { id: 'notes', question: 'Anything else?' },
+    ])).toBeUndefined()
   })
 })

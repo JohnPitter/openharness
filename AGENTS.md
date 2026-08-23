@@ -178,6 +178,9 @@ go vet ./...  # lint
 - **J-Space:** skill empacotada em `apps/cli/config/skills/j-space`, nos presets
   Standard, Code e Workflow. Protocolo de construção (fast/full/loop); se a
   tarefa admite duas leituras com ações diferentes, carrega `problem-model`.
+- **Perguntas de subagente:** `ask_user_question` no filho não espera o composer
+  do pai. Escolhe a opção `(Recommended)` (senão a primeira). Sem opções, falha
+  com `DELEGATED_CALLER` em vez de travar.
 - O SQLite de sessão do rc.8 (v2) **não** lê o storage antigo: dados em
   `%LOCALAPPDATA%\openharness\dsh-home` de um exe rc.5 podem quebrar. Se a UI
   não subir sessões, apague (ou renomeie) essa pasta e reabra o app.

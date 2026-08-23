@@ -70,7 +70,7 @@ interface AskUserQuestionItem {
 
 ## Ask request
 
-`AskUserQuestionRequest` is the cross-package request. `questions` is an array so a UI can present related prompts in one flow while preserving a stable id per answer. When present, `agent` is the exact live caller; the interaction seam admits it only while the live registry identifies that instance as a runtime root.
+`AskUserQuestionRequest` is the cross-package request. `questions` is an array so a UI can present related prompts in one flow while preserving a stable id per answer. When present, `agent` is the exact live caller. The interaction seam waits on a human UI only for a runtime root the user is answering; a delegated caller auto-selects recommended (else first) options or fails with `DELEGATED_CALLER` when the batch has no options.
 
 ```ts type-equiv
 /** Request for a human answer. */

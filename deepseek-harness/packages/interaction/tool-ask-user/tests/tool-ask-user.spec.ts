@@ -289,6 +289,45 @@ describe('ask_user_question tool', () => {
     expect(seen).toHaveLength(0)
   })
 
+  it('auto-selects the recommended option for a live runtime-owned agent', async () => {
+    const ctx = await setup()
+    const seen: AskUserQuestionRequest[] = []
+    ctx.userQuestions.registerProvider({
+      async ask(request) {
+        seen.push(request)
+        return { answers: [{ id: 'pkg', selected: ['npm'] }] }
+      },
+    })
+    const root = stubAgent('root', 0)
+    const child = stubAgent('child', 1)
+    ctx.agents.enter(root, undefined)
+    ctx.agents.enter(child, root)
+
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('ask-delegated-recommended'),
+      name: 'ask_user_question',
+      arguments: {
+        questions: [{
+          id: 'pkg',
+          question: 'Which package manager?',
+          options: [
+            { label: 'npm' },
+            { label: 'pnpm (Recommended)' },
+          ],
+        }],
+      },
+      agent: child,
+    })
+
+    expect(result.isError).toBe(false)
+    if (result.isError) throw new Error('expected ask_user_question success')
+    expect(result.value).toEqual({
+      answers: [{ id: 'pkg', selected: ['pnpm (Recommended)'] }],
+    })
+    expect(seen).toHaveLength(0)
+  })
+
   it('returns a structured error for empty question batches', async () => {
     const ctx = await setup()
 

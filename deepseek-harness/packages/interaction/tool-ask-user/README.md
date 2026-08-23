@@ -53,6 +53,6 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
-- **A pending question blocks the tool call until the human answers** — the tool declares no `timeout-policy` budget; cancellation rides the turn's `exec.signal` only.
-- **Runtime-owned subagents cannot ask the user** — `ask_user_question` rejects a live child owned by another agent with `DELEGATED_CALLER`; the child must include the unresolved question or decision in its final result. Durable lineage does not decide this boundary, so a lineage-bearing session resumed as a runtime root may ask normally.
+- **A pending question blocks the tool call until the human answers** — the tool declares no `timeout-policy` budget; cancellation rides the turn's `exec.signal` only. Delegated callers never enter that wait: they receive the recommended option (else the first) or `DELEGATED_CALLER` when the batch has no options.
+- **Delegated callers do not wait on a human channel** — a live child owned by another agent, or a continuable `origin: 'subagent'` agent whose parent session is still live, auto-selects options at `ctx.userQuestions.ask()`. Optionless questions still fail with `DELEGATED_CALLER`; the child must include the unresolved free-text question in its final result. A lineage-bearing session resumed as a runtime root with no live parent may ask normally.
 - **Native answers render as JSON text** — the canonical value remains structured, but the model-facing result uses compact JSON rather than a richer content-block vocabulary.

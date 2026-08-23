@@ -18,11 +18,20 @@ declare module '@deepseek-ai/cordis' {
 }
 
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from './types.ts'
+import {
+  autoAnswerDelegatedQuestions,
+  isDelegatedQuestionCaller,
+} from './auto-answer.ts'
 
 export type {
   AskUserQuestionAnswer, AskUserQuestionAnswerItem, AskUserQuestionIntent, AskUserQuestionItem,
   AskUserQuestionOption,
 } from './types.ts'
+export {
+  autoAnswerDelegatedQuestions,
+  isDelegatedQuestionCaller,
+  isRecommendedOptionLabel,
+} from './auto-answer.ts'
 
 /** Request for a human answer. */
 export interface AskUserQuestionRequest {
@@ -77,17 +86,20 @@ export class UserQuestionService extends Service {
   /**
    * Ask the active UI provider and wait for the user's answer.
    *
-   * When a caller supplies an agent, human interaction is valid only for the
-   * exact live runtime root. Runtime ownership, not durable session lineage,
-   * decides this boundary: an owned child has no human answerer and would
-   * block forever, while a lineage-bearing session resumed as a new runtime
-   * root may ask normally.
+   * When a caller supplies an agent, human interaction waits on a UI only for
+   * the exact live runtime root the human is answering. A delegated caller —
+   * a live child owned by another agent, or a continuable `origin: 'subagent'`
+   * agent whose parent session is still live — never waits: `ask()` selects the
+   * recommended option label (else the first) and returns. Optionless batches
+   * still fail with `DELEGATED_CALLER`. Durable lineage alone does not decide:
+   * a lineage-bearing session resumed as a new runtime root with no live parent
+   * may ask normally.
    *
    * @param request Questions, owner agent, and abort signal.
-   * @returns The answer chosen or typed by the human.
+   * @returns The answer chosen by the human, or the auto-selected delegated options.
    * @throws {UserQuestionError} code `CALLER_NOT_LIVE` when a supplied
    *   agent is not the registry's exact live instance, or `DELEGATED_CALLER`
-   *   when that live agent is owned by another agent.
+   *   when a delegated caller has no selectable options.
    */
   async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer> {
     if (request.signal?.aborted) {
@@ -97,6 +109,7 @@ export class UserQuestionService extends Service {
       throw new UserQuestionError('ask_user_question requires at least one question', 'EMPTY_QUESTIONS')
     }
     const agent = request.agent
+    let delegated = false
     if (agent !== undefined) {
       const agents = this.ctx.get('agents')
       if (agents === undefined || agents.get(agent.id) !== agent) {
@@ -104,12 +117,7 @@ export class UserQuestionService extends Service {
           'human interaction requires the exact live calling agent when an agent is supplied',
           'CALLER_NOT_LIVE')
       }
-      if (!agents.roots().includes(agent)) {
-        throw new UserQuestionError(
-          'human interaction is unavailable while the calling agent is owned by another live agent; '
-          + "include the unresolved question or decision in the child agent's final result",
-          'DELEGATED_CALLER')
-      }
+      delegated = isDelegatedQuestionCaller(agents, agent)
     }
     // A presentation intent asserts two things the types cannot: that the
     // named approve label is one of this question's own options, and that a
@@ -132,6 +140,14 @@ export class UserQuestionService extends Service {
           `question ${question.id} declares intent ${intent.kind} without the detail it reviews`,
           'BAD_INTENT')
       }
+    }
+    if (delegated) {
+      const auto = autoAnswerDelegatedQuestions(request.questions)
+      if (auto !== undefined) return auto
+      throw new UserQuestionError(
+        'human interaction is unavailable while the calling agent is owned by another live agent; '
+        + "include the unresolved question or decision in the child agent's final result",
+        'DELEGATED_CALLER')
     }
     if (this.provider === undefined) {
       throw new UserQuestionError('no user-questions provider is registered', 'NO_PROVIDER')
