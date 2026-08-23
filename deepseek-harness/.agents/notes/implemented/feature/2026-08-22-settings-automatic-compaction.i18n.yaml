@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-22-settings-automatic-compaction.md
-2026-08-22-settings-automatic-compaction.md: 9b5e934bf33c6c98045f3ce2cb03d6ebf7f253ec
-2026-08-22-settings-automatic-compaction.zh.md: 42b18513c051466c9b2ee9e76de1fef54e3d998a
+2026-08-22-settings-automatic-compaction.md: 13c9be20b76b4f69dbb8e0530cdf6b4d7712f695
+2026-08-22-settings-automatic-compaction.zh.md: 40991de57afd350eec5a01b329da2be6ec6c48fc

@@ -1915,6 +1915,18 @@ describe('automatic listener and loader composition', () => {
       .toEqual({ auto: false, thresholdPercent: 50 })
   })
 
+  it('mounts on a fiber that can get settings but did not inject it', async () => {
+    const ctx = createContext()
+    await ctx.plugin(SessionStore).await()
+    await ctx.plugin(MemorySettings).await()
+    await expect(ctx.plugin(TestCompactionEngine, { auto: false }).await()).resolves.toBeDefined()
+    const ns = settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)
+    expect(ctx.settings.get(ns)).toEqual({
+      auto: DEFAULT_COMPACTION_AUTO,
+      thresholdPercent: DEFAULT_COMPACTION_THRESHOLD_PERCENT,
+    })
+  })
+
   it('waits to register the overlay until a settings provider appears', async () => {
     const ctx = createContext()
     void service({ auto: false }, ctx)

@@ -10,7 +10,7 @@ Automatic compaction fired from load-time `BasicCompactionConfig.auto` and `thre
 
 ## Decision
 
-The first `compaction-basic` engine that sees `ctx.settings` registers namespace `compaction-basic` with `auto` (default `true`) and `thresholdPercent` (`25`, `50`, `75`, or `100`; default `75`, the closest allowed fraction to Config `0.8`). Later standing mounts no-op on that namespace. Pressure replaces the routed Config `thresholdRatio` with `thresholdPercent / 100` at event time. `auto: false` skips both the `agent/pre-step` pressure listener and overflow recovery on the next check; `/compact` and `compactNow()` stay available. Compositions without a settings provider keep the plugin Config, including `thresholdRatio: 0.8`.
+The first `compaction-basic` engine that sees `ctx.get('settings')` registers namespace `compaction-basic` with `auto` (default `true`) and `thresholdPercent` (`25`, `50`, `75`, or `100`; default `75`, the closest allowed fraction to Config `0.8`). Registration never reads `ctx.settings`: agent-preset fibers isolate compaction and do not inject the host settings service, so the property proxy would refuse the mount. Later standing mounts no-op on that namespace. Pressure replaces the routed Config `thresholdRatio` with `thresholdPercent / 100` at event time. `auto: false` skips both the `agent/pre-step` pressure listener and overflow recovery on the next check; `/compact` and `compactNow()` stay available. Compositions without a settings provider keep the plugin Config, including `thresholdRatio: 0.8`.
 
 ui-conversation binds the same namespace into two General rows (On/Off and the percent menu). The threshold selector disables while automatic compaction is off. The overlay does not change overflow's bypass of threshold and retention.
 
@@ -32,4 +32,4 @@ A Web or desktop host with settings therefore compacts at 75% of the routed wind
 
 ## Testing
 
-`user-settings.spec.ts` covers overlay math and rejected sections. `compaction-basic.spec.ts` registers the schema once, rejects `80`, overlays `25` / `100` on `compactIfNeeded`, and skips both automatic listeners when `auto` is false. ui-conversation row and policy specs drive On/Off, 50%, and Host adoption. The settings-chrome e2e snapshots include the two new General rows.
+`user-settings.spec.ts` covers overlay math and rejected sections. `compaction-basic.spec.ts` registers the schema once, including from a fiber that can `get('settings')` but must not read `ctx.settings`, rejects `80`, overlays `25` / `100` on `compactIfNeeded`, and skips both automatic listeners when `auto` is false. ui-conversation row and policy specs drive On/Off, 50%, and Host adoption. The settings-chrome e2e snapshots include the two new General rows.

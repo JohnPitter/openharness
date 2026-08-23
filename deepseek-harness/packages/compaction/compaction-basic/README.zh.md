@@ -42,7 +42,7 @@
 
 每个 `modelPolicies` 配置项都接受上述策略字段，但不接受 `auto` 和 `modelPolicies` 自身。如果配置项提供任意一个保留字段，就替换默认策略的保留选择；否则继承保留设置。摘要提供方／模型在每个配置项内仍然成对。
 
-当存在 settings 提供方时，第一个引擎会注册命名空间 `compaction-basic`，字段为 `auto`（默认 `true`）和 `thresholdPercent`（`25`、`50`、`75` 或 `100`；默认 `75`，即最接近 Config `thresholdRatio` `0.8` 的可选比例）。压力检查用 `thresholdPercent / 100` 替代已路由 Config 的 `thresholdRatio`。将 `auto` 关闭会在下一步或溢出时跳过两个自动 listener；`/compact` 与 `compactNow()` 仍然可用。没有 settings 的组合继续使用插件 Config，包括 `thresholdRatio: 0.8`。
+当存在 settings 提供方时，第一个能 `ctx.get('settings')` 的引擎会注册命名空间 `compaction-basic`，字段为 `auto`（默认 `true`）和 `thresholdPercent`（`25`、`50`、`75` 或 `100`；默认 `75`，即最接近 Config `thresholdRatio` `0.8` 的可选比例）。它从不读取 `ctx.settings`，因此未 inject settings 的 agent preset fiber 仍可挂载。压力检查用 `thresholdPercent / 100` 替代已路由 Config 的 `thresholdRatio`。将 `auto` 关闭会在下一步或溢出时跳过两个自动 listener；`/compact` 与 `compactNow()` 仍然可用。没有 settings 的组合继续使用插件 Config，包括 `thresholdRatio: 0.8`。
 
 适配器可能无法为有效动态路由返回容量，已解析容量也可能暴露无效的绝对保留预算。此时手动压力检查会抛出目标特定配置错误；自动 listener 会对该精确目标警告一次，并携带完整历史继续。不相关的操作性失败仍会独立可见。规范提供方溢出仍会尝试恢复，因为提供方已确立压缩的必要性。
 

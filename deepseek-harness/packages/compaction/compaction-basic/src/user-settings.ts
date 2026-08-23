@@ -51,9 +51,13 @@ export const CompactionUserSettingsSchema: z<CompactionUserSettings> = z.object(
 /** Register the section once per process; later standing mounts no-op. */
 export function registerCompactionUserSettings(ctx: Context): void {
   const tryRegister = (settingsCtx: Context): void => {
+    // Preset fibers isolate compaction and do not inject `settings`. The
+    // property proxy would throw `without inject`; `get` reads the host store.
+    const settings = settingsCtx.get('settings')
+    if (settings === undefined) return
     const ns = settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)
-    if (settingsCtx.settings.describe().some(row => row.ns === ns)) return
-    settingsCtx.settings.register(ns, CompactionUserSettingsSchema)
+    if (settings.describe().some(row => row.ns === ns)) return
+    settings.register(ns, CompactionUserSettingsSchema)
   }
   if (ctx.get('settings') !== undefined) {
     tryRegister(ctx)

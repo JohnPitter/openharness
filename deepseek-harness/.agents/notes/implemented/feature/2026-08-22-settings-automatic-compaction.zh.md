@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-第一个见到 `ctx.settings` 的 `compaction-basic` 引擎会注册命名空间 `compaction-basic`，字段为 `auto`（默认 `true`）和 `thresholdPercent`（`25`、`50`、`75` 或 `100`；默认 `75`，即最接近 Config `0.8` 的可选比例）。之后的常驻挂载对该命名空间不再注册。压力检查在事件时用 `thresholdPercent / 100` 替换已路由 Config 的 `thresholdRatio`。`auto: false` 会在下一次检查时跳过 `agent/pre-step` 压力 listener 和溢出恢复；`/compact` 与 `compactNow()` 仍然可用。没有 settings 提供方的组合继续使用插件 Config，包括 `thresholdRatio: 0.8`。
+第一个见到 `ctx.get('settings')` 的 `compaction-basic` 引擎会注册命名空间 `compaction-basic`，字段为 `auto`（默认 `true`）和 `thresholdPercent`（`25`、`50`、`75` 或 `100`；默认 `75`，即最接近 Config `0.8` 的可选比例）。注册从不读取 `ctx.settings`：agent preset 的 fiber 会隔离 compaction，且不 inject 宿主的 settings 服务，属性代理会拒绝挂载。之后的常驻挂载对该命名空间不再注册。压力检查在事件时用 `thresholdPercent / 100` 替换已路由 Config 的 `thresholdRatio`。`auto: false` 会在下一次检查时跳过 `agent/pre-step` 压力 listener 和溢出恢复；`/compact` 与 `compactNow()` 仍然可用。没有 settings 提供方的组合继续使用插件 Config，包括 `thresholdRatio: 0.8`。
 
 ui-conversation 把同一命名空间绑定到两行通用设置（开/关与百分比菜单）。关闭自动压缩时禁用阈值选择器。该覆盖不改变溢出对阈值和保留策略的绕过。
 
@@ -32,4 +32,4 @@ ui-conversation 把同一命名空间绑定到两行通用设置（开/关与百
 
 ## 测试
 
-`user-settings.spec.ts` 覆盖 overlay 计算与被拒绝的段。`compaction-basic.spec.ts` 只注册一次 schema、拒绝 `80`、在 `compactIfNeeded` 上覆盖 `25` / `100`，并在 `auto` 为 false 时跳过两个自动 listener。ui-conversation 的行与策略 spec 驱动开/关、50% 以及 Host 采纳。settings-chrome e2e 快照包含这两行新的通用设置。
+`user-settings.spec.ts` 覆盖 overlay 计算与被拒绝的段。`compaction-basic.spec.ts` 只注册一次 schema（包括在能 `get('settings')` 但不得读取 `ctx.settings` 的 fiber 上）、拒绝 `80`、在 `compactIfNeeded` 上覆盖 `25` / `100`，并在 `auto` 为 false 时跳过两个自动 listener。ui-conversation 的行与策略 spec 驱动开/关、50% 以及 Host 采纳。settings-chrome e2e 快照包含这两行新的通用设置。
