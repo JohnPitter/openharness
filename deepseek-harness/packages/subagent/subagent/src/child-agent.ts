@@ -194,12 +194,15 @@ export function applyChildComposition(
 /**
  * Worker persona for an in-process child of a workflow-mode orchestrator.
  * Shadows the parent's coordinator persona so the child gathers information
- * and applies changes instead of planning.
+ * and applies changes instead of planning. Coding-standard excerpts in the
+ * task are required; the child reads named instruction files for the rest.
  */
 export const WORKFLOW_WORKER_PERSONA
   = 'You are the worker for this delegated task. Gather information (grep, glob, read, web search) '
     + 'and apply the modifications (edit, write, shell, tests). Do not redesign the overall solution; '
-    + 'execute the task you were given and report what you found and what you changed.'
+    + 'execute the task you were given and report what you found and what you changed. '
+    + 'Honor coding-standard excerpts and named instruction files in the task; read those files when '
+    + 'you need the rest. Do not invent a conflicting architecture or skip tests the task named.'
 
 /** Tools a workflow orchestrator must not see or call; workers keep them through the standing mount. */
 export const WORKFLOW_ORCHESTRATOR_WORK_TOOLS = [

@@ -172,7 +172,8 @@ go vet ./...  # lint
 - **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell); uma
   ou duas tarefas vão só por `subagent` — a ferramenta `workflow` não é shell.
   O Trabalhador recolhe informação e aplica as modificações, no modelo escolhido
-  no chip da direita.
+  no chip da direita. Em criação/edição de código, o planejador põe no prompt
+  do trabalhador trechos dos padrões (AGENTS.md etc.), não o arquivo inteiro.
 - **Busca na web:** padrão é DuckDuckGo (HTML, sem chave). A busca nativa
   DeepSeek fica desativada; ela cobra saldo DeepSeek mesmo se o chat for Kimi.
 - **J-Space:** skill empacotada em `apps/cli/config/skills/j-space`, nos presets

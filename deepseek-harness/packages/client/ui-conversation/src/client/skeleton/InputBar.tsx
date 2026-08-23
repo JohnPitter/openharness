@@ -406,6 +406,12 @@ export function InputBar({
       if (keyboard.space()) e.preventDefault() // claim token already carries the trailing separator
       return
     }
+    if (e.key === 'Tab') {
+      // Open-menu Tab picks the highlight (same as Enter) and must not move
+      // focus out of the composer; a closed menu leaves native Tab alone.
+      if (keyboard.arbitrate('tab', composing) !== 'pass') e.preventDefault()
+      return
+    }
     if (e.key !== 'Enter') return
     if (composing) return
     // Menu-open Enter picks the highlight through arbitration; a no-highlight

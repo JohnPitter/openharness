@@ -701,6 +701,25 @@ describe('arbitrate', () => {
     expect(controller.menu.getSnapshot().open).toBe(false)
   })
 
+  it('tab picks the current highlight through the pipeline', async () => {
+    const { controller, cmd } = await menuBench()
+    expect(controller.arbitrate('down', false)).toBe('consumed')
+    expect(controller.arbitrate('tab', false)).toBe('pick-highlighted')
+    expect(cmd.picks[0]!.candidate.name).toBe('plan')
+    expect(controller.menu.getSnapshot().open).toBe(false)
+  })
+
+  it('closed menu passes; an open menu without a highlight passes enter and consumes tab', () => {
+    const cmd = deferredSource('/', 'command')
+    const { controller } = controllerBench([cmd.source])
+    expect(controller.arbitrate('enter', false)).toBe('pass')
+    expect(controller.arbitrate('tab', false)).toBe('pass')
+    // Open with the only group still pending: nothing to pick yet.
+    controller.track('/g', 2, { tier: 'plain' }, 1)
+    expect(controller.arbitrate('enter', false)).toBe('pass')
+    expect(controller.arbitrate('tab', false)).toBe('consumed')
+  })
+
   it('escape closes and consumes', async () => {
     const { controller } = await menuBench()
     expect(controller.arbitrate('escape', false)).toBe('consumed')
@@ -709,19 +728,10 @@ describe('arbitrate', () => {
 
   it('IME composition passes every key untouched', async () => {
     const { controller } = await menuBench()
-    for (const key of ['up', 'down', 'enter', 'escape'] as const) {
+    for (const key of ['up', 'down', 'tab', 'enter', 'escape'] as const) {
       expect(controller.arbitrate(key, true)).toBe('pass')
     }
     expect(controller.menu.getSnapshot().open).toBe(true)
-  })
-
-  it('closed menu passes; an open menu without a highlight passes enter', () => {
-    const cmd = deferredSource('/', 'command')
-    const { controller } = controllerBench([cmd.source])
-    expect(controller.arbitrate('enter', false)).toBe('pass')
-    // Open with the only group still pending: nothing to pick yet.
-    controller.track('/g', 2, { tier: 'plain' }, 1)
-    expect(controller.arbitrate('enter', false)).toBe('pass')
   })
 })
 

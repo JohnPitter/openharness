@@ -173,7 +173,9 @@ export class InputTriggerController {
   }
 
   /**
-   * Keyboard arbitration while the menu is open.
+   * Keyboard arbitration while the menu is open. Tab and Enter pick the
+   * highlighted row; Tab with no highlight still consumes so focus stays in
+   * the composer.
    * @param key - intercepted key.
    * @param composing - inside IME composition: everything passes.
    * @returns consumed / pick-highlighted / pass.
@@ -196,8 +198,9 @@ export class InputTriggerController {
         this.reduce({ type: 'close' })
         return 'consumed'
       }
+      case 'tab':
       case 'enter': {
-        if (state.highlight === null) return 'pass'
+        if (state.highlight === null) return key === 'tab' ? 'consumed' : 'pass'
         this.pick(state.highlight.source, state.highlight.index)
         return 'pick-highlighted'
       }

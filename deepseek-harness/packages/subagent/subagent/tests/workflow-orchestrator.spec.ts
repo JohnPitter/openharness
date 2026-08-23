@@ -78,6 +78,7 @@ describe('workflow orchestrator tool restriction', () => {
   it('tells the worker to gather information and apply changes', () => {
     expect(WORKFLOW_WORKER_PERSONA).toMatch(/grep/)
     expect(WORKFLOW_WORKER_PERSONA).toMatch(/edit/)
+    expect(WORKFLOW_WORKER_PERSONA).toMatch(/coding-standard excerpts/)
     expect(WORKFLOW_WORKER_PERSONA).not.toMatch(/orchestrator/i)
   })
 

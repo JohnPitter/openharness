@@ -478,6 +478,14 @@ describe('Enter semantics', () => {
     expect(sink).not.toHaveBeenCalled()
   })
 
+  it('Tab picks the highlighted slash candidate and does not submit', () => {
+    const { textarea, sink, shell } = bench({ draft: '/g' })
+    const arbitrate = vi.spyOn(shell, 'arbitrate').mockReturnValue('pick-highlighted')
+    expect(fireEvent.keyDown(textarea, { key: 'Tab' })).toBe(false)
+    expect(arbitrate).toHaveBeenCalledWith('tab', false)
+    expect(sink).not.toHaveBeenCalled()
+  })
+
   it('plain Enter submits queue mode through the machine; repeat and empty are suppressed', () => {
     const { textarea, sink } = bench({ draft: 'hello' })
     fireEvent.keyDown(textarea, { key: 'Enter' })

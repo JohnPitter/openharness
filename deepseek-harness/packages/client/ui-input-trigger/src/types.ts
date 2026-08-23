@@ -237,9 +237,9 @@ export interface TriggerGuard {
 }
 
 /** Keys the menu intercepts while open (all behind the IME composition guard). */
-export type ArbitrateKey = 'up' | 'down' | 'enter' | 'escape'
+export type ArbitrateKey = 'up' | 'down' | 'tab' | 'enter' | 'escape'
 
-/** consumed = key handled; pick-highlighted = enter picked the highlight; pass = let the input see it. */
+/** consumed = key handled; pick-highlighted = Tab or Enter picked the highlight; pass = let the input see it. */
 export type ArbitrateOutcome = 'consumed' | 'pick-highlighted' | 'pass'
 
 /** Request payload of the scoped begin-command input event. */

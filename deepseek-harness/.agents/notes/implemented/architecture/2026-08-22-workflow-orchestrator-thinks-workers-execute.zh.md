@@ -10,7 +10,7 @@ Workflow 模式会选出规划模型和工人模型，但根会话仍保留完�
 
 ## 决策
 
-workflow 的 standing mount 仍注册与 `standard` 相同的工具，使同进程 child 继承 grep、文件系统和 shell。根 workflow agent 发布后，`restrictWorkflowOrchestrator` 只在该 agent 的 scope 上拒绝这些工作工具。child 作为兄弟加入 standing mount，而不是嵌在父 agent 的 scope 下，因此拒绝不会传到工人。workflow 父会话的同进程 child 会收到 `WORKFLOW_WORKER_PERSONA`，除非 start 请求已经点名了 persona。编排者人设和 `workflow` 工具的 `tool:<toolName>` 提示词段把 `subagent` 定为一两项任务的唯一路径：`workflow` 运行通过 `agent()` 启动工人的 JavaScript 脚本，不是 shell，也不能代替 grep、edit 或 pwsh。
+workflow 的 standing mount 仍注册与 `standard` 相同的工具，使同进程 child 继承 grep、文件系统和 shell。根 workflow agent 发布后，`restrictWorkflowOrchestrator` 只在该 agent 的 scope 上拒绝这些工作工具。child 作为兄弟加入 standing mount，而不是嵌在父 agent 的 scope 下，因此拒绝不会传到工人。workflow 父会话的同进程 child 会收到 `WORKFLOW_WORKER_PERSONA`，除非 start 请求已经点名了 persona。编排者人设和 `workflow` 工具的 `tool:<toolName>` 提示词段把 `subagent` 定为一两项任务的唯一路径：`workflow` 运行通过 `agent()` 启动工人的 JavaScript 脚本，不是 shell，也不能代替 grep、edit 或 pwsh。当委派任务会创建或编辑代码时，编排者人设要求工人提示词里只放编码规范摘录和指令文件路径，而不是整份 `AGENTS.md`；该提示词策略由[编码规范摘录 note](../feature/2026-08-23-workflow-planner-coding-standard-excerpts.zh.md)负责。
 
 ## 曾考虑的替代方案
 
@@ -26,4 +26,4 @@ workflow 的 standing mount 仍注册与 `standard` 相同的工具，使同进�
 
 ## 后果
 
-workflow 根会话即使忽略人设也不能调用 grep、edit 或 shell。工人仍可以。start 请求自带的 persona 会替换工人默认人设。进程外的产品 provider 不变。规划者仍能看见 `workflow` 工具；靠指导而不是目录限制，把一两项任务导向 `subagent`。
+workflow 根会话即使忽略人设也不能调用 grep、edit 或 shell。工人仍可以。start 请求自带的 persona 会替换工人默认人设。进程外的产品 provider 不变。规划者仍能看见 `workflow` 工具；靠指导而不是目录限制，把一两项任务导向 `subagent`。创建代码的工人只会收到规划者放进任务里的摘录，再加上 standing mount 已经贡献的 `agent-instructions`。
