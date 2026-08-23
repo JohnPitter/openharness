@@ -92,6 +92,31 @@ func TestAwaitPreviousUnsetsEnv(t *testing.T) {
 	}
 }
 
+func TestCheckMissingAssetIsNotAvailable(t *testing.T) {
+	rel := ghRelease{TagName: "v0.2.0"}
+	payload, err := json.Marshal(rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := &Checker{Client: srv.Client(), API: srv.URL, Repo: "JohnPitter/openharness"}
+	info, err := c.Check("0.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Available {
+		t.Fatalf("empty asset list must not offer an update: %+v", info)
+	}
+	if info.Latest != "0.2.0" {
+		t.Fatalf("latest: %+v", info)
+	}
+}
+
 func TestCheckNotFoundIsQuiet(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

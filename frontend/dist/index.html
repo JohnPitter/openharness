@@ -140,31 +140,51 @@
     }
   }
   poll()
+  const updateAvailable = (info) => Boolean(
+    info && (info.available === true || info.Available === true),
+  )
+  const refreshUpdateChip = async () => {
+    const chip = document.getElementById('update-chip')
+    const label = document.getElementById('update-label')
+    const btn = document.getElementById('btn-update')
+    try {
+      const info = await CheckForUpdate()
+      if (!updateAvailable(info)) {
+        chip.classList.remove('visible')
+        return false
+      }
+      const latest = info.latest || info.Latest
+      label.textContent = `v${latest} disponível`
+      chip.classList.add('visible')
+      btn.onclick = async () => {
+        btn.disabled = true
+        label.textContent = 'Baixando atualização…'
+        try {
+          await ApplyUpdate()
+        } catch (err) {
+          label.textContent = String(err)
+          btn.disabled = false
+        }
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
   void (async () => {
     try {
       const ver = await AppVersion()
       document.getElementById('app-version').textContent = ver ? `v${ver}` : ''
-      const info = await CheckForUpdate()
-      const chip = document.getElementById('update-chip')
-      const label = document.getElementById('update-label')
-      const btn = document.getElementById('btn-update')
-      if (info.available) {
-        label.textContent = `v${info.latest} disponível`
-        chip.classList.add('visible')
-        btn.onclick = async () => {
-          btn.disabled = true
-          label.textContent = 'Baixando atualização…'
-          try {
-            await ApplyUpdate()
-          } catch (err) {
-            label.textContent = String(err)
-            btn.disabled = false
-          }
-        }
-      }
     } catch {
-      /* check is best-effort */
+      /* version is best-effort */
     }
+    // GitHub caches /releases/latest ~60s and the tag workflow can publish
+    // before openharness.exe is attached; retry a few times at boot, then poll.
+    for (const delayMs of [0, 8000, 20000]) {
+      if (delayMs) await new Promise((r) => setTimeout(r, delayMs))
+      if (await refreshUpdateChip()) break
+    }
+    setInterval(() => { void refreshUpdateChip() }, 15 * 60 * 1000)
   })()
 </script>
 </body>

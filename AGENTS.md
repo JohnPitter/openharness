@@ -46,6 +46,10 @@ pnpm --filter @deepseek-ai/dsh deploy --legacy --prod `
 #   O deploy --prod NÃO inclui transitivos do Cordis: cosmokit, schemastery,
 #   cordis-plugin-group, cordis-plugin-logger-console — sem eles o sidecar
 #   cai com ERR_MODULE_NOT_FOUND no primeiro import de cordis.
+# O staging NÃO é hardlink: copie de novo cada packages/*/*/lib para
+# dsh-runtime/node_modules/@deepseek-ai/<pkg>/lib. Recopie apps/web/dist
+# para dsh-web-frontend/dist. Confira RemoteChip (ou outra string nova) no
+# client.js de dsh-client-ui-model-selection no staging antes de zipar.
 # zipar dsh-runtime -> internal/sidecar/assets/dsh-runtime.zip
 # copiar node.exe -> internal/sidecar/assets/node.exe
 ```
@@ -134,10 +138,10 @@ acima). A face host do tsdown no Windows não expande o glob
 `lib/types/{index,invariant,startup}.js` no pacote raiz — o overlay
 `openharness-expand-host-entries` em `tsdown.config.ts` + stub
 `scripts/tsdown-root-stub.js` contorna isso. Rodar `pnpm run build` completo só
-quando libs host mudarem. O staging `dsh-runtime/` usa **hardlinks** para os
-pacotes workspace, então libs rebuildadas propagam sozinhas; a exceção é
-`dsh-web-frontend/dist` (saída do vite com hashes novos): remover a pasta no
-staging e copiar de `apps/web/dist` de novo antes de rezipar.
+quando libs host mudarem. O staging `dsh-runtime/` é uma cópia independente:
+depois de rebuildar, sincronize cada `lib/` do workspace para
+`dsh-runtime/node_modules/@deepseek-ai/<pkg>/lib` e recopie `apps/web/dist`
+para `dsh-web-frontend/dist` antes de rezipar. Não confie em hardlink.
 
 ## Comandos
 
@@ -157,6 +161,8 @@ go vet ./...  # lint
   `CLAUDE_CODE_OAUTH_TOKEN` / `OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN` /
   `ZAI_API_KEY` / `OPENCODE_API_KEY`.
 - Auto-update consulta as GitHub Releases públicas; não precisa de token.
+  O chip na titlebar checa no boot (com retries) e a cada 15 min. Uma
+  instância já aberta não vê um tag novo até o próximo check.
 - **Remote** (sidebar, acima do modelo em uso): opt-in. O exe publica um HTTPS
   público (túnel Cloudflare Quick Tunnel a partir de `127.0.0.1`) com um token
   no QR; o celular usa o harness completo (todas as sessões) de qualquer rede,

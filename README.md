@@ -79,10 +79,10 @@ Detalhes do pipeline, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 Publicar um binário:
 
 ```powershell
-wails build -ldflags "-X openharness/internal/update.Version=0.1.6"
-git tag v0.1.6
-git push origin v0.1.6
-gh release upload v0.1.6 build/bin/openharness.exe
+wails build -ldflags "-X openharness/internal/update.Version=0.1.7"
+git tag v0.1.7
+git push origin v0.1.7
+gh release upload v0.1.7 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.
