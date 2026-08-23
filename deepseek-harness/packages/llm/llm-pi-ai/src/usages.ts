@@ -248,14 +248,24 @@ function zaiLimitMinutes(raw: Record<string, unknown>): number | undefined {
 
 /** Token / credit windows the chip maps onto 5-hour and weekly meters. */
 const ZAI_TOKEN_LIMIT_TYPES = new Set(['TOKENS_LIMIT', 'CREDIT_LIMIT'])
+/** Request-count windows. Distinct ids so they do not collide with token `rate`/`weekly`. */
+const ZAI_REQUEST_LIMIT_TYPES = new Set(['TIME_LIMIT', 'REQUESTS_LIMIT', 'REQUEST_LIMIT', 'RPM_LIMIT'])
+
+function zaiWindowId(type: string | undefined, minutes: number | undefined): string {
+  const request = typeof type === 'string' && ZAI_REQUEST_LIMIT_TYPES.has(type)
+  if (minutes !== undefined && minutes < 24 * 60) return request ? 'requests' : 'rate'
+  return request ? 'requests-weekly' : 'weekly'
+}
 
 function zaiLimitWindow(raw: unknown): LlmAccountUsageWindow | undefined {
   const limit = asMap(raw)
   if (limit === undefined) return undefined
   const type = limit.type
-  if (typeof type === 'string' && !ZAI_TOKEN_LIMIT_TYPES.has(type)) return undefined
+  if (typeof type === 'string'
+    && !ZAI_TOKEN_LIMIT_TYPES.has(type)
+    && !ZAI_REQUEST_LIMIT_TYPES.has(type)) return undefined
   const minutes = zaiLimitMinutes(limit)
-  const id = windowIdForMinutes(minutes, 'weekly')
+  const id = zaiWindowId(typeof type === 'string' ? type : undefined, minutes)
   const resetsAt = unixSeconds(limit.nextResetTime ?? limit.next_reset_time ?? limit.resetTime)
   // Monitor rows name the cap `usage` and the consumed amount `currentValue`
   // (Lite coding-plan credits). Older fixtures used `used`/`limit`.

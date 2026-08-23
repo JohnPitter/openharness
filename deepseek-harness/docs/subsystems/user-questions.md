@@ -159,17 +159,20 @@ registerProvider(provider: UserQuestionProvider): () => void
 /**
  * Ask the active UI provider and wait for the user's answer.
  *
- * When a caller supplies an agent, human interaction is valid only for the
- * exact live runtime root. Runtime ownership, not durable session lineage,
- * decides this boundary: an owned child has no human answerer and would
- * block forever, while a lineage-bearing session resumed as a new runtime
- * root may ask normally.
+ * When a caller supplies an agent, human interaction waits on a UI only for
+ * the exact live runtime root the human is answering. A delegated caller —
+ * a live child owned by another agent, or a continuable `origin: 'subagent'`
+ * agent whose parent session is still live — never waits: `ask()` selects the
+ * recommended option label (else the first) and returns. Optionless batches
+ * still fail with `DELEGATED_CALLER`. Durable lineage alone does not decide:
+ * a lineage-bearing session resumed as a new runtime root with no live parent
+ * may ask normally.
  *
  * @param request Questions, owner agent, and abort signal.
- * @returns The answer chosen or typed by the human.
+ * @returns The answer chosen by the human, or the auto-selected delegated options.
  * @throws {UserQuestionError} code `CALLER_NOT_LIVE` when a supplied
  *   agent is not the registry's exact live instance, or `DELEGATED_CALLER`
- *   when that live agent is owned by another agent.
+ *   when a delegated caller has no selectable options.
  */
 async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>
 ```

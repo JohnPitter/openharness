@@ -10,6 +10,7 @@ import type {
   ContentBlock, FinishReason, GenerateOptions, Message, TokenUsage, ToolSchema,
 } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { foldMilestoneTitles } from '@deepseek-ai/dsh-tool-milestone'
 
 interface SummaryConfig {
   readonly summarizationProvider: string
@@ -65,6 +66,17 @@ const COMPACTION_INSTRUCTION = [
   '- Output only the checkpoint text: do not call any tool or take any other action.',
   `- If the conversation already contains a ${SUMMARY_OPEN_TAG} block, it is a PRIOR checkpoint. Do not copy it forward verbatim: preserve still-true facts, drop stale ones, and merge newer information into a single consolidated summary under the same structure.`,
 ].join('\n')
+
+/**
+ * Compaction instruction for one session, with recorded milestone titles so
+ * the checkpoint keeps the index.
+ * @param titles - folded milestone titles in log order.
+ * @returns the user-message instruction body.
+ */
+export function compactionInstruction(titles: readonly string[] = []): string {
+  if (titles.length === 0) return COMPACTION_INSTRUCTION
+  return `${COMPACTION_INSTRUCTION}\n\nRecorded session milestones — keep every title under Critical Context; do not drop this index:\n${titles.map(title => `- ${title}`).join('\n')}`
+}
 
 /** Framing that makes the replacement user message established context. */
 const CHECKPOINT_PREAMBLE =
@@ -149,7 +161,7 @@ export async function summarizeWithLlm(
   const messages: Message[] = [
     ...input.messages,
     createUserMessage({
-      content: [{ type: 'text', text: COMPACTION_INSTRUCTION }],
+      content: [{ type: 'text', text: compactionInstruction(foldMilestoneTitles(agent.session)) }],
       source: { kind: 'plugin', plugin: 'dsh-compaction-basic' },
     }),
   ]

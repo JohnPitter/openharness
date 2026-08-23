@@ -19,6 +19,7 @@ import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
+import { ChatRail } from './ChatRail.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
@@ -241,6 +242,18 @@ export function ChatView({
   const lastSteeringId = pendingSteering[pendingSteering.length - 1]?.id ?? null
   const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${lastSteeringId ?? ''}`
 
+  const jumpTo = useCallback((key: string) => {
+    const local = listRef.current
+    /* v8 ignore next -- ref-null guard: the rail only renders alongside the mounted list. */
+    if (local === null) return
+    const row = anchorElement(local, key)
+    /* v8 ignore next -- the rail only emits keys that ChatNodeSeat mounted. */
+    if (row === null) return
+    atBottomRef.current = false
+    setAtBottom(false)
+    row.scrollIntoView({ block: 'start' })
+  }, [])
+
   const toBottom = (el: HTMLElement): void => {
     anchorRef.current = null
     el.scrollTop = el.scrollHeight
@@ -414,6 +427,7 @@ export function ChatView({
 
   return (
     <div className={css.root}>
+      <ChatRail order={order} nodes={nodeStore} t={t} onJump={jumpTo} />
       <div ref={listRef} className={css.scroll}>
         <div ref={columnRef} className={css.column} data-chat-flow="">
           {openState === 'loading' && <div className={css.hint}>{t('chat.loadingHistory')}</div>}

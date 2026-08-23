@@ -346,6 +346,19 @@ currentSelection(): ModelSelection
  * @returns fulfillment after the optional settings write settles.
  */
 async saveSelection(next: ModelSelection): Promise<void>
+
+/**
+ * Read the worker model for Workflow-mode subagents and construction.
+ * @returns a selection when one is stored, otherwise `undefined` (inherit parent).
+ */
+currentWorkerSelection(): ModelSelection | undefined
+
+/**
+ * Save the worker model used by Workflow-mode subagents and construction.
+ * @param next - resolved selection accepted by the Workflow picker.
+ * @returns fulfillment after the optional settings write settles.
+ */
+async saveWorkerSelection(next: ModelSelection): Promise<void>
 ```
 
 Source: [`packages/core/agent-default-model/src/index.ts`](../../packages/core/agent-default-model/src/index.ts)

@@ -570,6 +570,25 @@ describe('LlmRuntime', () => {
     await expect(ctx.llm.resolveModelInfo('missing', 'm')).rejects.toMatchObject({ code: 'NO_ADAPTER' })
   })
 
+  it('copies declared metering and defaults unregistered or undeclared routes to tokens', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['plain'], new ScriptedAdapter(SCRIPT))
+    ctx.llm.registerAdapter(['coded'], new class extends ScriptedAdapter {
+      override providerInfo(provider: string): LlmProviderInfo {
+        return { id: provider, name: 'Coded', metering: 'requests' }
+      }
+    }(SCRIPT))
+    expect(ctx.llm.providerMetering('coded')).toBe('requests')
+    expect(ctx.llm.listProviders()).toEqual([
+      { id: 'plain', name: 'plain' },
+      { id: 'coded', name: 'Coded', metering: 'requests' },
+    ])
+    expect(ctx.llm.providerMetering('plain')).toBe('tokens')
+    expect(ctx.llm.providerMetering('missing')).toBe('tokens')
+    await ctx.fiber.dispose()
+  })
+
   it.each([
     [{ provider: 1, id: 'model', name: 'Model' }, 'non-string provider'],
     [{ provider: 'other', id: 'model', name: 'Model' }, 'mismatched provider'],

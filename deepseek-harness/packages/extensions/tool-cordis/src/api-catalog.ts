@@ -98,6 +98,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'next', description: 'resolved selection accepted by an entry point.' }],
         returns: 'fulfillment after the optional settings write settles.',
       },
+      {
+        signature: 'currentWorkerSelection(): ModelSelection | undefined',
+        description: 'Read the worker model for Workflow-mode subagents and construction.',
+        parameters: [],
+        returns: 'a selection when one is stored, otherwise `undefined` (inherit parent).',
+      },
+      {
+        signature: 'async saveWorkerSelection(next: ModelSelection): Promise<void>',
+        description: 'Save the worker model used by Workflow-mode subagents and construction.',
+        parameters: [{ name: 'next', description: 'resolved selection accepted by the Workflow picker.' }],
+        returns: 'fulfillment after the optional settings write settles.',
+      },
     ],
   },
   {
@@ -972,6 +984,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'detached provider metadata in registration order.',
       },
       {
+        signature: 'providerMetering(provider: string): LlmMetering',
+        description: 'Charged unit for one registered provider route.',
+        parameters: [{ name: 'provider', description: 'route id passed to {@link GenerateOptions.provider}.' }],
+        returns: 'the adapter-declared metering, or `tokens` when the route is unregistered or undeclared.',
+      },
+      {
         signature: 'registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle',
         description: 'Declare provider routes an adapter plugin can activate through configuration. Registration is all-or-nothing: an empty list, invalid entry, or a provider already declared by any registration throws `LlmError` without registering the rest. Disposed with the fiber.',
         parameters: [{ name: 'entries', description: 'every configurable provider this plugin owns.' }],
@@ -1000,6 +1018,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Resolve the retry policy captured when one provider route was registered.',
         parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }],
         returns: 'the provider-owned policy, with normal defaults already resolved.',
+      },
+      {
+        signature: 'async accountUsage(provider: string, signal?: AbortSignal): Promise<LlmAccountUsage | undefined>',
+        description: 'Report account-level quota for one registered provider, when its adapter can read it from the same credentials used for generation.',
+        parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }, { name: 'signal', description: 'optional cancellation for the adapter lookup.' }],
+        returns: 'quota windows, or `undefined` when the adapter has no quota surface.',
+      },
+      {
+        signature: 'async advertiseModels(provider: string): Promise<boolean>',
+        description: 'Whether the advisory picker should list one registered provider\'s models.',
+        parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }],
+        returns: 'whether the picker should list this route\'s models.',
       },
       {
         signature: 'async listModels(provider: string): Promise<LlmModelInfo[]>',
@@ -1679,6 +1709,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Layered registry of skill providers, the host+per-scope shape the tools registry established. A registration files into the layer of its calling context\'s scope (scopeOf): host rows and repository plugins land in the global layer, while a plugin mounted by an agent preset\'s standing composition lands in that preset\'s layer. A read merges the global layer with the viewing scope\'s chain — the nearest layer\'s entry wins a duplicate name outright, and the rank order decides duplicates only within one layer. It exposes sorted invocation-neutral summaries and loads full skill bodies on demand.',
     methods: [
       {
+        signature: 'hideFromModel(name: string): () => void',
+        description: 'Hide a skill from model-facing catalogs and the `skill` tool without changing its stored invocation policy or user-facing `/name` path. `list`, `snapshot`, and `get` rewrite `modelInvocable` to false for that name while the disposer is live; the body still loads. Duplicate hides refcount. Invalidation follows the same `skills/change` path as a provider catalog change so consumers republish.',
+        parameters: [{ name: 'name', description: 'kebab-case skill name to hide from the model.' }],
+        returns: 'the calling fiber\'s disposer; disposing the last hide restores model invocation.',
+      },
+      {
         signature: 'registerProvider(create: (control: SkillProviderControl) => SkillProvider): () => void',
         description: 'Register a borrowed same-process provider synchronously during plugin apply, into the calling context\'s layer: a scoped context (an agent preset\'s standing mount) registers for that scope alone, an unscoped context registers globally. Duplicate names within one layer and reserved names throw; remote initialization belongs in `list()`. Fiber disposal unregisters the provider and invalidates catalog caches.',
         parameters: [{ name: 'create', description: 'synchronous factory receiving this registration\'s lifecycle and invalidation control.' }],
@@ -1692,13 +1728,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async list(options: SkillViewOptions = {}): Promise<SkillSummary[]>',
-        description: 'List invocation-neutral skill summaries for a workspace. Consumers apply model or user invocation policy at their operational boundary. Lookup options and provider candidates are readonly same-process values borrowed throughout discovery.',
+        description: 'List skill summaries for a workspace. `hideFromModel` rewrites `modelInvocable` on the returned summaries. Consumers still apply `isModelInvocable` or `isUserInvocable` at their operational boundary. Lookup options and provider candidates are readonly same-process values borrowed throughout discovery.',
         parameters: [{ name: 'options', description: 'view options; `scope` selects the viewing agent\'s layers, `cwd` selects project roots, and `signal` cancels discovery.' }],
         returns: 'all sorted winning summaries.',
       },
       {
         signature: 'async snapshot(options: SkillViewOptions = {}): Promise<SkillCatalogSnapshot>',
-        description: 'Observe the current invocation-neutral catalog and whether discovery completed within a stable revision. Incomplete observations are never cached, allowing consumers to retain last-good state and retry on their next request boundary.',
+        description: 'Observe the current catalog and whether discovery completed within a stable revision. `hideFromModel` rewrites `modelInvocable` on the returned summaries. Incomplete observations are never cached, allowing consumers to retain last-good state and retry on their next request boundary.',
         parameters: [{ name: 'options', description: 'view options; `scope` selects the viewing agent\'s layers, `cwd` selects project roots, and `signal` cancels discovery.' }],
         returns: 'sorted summaries plus discovery-completeness state.',
       },
@@ -1706,7 +1742,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined>',
         description: 'Load and validate the winning candidate, passing its opaque discovery locator back to the provider. Cancellation is rechecked after selection, including cache hits, and raced against loading so an uncooperative provider cannot hang the caller.',
         parameters: [{ name: 'name', description: 'kebab-case skill name.' }, { name: 'options', description: 'view options; `scope` selects the viewing agent\'s layers, `cwd` selects workspace-sensitive skills, and `signal` cancels work.' }],
-        returns: 'the full skill, including body content, or `undefined`.',
+        returns: 'the full skill, including body content, or `undefined`. A live `hideFromModel` for this name reports `modelInvocable: false` on the returned definition; the body still loads.',
       },
     ],
   },
@@ -2212,10 +2248,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>',
-        description: 'Ask the active UI provider and wait for the user\'s answer.\n\nWhen a caller supplies an agent, human interaction is valid only for the exact live runtime root. Runtime ownership, not durable session lineage, decides this boundary: an owned child has no human answerer and would block forever, while a lineage-bearing session resumed as a new runtime root may ask normally.',
+        description: 'Ask the active UI provider and wait for the user\'s answer.\n\nWhen a caller supplies an agent, human interaction waits on a UI only for the exact live runtime root the human is answering. A delegated caller — a live child owned by another agent, or a continuable `origin: \'subagent\'` agent whose parent session is still live — never waits: `ask()` selects the recommended option label (else the first) and returns. Optionless batches still fail with `DELEGATED_CALLER`. Durable lineage alone does not decide: a lineage-bearing session resumed as a new runtime root with no live parent may ask normally.',
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
-        returns: 'The answer chosen or typed by the human.',
-        throws: ['{UserQuestionError} code `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
+        returns: 'The answer chosen by the human, or the auto-selected delegated options.',
+        throws: ['{UserQuestionError} code `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when a delegated caller has no selectable options.'],
       },
     ],
   },
@@ -2891,7 +2927,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ApprovalPolicy',
-    declaration: 'export type ApprovalPolicy = \'ask\' | \'never\';',
+    declaration: 'export type ApprovalPolicy = \'ask\' | \'never\' | \'always\';',
   },
   {
     name: 'ApprovalRequest',
@@ -3594,8 +3630,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n}',
   },
   {
+    name: 'LlmAccountUsage',
+    declaration: 'export interface LlmAccountUsage {\n    plan?: string;\n    windows: readonly LlmAccountUsageWindow[];\n}',
+  },
+  {
+    name: 'LlmAccountUsageWindow',
+    declaration: 'export interface LlmAccountUsageWindow {\n    id: string;\n    used: number;\n    limit: number;\n    percent: number;\n    resetsAt?: number;\n    windowMinutes?: number;\n}',
+  },
+  {
     name: 'LlmAdapter',
-    declaration: 'export abstract class LlmAdapter {\n    providerInfo(provider: string): LlmProviderInfo;\n    providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;\n    listModels(_provider: string): Promise<readonly LlmModelInfo[]>;\n    resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall>;\n    abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+    declaration: 'export abstract class LlmAdapter {\n    providerInfo(provider: string): LlmProviderInfo;\n    providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;\n    listModels(_provider: string): Promise<readonly LlmModelInfo[]>;\n    advertiseModels(_provider: string): Promise<boolean>;\n    accountUsage(_provider: string, _signal?: AbortSignal): Promise<LlmAccountUsage | undefined>;\n    resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall>;\n    abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
     name: 'LlmCallConfig',
@@ -3618,6 +3662,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LlmFailure {\n    readonly message: string;\n    readonly code: string;\n    readonly status?: number;\n    readonly providerRetryAfterMs?: number;\n    readonly requestId?: ProviderRequestId;\n}',
   },
   {
+    name: 'LlmMetering',
+    declaration: 'export type LlmMetering = \'tokens\' | \'requests\';',
+  },
+  {
     name: 'LlmModelContext',
     declaration: 'export interface LlmModelContext {\n    contextWindow: number;\n}',
   },
@@ -3635,7 +3683,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmProviderInfo',
-    declaration: 'export interface LlmProviderInfo {\n    id: string;\n    name: string;\n}',
+    declaration: 'export interface LlmProviderInfo {\n    id: string;\n    name: string;\n    metering?: LlmMetering;\n}',
   },
   {
     name: 'LlmReasoningEffortInfo',
@@ -3647,7 +3695,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends Service {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+    declaration: 'export class LlmRuntime extends Service {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    listProviders(): LlmProviderInfo[];\n    providerMetering(provider: string): LlmMetering;\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    async accountUsage(provider: string, signal?: AbortSignal): Promise<LlmAccountUsage | undefined>;\n    async advertiseModels(provider: string): Promise<boolean>;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
     name: 'LspHover',

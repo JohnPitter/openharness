@@ -26,16 +26,20 @@ export function MeterBar({ percent, className, fillClassName }: {
   )
 }
 
+/** Rolling-window length in hours, defaulting to a 5-hour coding-plan window. */
+function windowHours(window: AccountUsageWindowView): string {
+  const minutes = window.windowMinutes
+  return minutes !== undefined && minutes > 0
+    ? String(minutes % 60 === 0 ? minutes / 60 : Math.max(1, Math.round(minutes / 60)))
+    : '5'
+}
+
 /** Human label for one quota window id. */
 export function quotaWindowLabel(window: AccountUsageWindowView, t: QuotaTranslate): string {
   if (window.id === 'weekly') return t('usage.quotaWeekly')
-  if (window.id === 'rate') {
-    const minutes = window.windowMinutes
-    const hours = minutes !== undefined && minutes > 0
-      ? String(minutes % 60 === 0 ? minutes / 60 : Math.max(1, Math.round(minutes / 60)))
-      : '5'
-    return t('usage.quotaRate', { hours })
-  }
+  if (window.id === 'requests-weekly') return t('usage.quotaRequestsWeekly')
+  if (window.id === 'rate') return t('usage.quotaRate', { hours: windowHours(window) })
+  if (window.id === 'requests') return t('usage.quotaRequests', { hours: windowHours(window) })
   return window.id
 }
 

@@ -2,7 +2,7 @@
 #
 # The standing mount keeps the same tools as `standard` so in-process workers
 # inherit grep, filesystem, and shell. A root workflow agent is restricted to
-# coordinator tools (subagent, workflow, todo, ask-user, skill, plan).
+# coordinator tools (subagent, workflow, todo, ask-user, skill, plan). Workers keep grep, filesystem, shell, and milestone_write.
 # One or two tasks go through subagent; the workflow tool is a fan-out script,
 # not a shell. Construction prefers the worker model selected beside this preset.
 #
@@ -256,6 +256,9 @@
   name: '@deepseek-ai/dsh-tool-todo'
   config:
     allowParallelInProgress: true
+
+- id: tool-milestone
+  name: '@deepseek-ai/dsh-tool-milestone'
 
 # The `web` service and its search provider stay in the host composition; only
 # the model-facing tool is per-session.

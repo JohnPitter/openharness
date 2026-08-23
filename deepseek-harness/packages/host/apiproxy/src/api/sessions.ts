@@ -6,7 +6,7 @@
 
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
+import type { ContentBlock, LlmMetering } from '@deepseek-ai/dsh-llm/types'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
 // The pure-type outlet: api/ is browser-importable, and the package root's
 // cordis Context merge (via dsh-agent) must not enter client aggregates.
@@ -167,6 +167,11 @@ export interface SessionModels {
    * blocks input must read this rather than the groups.
    */
   routable: boolean
+  /**
+   * Charged unit of `current.provider`. The Host reads the adapter declaration;
+   * the client must not infer it from the provider id.
+   */
+  currentMetering: LlmMetering
   /** Successfully loaded provider groups. */
   groups: ModelProviderGroup[]
   /** Provider-local failures; successful groups remain usable. */
@@ -305,7 +310,7 @@ export interface SessionsApi {
     model: string
     reasoningEffort?: string
   }>):
-  Promise<RpcResponse<{ selected: ModelSelection }>>
+  Promise<RpcResponse<{ selected: ModelSelection; metering: LlmMetering }>>
 
   /**
    * Renames a session: appends a `session/title` event with the `user`

@@ -146,6 +146,23 @@ export interface LlmProviderInfo {
   id: string
   /** Human-readable provider name for selectors and diagnostics. */
   name: string
+  /**
+   * Charged unit for this route. Adapters declare it; consumers must not
+   * infer it from the provider id. Omitted means {@link LlmMetering} `tokens`.
+   */
+  metering?: LlmMetering
+}
+
+/** How the provider bills this route. */
+export type LlmMetering = 'tokens' | 'requests'
+
+/**
+ * Resolve the charged unit for one provider-info record.
+ * @param info - registered route metadata, or `undefined` when none is registered.
+ * @returns the declared metering, or `tokens` when the adapter omitted it.
+ */
+export function providerMeteringOf(info: LlmProviderInfo | undefined): LlmMetering {
+  return info?.metering ?? 'tokens'
 }
 
 /** Merge-extensible provider model modality vocabulary. */

@@ -10,7 +10,8 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { createScope } from '@deepseek-ai/dsh-client-runtime/client'
+import { createScope, createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
@@ -58,11 +59,24 @@ async function bench() {
   const ctx = new Context()
   let current: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
   const calls = { models: 0, select: 0 }
+  // Whether the Host reports an adapter for the current route; the composer
+  // block follows this, never catalog membership.
+  let routable = true
+  let currentMetering: 'tokens' | 'requests' = 'tokens'
+  const list = createSnapshotStore<SessionListState>({
+    ids: [],
+    byId: {},
+    current: undefined,
+    phase: 'ready',
+    subagentsByParent: {},
+    jobsBySession: {},
+    currentAddress: undefined,
+  })
   ctx.provide('connection', { api: { sessions: {
     models: () => {
       calls.models += 1
       return Promise.resolve({
-        result: { ok: true as const, value: { current, routable, groups: GROUPS, failures: [] } },
+        result: { ok: true as const, value: { current, routable, currentMetering, groups: GROUPS, failures: [] } },
       })
     },
     selectModel: (payload: { provider: string; model: string; reasoningEffort?: string }) => {
@@ -74,12 +88,11 @@ async function bench() {
           ? {}
           : { reasoningEffort: payload.reasoningEffort },
       }
-      return Promise.resolve({ result: { ok: true as const, value: { selected: current } } })
+      return Promise.resolve({
+        result: { ok: true as const, value: { selected: current, metering: currentMetering } },
+      })
     },
   } } })
-  // Whether the Host reports an adapter for the current route; the composer
-  // block follows this, never catalog membership.
-  let routable = true
   const blocks = new Map<SessionId, { reason: string } | undefined>()
   ctx.provide('conversation', {
     blocks: {
@@ -131,6 +144,7 @@ async function bench() {
     subagentAddress: (id: SessionId) => addressed.has(id)
       ? { parentSessionId: sid('parent'), childSessionId: id, mode: 'continuable' as const }
       : undefined,
+    list,
   })
   new TestRemote(ctx)
   ctx.provide('settingsNav', { bind: () => () => {}, openSection: () => {} })
@@ -168,6 +182,26 @@ async function bench() {
     setHostCurrent: (selection: ModelSelection) => { current = selection },
     address: (id: SessionId) => { addressed.add(id) },
     setRoutable: (next: boolean) => { routable = next },
+    setMetering: (next: 'tokens' | 'requests') => { currentMetering = next },
+    setPreset: (id: SessionId, agentPreset: string | undefined) => {
+      list.update((s) => {
+        const row = s.byId[id]
+        if (row === undefined) {
+          s.ids.push(id)
+          s.byId[id] = {
+            id,
+            displayTitle: String(id),
+            running: false,
+            blank: true,
+            updatedAt: 0,
+            ...agentPreset === undefined ? {} : { agentPreset },
+          }
+          return
+        }
+        if (agentPreset === undefined) delete row.agentPreset
+        else row.agentPreset = agentPreset
+      })
+    },
     blockOf: (key: string) => blocks.get(sid(key)),
   }
 }
@@ -297,6 +331,22 @@ describe('ui-model-selection dual entry', () => {
     b.setRoutable(true)
     b.ctx.remote.$dispatch('settings/document-updated', ['llm-deepseek', 1])
     await Promise.resolve()
+    await Promise.resolve()
+    expect(b.blockOf('s1')).toBeUndefined()
+  })
+
+  it('blocks a Workflow session whose planner is request-metered until a worker is selected', async () => {
+    const b = await bench()
+    b.mint('s1')
+    b.setPreset(sid('s1'), 'workflow')
+    b.setMetering('requests')
+    const face = b.seat().inject!(sid('s1'))
+    face.load()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(b.blockOf('s1')?.reason).toBe(zh['blocked.worker'])
+
+    b.setPreset(sid('s1'), 'standard')
     await Promise.resolve()
     expect(b.blockOf('s1')).toBeUndefined()
   })

@@ -250,6 +250,18 @@ Layered registry of skill providers, the host+per-scope shape the tools registry
 
 ```ts cordis-catalog
 /**
+ * Hide a skill from model-facing catalogs and the `skill` tool without
+ * changing its stored invocation policy or user-facing `/name` path.
+ * `list`, `snapshot`, and `get` rewrite `modelInvocable` to false for that
+ * name while the disposer is live; the body still loads. Duplicate hides
+ * refcount. Invalidation follows the same `skills/change` path as a provider
+ * catalog change so consumers republish.
+ * @param name - kebab-case skill name to hide from the model.
+ * @returns the calling fiber's disposer; disposing the last hide restores model invocation.
+ */
+hideFromModel(name: string): () => void
+
+/**
  * Register a borrowed same-process provider synchronously during plugin
  * apply, into the calling context's layer: a scoped context (an agent
  * preset's standing mount) registers for that scope alone, an unscoped
@@ -274,9 +286,10 @@ registerProvider(create: (control: SkillProviderControl) => SkillProvider): () =
 register(skill: SkillRegistration): () => void
 
 /**
- * List invocation-neutral skill summaries for a workspace. Consumers apply
- * model or user invocation policy at their operational boundary. Lookup
- * options and provider candidates are readonly same-process values borrowed
+ * List skill summaries for a workspace. `hideFromModel` rewrites
+ * `modelInvocable` on the returned summaries. Consumers still apply
+ * `isModelInvocable` or `isUserInvocable` at their operational boundary.
+ * Lookup options and provider candidates are readonly same-process values borrowed
  * throughout discovery.
  * @param options - view options; `scope` selects the viewing agent's layers, `cwd` selects project roots, and `signal` cancels discovery.
  * @returns all sorted winning summaries.
@@ -284,7 +297,8 @@ register(skill: SkillRegistration): () => void
 async list(options: SkillViewOptions = {}): Promise<SkillSummary[]>
 
 /**
- * Observe the current invocation-neutral catalog and whether discovery completed within a stable revision.
+ * Observe the current catalog and whether discovery completed within a stable revision.
+ * `hideFromModel` rewrites `modelInvocable` on the returned summaries.
  * Incomplete observations are never cached, allowing consumers to retain last-good state and
  * retry on their next request boundary.
  * @param options - view options; `scope` selects the viewing agent's layers, `cwd` selects project roots, and `signal` cancels discovery.
@@ -299,7 +313,9 @@ async snapshot(options: SkillViewOptions = {}): Promise<SkillCatalogSnapshot>
  * @param name - kebab-case skill name.
  * @param options - view options; `scope` selects the viewing agent's layers,
  *   `cwd` selects workspace-sensitive skills, and `signal` cancels work.
- * @returns the full skill, including body content, or `undefined`.
+ * @returns the full skill, including body content, or `undefined`. A live
+ *   `hideFromModel` for this name reports `modelInvocable: false` on the
+ *   returned definition; the body still loads.
  */
 async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined>
 ```

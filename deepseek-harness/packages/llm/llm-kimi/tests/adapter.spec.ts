@@ -59,3 +59,13 @@ describe('KimiAdapter.advertiseModels', () => {
     await expect(missing.advertiseModels('kimi-for-coding')).resolves.toBe(false)
   })
 })
+
+describe('KimiAdapter.providerInfo', () => {
+  it('declares request metering on the coding-plan route', () => {
+    expect(adapterFor('kimi-for-coding').providerInfo('kimi-for-coding')).toEqual({
+      id: 'kimi-for-coding',
+      name: 'Kimi for Code',
+      metering: 'requests',
+    })
+  })
+})

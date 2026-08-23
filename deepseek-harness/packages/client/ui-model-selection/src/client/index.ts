@@ -130,9 +130,19 @@ export function apply(ctx: ClientContext): void {
   // through the bound translate; the seat component reads the standard seat.
   const t = ctx.locale.bind(NS)
 
-  // The composer-block reason is this plugin's own copy, read at raise time so
-  // a locale change reaches the next publish.
-  ctx.plugin(ModelDirectoryResolver, { blockReason: () => t('blocked.composer') })
+  const settings = (ctx.get('connection') as ConnectionHandle | undefined)?.api.settings
+  const worker = settings === undefined ? undefined : new WorkerModelStore(settings)
+  if (worker !== undefined) {
+    ctx.effect(() => () => { worker.dispose() }, 'ui-model-selection: worker store')
+    ctx.remote.$on('settings/document-updated', () => { void worker.load().catch(() => undefined) })
+  }
+
+  ctx.plugin(ModelDirectoryResolver, {
+    blockReason: () => t('blocked.composer'),
+    workerBlockReason: () => t('blocked.worker'),
+    workerSelected: () => worker?.store.getSnapshot().current ?? null,
+    ...worker === undefined ? {} : { subscribeWorker: (listener: () => void) => worker.store.subscribe(listener) },
+  })
 
   const jspaceScope = ctx.settingsScope.bind<JspaceSettings>({ namespace: JSPACE_SETTINGS_NAMESPACE })
   const jspaceControl = {
@@ -143,13 +153,6 @@ export function apply(ctx: ClientContext): void {
       return snap.value?.enabled ?? JSPACE_DEFAULT_ENABLED
     },
     set: (enabled: boolean) => jspaceScope.set(JSPACE_ENABLED_FIELD, enabled),
-  }
-
-  const settings = (ctx.get('connection') as ConnectionHandle | undefined)?.api.settings
-  const worker = settings === undefined ? undefined : new WorkerModelStore(settings)
-  if (worker !== undefined) {
-    ctx.effect(() => () => { worker.dispose() }, 'ui-model-selection: worker store')
-    ctx.remote.$on('settings/document-updated', () => { void worker.load().catch(() => undefined) })
   }
 
   // Entry 1: the /model popupSelect over the shared directory. The command

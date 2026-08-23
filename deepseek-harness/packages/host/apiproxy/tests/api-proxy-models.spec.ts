@@ -318,6 +318,7 @@ describe('Web session model selection', () => {
     expect(catalog.groups.map(group => group.id)).not.toContain('dormant')
     expect(catalog.failures.map(failure => failure.id)).not.toContain('dormant')
     expect(catalog.routable).toBe(true)
+    expect(catalog.currentMetering).toBe('tokens')
     await ctx.fiber.dispose()
   })
 

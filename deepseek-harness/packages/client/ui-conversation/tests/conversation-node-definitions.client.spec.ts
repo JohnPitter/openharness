@@ -8,6 +8,7 @@ import { assistantDefinition } from '../src/client/conversation-nodes/assistant.
 import { chatViewDefinition } from '../src/client/conversation-nodes/chat-snapshot-builder.ts'
 import { commandDefinition } from '../src/client/conversation-nodes/command.ts'
 import { compactionDefinition } from '../src/client/conversation-nodes/compaction.ts'
+import { milestoneDefinition } from '../src/client/conversation-nodes/milestone.ts'
 import { unknownFallbackDefinition } from '../src/client/conversation-nodes/fallback.ts'
 import { nextStepInboxDefinition, nextTurnInboxDefinition } from '../src/client/conversation-nodes/inbox.ts'
 import { messageDefinition } from '../src/client/conversation-nodes/message.ts'
@@ -28,6 +29,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   toolDefinition,
   commandDefinition,
   compactionDefinition,
+  milestoneDefinition,
   retryDefinition,
   turnErrorDefinition,
   turnMaxTokensDefinition,
@@ -831,6 +833,46 @@ describe('built-in conversation node Definitions', () => {
     ], true)
 
     expect(node(snapshot(value), 'compaction')).toBeUndefined()
+  })
+
+  it('folds each milestone/write into a keyed Chat Node', () => {
+    const value = assembler([
+      at(1, 'user/message', textMessage('m1', 'hello'), { surfaceOp: 'append' }),
+      at(2, 'milestone/write', {
+        milestoneId: 'ms-1',
+        title: 'Found the leak',
+        body: 'Cache key was session id.',
+        origin: 'session',
+      }),
+      at(3, 'milestone/write', { milestoneId: '', title: 'ignored', body: 'empty id', origin: 'session' }),
+    ])
+    const marker = node(snapshot(value), 'milestone')
+    expect(marker?.id).toBe('ms-1')
+    expect(marker?.data).toMatchObject({
+      title: 'Found the leak',
+      body: 'Cache key was session id.',
+      origin: 'session',
+    })
+    expect(snapshot(value).nodes.values().filter(candidate => candidate.kind === 'milestone')).toHaveLength(1)
+
+    const match = (seq: number, type: string, data: unknown) => ({
+      event: { seq, time: seq * 1_000, type, data },
+      view: undefined,
+      role: 'start',
+      location: undefined,
+    }) as unknown as Parameters<typeof milestoneDefinition.start>[1]
+    const context = (state: unknown) => ({
+      key: 'k', kind: 'milestone', id: 'ms-1', matches: [], start: undefined, state, current: new Map(),
+    }) as unknown as Parameters<NonNullable<typeof milestoneDefinition.buildViewNode>>[0]
+    const reader = { previous: () => undefined }
+    const state = {
+      seq: 2, time: 2_000, title: 'Found the leak', body: 'Cache key was session id.', origin: 'session' as const,
+    }
+    expect(() => milestoneDefinition.start(context(undefined), match(1, 'user/message', {}), reader))
+      .toThrow('milestone start requires milestone/write')
+    expect(milestoneDefinition.update(context(state) as Parameters<typeof milestoneDefinition.update>[0], match(2, 'milestone/write', {})))
+      .toBe(state)
+    expect(milestoneDefinition.buildViewNode?.(context(undefined))).toBeNull()
   })
 
   it('ignores legacy retry and code-dispatch events without correlation ids', () => {

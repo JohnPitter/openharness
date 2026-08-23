@@ -6,6 +6,7 @@
 export type {} from './conversation-nodes/assistant.ts'
 export type {} from './conversation-nodes/command.ts'
 export type {} from './conversation-nodes/compaction.ts'
+export type {} from './conversation-nodes/milestone.ts'
 export type {} from './conversation-nodes/fallback.ts'
 export type {} from './conversation-nodes/message.ts'
 export type {} from './conversation-nodes/retry.ts'
@@ -25,7 +26,7 @@ export type {
 export type { ConversationKey } from './locales.ts'
 export type {
   AssistantChatData, ChatNode, ChatNodeDataMap, ChatNodeKind, ManualCompactionChatData,
-  RetryChatData, ToolChatData, TurnTailChatData,
+  MilestoneChatData, RetryChatData, ToolChatData, TurnTailChatData,
 } from './contract/chat-nodes.ts'
 export type {
   ChatFileMentions, ChatNodeOwnerProps, ChatNodeViewProps,

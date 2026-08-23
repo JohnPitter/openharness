@@ -18,7 +18,7 @@ The package root exposes the Cordis plugin contract and `KimiAdapter`; wire seri
     defaultContextWindow: 262144 # optional positive-integer fallback; this is the default
 ```
 
-The plugin registers the single provider route `kimi-for-coding` (display name `Kimi for Code`, settings namespace `llm-kimi`). The default catalog advertises one model: `kimi-for-coding` (`Kimi for Coding`, 262,144-token context window, 32,768-token output cap). With a configured key, discovery fetches the endpoint's live `GET {baseURL}/models` listing and merges it over the catalog — live entries win per id (including capacities, which also enrich resolutions of otherwise uncatalogued ids); without a key or on endpoint failure the configured catalog stands. The Models page **Fetch available models** button uses the same listing through `ctx.llm.registerModelDiscovery('llm-kimi', …)` and reports a failed probe to the form rather than falling back.
+The plugin registers the single provider route `kimi-for-coding` (display name `Kimi for Code`, settings namespace `llm-kimi`, `metering: 'requests'`). The default catalog advertises one model: `kimi-for-coding` (`Kimi for Coding`, 262,144-token context window, 32,768-token output cap). With a configured key, discovery fetches the endpoint's live `GET {baseURL}/models` listing and merges it over the catalog — live entries win per id (including capacities, which also enrich resolutions of otherwise uncatalogued ids); without a key or on endpoint failure the configured catalog stands. The Models page **Fetch available models** button uses the same listing through `ctx.llm.registerModelDiscovery('llm-kimi', …)` and reports a failed probe to the form rather than falling back.
 
 ## Thinking
 

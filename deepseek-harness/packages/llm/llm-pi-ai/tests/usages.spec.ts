@@ -133,6 +133,7 @@ describe('parseZaiUsage', () => {
       windows: [
         { id: 'rate', used: 12, limit: 100, percent: 12, resetsAt: 1_710_000_000, windowMinutes: 300 },
         { id: 'weekly', used: 40, limit: 100, percent: 40, resetsAt: 1_710_500_000, windowMinutes: 10_080 },
+        { id: 'requests', used: 8, limit: 100, percent: 8, windowMinutes: 300 },
       ],
     })
   })
@@ -197,8 +198,31 @@ describe('parseZaiUsage', () => {
     })
   })
 
-  it('rejects a body without token limits', () => {
-    expect(() => parseZaiUsage({ data: { limits: [{ type: 'TIME_LIMIT', percentage: 1 }] } }))
+  it('maps TIME_LIMIT rows onto request-count windows', () => {
+    // Captured GLM monitor payload: TIME_LIMIT is the request-window type.
+    expect(parseZaiUsage({
+      data: { limits: [{ type: 'TIME_LIMIT', unit: 3, percentage: 8 }] },
+    })).toEqual({
+      windows: [{ id: 'requests', used: 8, limit: 100, percent: 8, windowMinutes: 300 }],
+    })
+    expect(parseZaiUsage({
+      data: { limits: [{ type: 'TIME_LIMIT', unit: 6, used: 40, limit: 2_000 }] },
+    }).windows).toEqual([
+      { id: 'requests-weekly', used: 40, limit: 2_000, percent: 2, windowMinutes: 10_080 },
+    ])
+    expect(parseZaiUsage({
+      data: { limits: [{ type: 'REQUESTS_LIMIT', unit: 3, percentage: 10 }] },
+    }).windows[0]?.id).toBe('requests')
+    expect(parseZaiUsage({
+      data: { limits: [{ type: 'REQUEST_LIMIT', unit: 6, used: 1, limit: 100 }] },
+    }).windows[0]?.id).toBe('requests-weekly')
+    expect(parseZaiUsage({
+      data: { limits: [{ type: 'RPM_LIMIT', duration: 1, timeUnit: 'TIME_UNIT_MINUTE', percentage: 5 }] },
+    }).windows[0]).toMatchObject({ id: 'requests', windowMinutes: 1 })
+  })
+
+  it('rejects a body without token or request limits', () => {
+    expect(() => parseZaiUsage({ data: { limits: [{ type: 'UNKNOWN_LIMIT', percentage: 1 }] } }))
       .toThrow('Invalid GLM usage response')
   })
 })

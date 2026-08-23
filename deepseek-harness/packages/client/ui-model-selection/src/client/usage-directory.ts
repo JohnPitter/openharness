@@ -13,6 +13,7 @@ import type { ModelDirectoryResolver } from './service.ts'
 const EMPTY_DIRECTORY: ModelDirectoryState = {
   current: null,
   routable: null,
+  currentMetering: null,
   groups: [],
   failures: [],
   status: 'idle',

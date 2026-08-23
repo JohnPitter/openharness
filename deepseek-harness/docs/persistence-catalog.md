@@ -125,15 +125,14 @@ Source: [`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types
 
 ```ts persistence-catalog
 /**
- * The session's agent preset was chosen after creation, while the session
- * was still blank. Log-only: it records the composition later turns ran
- * under, so a resumed or forked session rebuilds the same one instead of
- * the header's creation-time value.
+ * The session's agent preset was chosen after creation. Log-only: it
+ * records the composition later turns run under, so a resumed or forked
+ * session rebuilds the same one instead of the header's creation-time value.
  */
 'agent-preset/selected': { agentPreset: string }
 ```
 
-Source: [`packages/preset/agent-presets/src/session.ts:26`](../packages/preset/agent-presets/src/session.ts)
+Source: [`packages/preset/agent-presets/src/session.ts:25`](../packages/preset/agent-presets/src/session.ts)
 
 ### `approval/*`
 
@@ -497,6 +496,23 @@ Source: [`packages/llm/llm-retry/src/types.ts:9`](../packages/llm/llm-retry/src/
 ```
 
 Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
+
+### `milestone/*`
+
+<a id="milestonewrite--log-only"></a>
+
+#### `milestone/write` — log-only
+
+```ts persistence-catalog
+/**
+ * One append-only session milestone. Log-only: the model sees titles through
+ * the runtime-context snapshot, not a second derived-history message.
+ * @param data - identity, title, body, optional anchor, and origin.
+ */
+'milestone/write': MilestoneWriteData
+```
+
+Source: [`packages/milestone/tool-milestone/src/types.ts:39`](../packages/milestone/tool-milestone/src/types.ts)
 
 ### `permission/*`
 

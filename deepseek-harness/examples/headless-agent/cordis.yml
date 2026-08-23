@@ -152,6 +152,9 @@
   config:
     allowParallelInProgress: true
 
+- id: tool-milestone
+  name: '@deepseek-ai/dsh-tool-milestone'
+
 # Policy loads before the model-facing filesystem tools so writes and edits
 # require an observed file. Relative paths resolve from the process cwd.
 - id: fs-local

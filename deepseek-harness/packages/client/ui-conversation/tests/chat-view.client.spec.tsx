@@ -30,6 +30,7 @@ import {
   CompactionNodeView, ContextMessageNodeView, RetryNodeView, TurnErrorNodeView,
   TurnMaxTokensNodeView, UnknownNodeView, UserMessageNodeView,
 } from '../src/client/chat/MessageItem.tsx'
+import { MilestoneNodeView } from '../src/client/chat/MilestoneItem.tsx'
 import { TurnTailNodeView } from '../src/client/chat/TurnTailNodeView.tsx'
 import { formatRunDuration } from '../src/client/chat/message-chrome.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
@@ -217,6 +218,8 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
         return <ManualCompactionNodeView {...nodeProps<'manual-compaction'>()} />
       case 'compaction':
         return <CompactionNodeView {...nodeProps<'compaction'>()} />
+      case 'milestone':
+        return <MilestoneNodeView {...nodeProps<'milestone'>()} />
       case 'model-retry':
         return <RetryNodeView {...nodeProps<'model-retry'>()} />
       case 'turn-error':
@@ -445,6 +448,17 @@ describe('ChatView', () => {
         'fixture:user:1', 'fixture:assistant:2',
         'fixture:tool:a', 'call:a', 'fixture:tool:b', 'call:b',
       ])
+  })
+
+  it('jumps a rail waypoint to its transcript row', () => {
+    const scrollIntoView = vi.fn()
+    const original = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = scrollIntoView
+    const h = makeHarness({ nodes: [user(1, 'do the thing')] })
+    const view = render(<h.ChatView {...h.props} />)
+    fireEvent.click(view.getByRole('button', { name: '消息：do the thing' }))
+    expect(scrollIntoView).toHaveBeenCalled()
+    HTMLElement.prototype.scrollIntoView = original
   })
 
   it('renders Host-pending steering at the flow tail and hands off to the durable node', () => {

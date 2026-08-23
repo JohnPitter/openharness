@@ -4,6 +4,8 @@ import type { ModelDirectoryState } from '../src/client/directory.ts'
 import {
   billedInputTokens, cacheHitPercent, contextOccupancy, currentModelContextWindow, formatTokens, routeLabelOf, sessionTokens,
 } from '../src/client/usage-format.ts'
+import { quotaWindowLabel } from '../src/client/usage-quota.tsx'
+import { en } from '../src/client/locales.ts'
 
 const usage = {
   uncachedInputTokens: 80,
@@ -50,6 +52,7 @@ describe('routeLabelOf', () => {
     const directory: ModelDirectoryState = {
       current: { provider: 'kimi-for-coding', model: 'k3-256k' },
       routable: true,
+      currentMetering: 'requests',
       groups: [{
         id: 'kimi-for-coding',
         name: 'Kimi for Code',
@@ -72,5 +75,25 @@ describe('routeLabelOf', () => {
         models: [{ id: 'k3-256k', name: 'K3-256k', contextWindow: 262_144 }],
       }],
     })).toBe(262_144)
+  })
+})
+
+describe('quotaWindowLabel', () => {
+  const t = (key: keyof typeof en, params?: Record<string, string>): string => {
+    let text = en[key]
+    if (params === undefined) return text
+    for (const [name, value] of Object.entries(params)) text = text.replaceAll(`{${name}}`, value)
+    return text
+  }
+
+  it('labels token windows and request-count windows separately', () => {
+    expect(quotaWindowLabel({ id: 'weekly', used: 1, limit: 2, percent: 50 }, t)).toBe(en['usage.quotaWeekly'])
+    expect(quotaWindowLabel({ id: 'requests-weekly', used: 40, limit: 2_000, percent: 2, windowMinutes: 10_080 }, t))
+      .toBe(en['usage.quotaRequestsWeekly'])
+    expect(quotaWindowLabel({ id: 'rate', used: 1, limit: 2, percent: 50, windowMinutes: 300 }, t))
+      .toBe(en['usage.quotaRate'].replace('{hours}', '5'))
+    expect(quotaWindowLabel({ id: 'requests', used: 8, limit: 100, percent: 8, windowMinutes: 300 }, t))
+      .toBe(en['usage.quotaRequests'].replace('{hours}', '5'))
+    expect(quotaWindowLabel({ id: 'unknown', used: 1, limit: 1, percent: 100 }, t)).toBe('unknown')
   })
 })

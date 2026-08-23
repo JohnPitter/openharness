@@ -66,6 +66,9 @@
   config:
     allowParallelInProgress: true
 
+- id: tool-milestone
+  name: '@deepseek-ai/dsh-tool-milestone'
+
 - id: fs-local
   name: '@deepseek-ai/dsh-fs-local'
   config:

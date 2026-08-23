@@ -18,6 +18,7 @@ function directory(overrides: Partial<ModelDirectoryState> = {}): ModelDirectory
   return {
     current: { provider: 'kimi-for-coding', model: 'k3-256k' },
     routable: true,
+    currentMetering: 'requests',
     groups: [{
       id: 'kimi-for-coding',
       name: 'Kimi for Code',

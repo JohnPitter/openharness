@@ -110,6 +110,7 @@ export {
   resolveChildDepth,
   restrictWorkflowOrchestrator,
   SubagentDepthError,
+  WorkflowWorkerRequiredError,
   WORKFLOW_ORCHESTRATOR_WORK_TOOLS,
   WORKFLOW_WORKER_PERSONA,
 } from './child-agent.ts'

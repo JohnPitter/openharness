@@ -523,6 +523,7 @@ export class SessionTitleService extends Service {
     route: SessionTitleModelProvenance,
   ): void {
     delete state.pending
+    if (this.requestMetered(route.provider)) return
     this.defer(async () => {
       if (this.registration !== pending.registration
         || pending.registration.closing
@@ -536,6 +537,11 @@ export class SessionTitleService extends Service {
         this.ctx.logger.warn(`session "${session.id}": automatic title generation failed: ${String(error)}`)
       }
     })
+  }
+
+  /** Request-metered routes skip the automatic title LLM; the first-words fallback still runs. */
+  private requestMetered(provider: string): boolean {
+    return this.ctx.get('llm')?.providerMetering(provider) === 'requests'
   }
 
   /** Start one tracked provider call after publishing its active revision. */

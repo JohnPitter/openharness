@@ -42,6 +42,40 @@ flowchart LR
   cfg --> plugin_dsh_base_credentials
   plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@deepseek-ai/dsh-llm-pi-ai"]
   cfg --> plugin_dsh_base_llm_pi_ai
+  plugin_dsh_base_glm_5_3["glm-5.3<br/>GLM-5.3"]
+  cfg --> plugin_dsh_base_glm_5_3
+  plugin_dsh_base_big_pickle["big-pickle<br/>Big Pickle"]
+  cfg --> plugin_dsh_base_big_pickle
+  plugin_dsh_base_x_preview_f_free["x-preview-f-free<br/>Ox Alpha Free"]
+  cfg --> plugin_dsh_base_x_preview_f_free
+  plugin_dsh_base_mimo_v2_5_free["mimo-v2.5-free<br/>MiMo V2.5 Free"]
+  cfg --> plugin_dsh_base_mimo_v2_5_free
+  plugin_dsh_base_hy3_free["hy3-free<br/>Hy3 Free"]
+  cfg --> plugin_dsh_base_hy3_free
+  plugin_dsh_base_nemotron_3_ultra_free["nemotron-3-ultra-free<br/>Nemotron 3 Ultra Free"]
+  cfg --> plugin_dsh_base_nemotron_3_ultra_free
+  plugin_dsh_base_nemotron_3_5_lightning_free["nemotron-3.5-lightning-free<br/>Nemotron 3.5 Lightning Free"]
+  cfg --> plugin_dsh_base_nemotron_3_5_lightning_free
+  plugin_dsh_base_deepseek_v4_flash_free["deepseek-v4-flash-free<br/>DeepSeek V4 Flash Free"]
+  cfg --> plugin_dsh_base_deepseek_v4_flash_free
+  plugin_dsh_base_laguna_s_2_1_free["laguna-s-2.1-free<br/>Laguna S 2.1 Free"]
+  cfg --> plugin_dsh_base_laguna_s_2_1_free
+  plugin_dsh_base_kimi_k2_7_code["kimi-k2.7-code<br/>Kimi K2.7 Code"]
+  cfg --> plugin_dsh_base_kimi_k2_7_code
+  plugin_dsh_base_kimi_k3["kimi-k3<br/>Kimi K3"]
+  cfg --> plugin_dsh_base_kimi_k3
+  plugin_dsh_base_glm_5_2["glm-5.2<br/>GLM 5.2"]
+  cfg --> plugin_dsh_base_glm_5_2
+  plugin_dsh_base_glm_5_1["glm-5.1<br/>GLM 5.1"]
+  cfg --> plugin_dsh_base_glm_5_1
+  plugin_dsh_base_minimax_m2_7["minimax-m2.7<br/>MiniMax M2.7"]
+  cfg --> plugin_dsh_base_minimax_m2_7
+  plugin_dsh_base_minimax_m3["minimax-m3<br/>MiniMax M3"]
+  cfg --> plugin_dsh_base_minimax_m3
+  plugin_dsh_base_deepseek_v4_pro["deepseek-v4-pro<br/>DeepSeek V4 Pro"]
+  cfg --> plugin_dsh_base_deepseek_v4_pro
+  plugin_dsh_base_deepseek_v4_flash["deepseek-v4-flash<br/>DeepSeek V4 Flash"]
+  cfg --> plugin_dsh_base_deepseek_v4_flash
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@deepseek-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_attachment_local["attachment-local<br/>@deepseek-ai/dsh-attachment-local"]
@@ -140,6 +174,8 @@ flowchart LR
   cfg --> plugin_dsh_base_tool_result_pruner
   plugin_dsh_base_tool_todo["tool-todo<br/>@deepseek-ai/dsh-tool-todo"]
   cfg --> plugin_dsh_base_tool_todo
+  plugin_dsh_base_tool_milestone["tool-milestone<br/>@deepseek-ai/dsh-tool-milestone"]
+  cfg --> plugin_dsh_base_tool_milestone
   plugin_dsh_base_tool_goal["tool-goal<br/>@deepseek-ai/dsh-tool-goal"]
   cfg --> plugin_dsh_base_tool_goal
   plugin_dsh_base_tool_ralph["tool-ralph<br/>@deepseek-ai/dsh-tool-ralph"]
@@ -166,6 +202,8 @@ flowchart LR
   cfg --> plugin_dsh_base_fs_sandbox
   plugin_dsh_base_llm_deepseek["llm-deepseek<br/>@deepseek-ai/dsh-llm-deepseek"]
   cfg --> plugin_dsh_base_llm_deepseek
+  plugin_dsh_base_llm_kimi["llm-kimi<br/>@deepseek-ai/dsh-llm-kimi"]
+  cfg --> plugin_dsh_base_llm_kimi
 ```
 
 | Plugin id | Package / module |
@@ -187,6 +225,23 @@ flowchart LR
 | `settings` | `@deepseek-ai/dsh-settings-file` |
 | `credentials` | `@deepseek-ai/dsh-credentials-local` |
 | `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
+| `glm-5.3` | `GLM-5.3` |
+| `big-pickle` | `Big Pickle` |
+| `x-preview-f-free` | `Ox Alpha Free` |
+| `mimo-v2.5-free` | `MiMo V2.5 Free` |
+| `hy3-free` | `Hy3 Free` |
+| `nemotron-3-ultra-free` | `Nemotron 3 Ultra Free` |
+| `nemotron-3.5-lightning-free` | `Nemotron 3.5 Lightning Free` |
+| `deepseek-v4-flash-free` | `DeepSeek V4 Flash Free` |
+| `laguna-s-2.1-free` | `Laguna S 2.1 Free` |
+| `kimi-k2.7-code` | `Kimi K2.7 Code` |
+| `kimi-k3` | `Kimi K3` |
+| `glm-5.2` | `GLM 5.2` |
+| `glm-5.1` | `GLM 5.1` |
+| `minimax-m2.7` | `MiniMax M2.7` |
+| `minimax-m3` | `MiniMax M3` |
+| `deepseek-v4-pro` | `DeepSeek V4 Pro` |
+| `deepseek-v4-flash` | `DeepSeek V4 Flash` |
 | `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` |
 | `attachment-local` | `@deepseek-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@deepseek-ai/dsh-session-query-sqlite` |
@@ -236,6 +291,7 @@ flowchart LR
 | `session-checkpoint-policy` | `@deepseek-ai/dsh-session-checkpoint-policy` |
 | `tool-result-pruner` | `@deepseek-ai/dsh-compaction-tool-result-pruner` |
 | `tool-todo` | `@deepseek-ai/dsh-tool-todo` |
+| `tool-milestone` | `@deepseek-ai/dsh-tool-milestone` |
 | `tool-goal` | `@deepseek-ai/dsh-tool-goal` |
 | `tool-ralph` | `@deepseek-ai/dsh-tool-ralph` |
 | `tool-str-replace-editor` | `@deepseek-ai/dsh-tool-str-replace-editor` |
@@ -249,6 +305,7 @@ flowchart LR
 | `agent-loop` | `@deepseek-ai/dsh-agent-loop` |
 | `fs-sandbox` | `@deepseek-ai/dsh-fs-sandbox` |
 | `llm-deepseek` | `@deepseek-ai/dsh-llm-deepseek` |
+| `llm-kimi` | `@deepseek-ai/dsh-llm-kimi` |
 
 Source config: [`packages/bundle/base/cordis.patch.yml`](../../packages/bundle/base/cordis.patch.yml).
 

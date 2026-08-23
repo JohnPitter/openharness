@@ -14,6 +14,7 @@ import {
 } from '@deepseek-ai/dsh-compaction-basic/src/user-settings.ts'
 import { selectCompactableRange } from '@deepseek-ai/dsh-compaction-basic/src/region.ts'
 import type { SummarizationInput, SummaryResult } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
+import { compactionInstruction } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { CompactionId, toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
 import {
   resolveCompactSpec,
@@ -87,11 +88,25 @@ class RoutedContextAdapter extends LlmAdapter {
   }
 }
 
+class RequestMeteredAdapter extends ContextAdapter {
+  override providerInfo(provider: string) {
+    return { id: provider, name: provider, metering: 'requests' as const }
+  }
+}
+
 function createContext(contextWindow = 1_000): Context {
   const ctx = new Context()
   void new LlmRuntime(ctx)
   void new TokenMeter(ctx)
   ctx.llm.registerAdapter([MODEL, 'actual', 'unlisted-provider'], new ContextAdapter(contextWindow))
+  return ctx
+}
+
+function createRequestMeteredContext(contextWindow = 1_000): Context {
+  const ctx = new Context()
+  void new LlmRuntime(ctx)
+  void new TokenMeter(ctx)
+  ctx.llm.registerAdapter([MODEL, 'actual', 'unlisted-provider'], new RequestMeteredAdapter(contextWindow))
   return ctx
 }
 
@@ -837,6 +852,33 @@ describe('optional model-free tool-result pruning', () => {
     expect(summarizedText(compact.calls[0]!.input)).not.toContain('result 1 '.repeat(300))
   })
 
+  it('skips LLM summarization on a request-metered route when pruning cannot clear pressure', async () => {
+    const ctx = createRequestMeteredContext(2_000)
+    void new ToolResultPruner(ctx, pruneConfig)
+    const compact = new TestCompactionEngine(ctx, {
+      auto: false,
+      thresholdRatio: 0.5,
+      retainTokens: 50,
+    })
+    const session = toolConversation()
+
+    expect(await compactIfNeeded(compact, session, 'pressure')).toBeNull()
+    expect(compact.calls).toHaveLength(0)
+  })
+
+  it('still summarizes a request-metered route on canonical overflow', async () => {
+    const ctx = createRequestMeteredContext(10_000)
+    const compact = new TestCompactionEngine(ctx, {
+      auto: false,
+      thresholdRatio: 1,
+      retainTokens: 900,
+    })
+    const session = conversation(3)
+
+    expect(await compactIfNeeded(compact, session, 'context-overflow')).not.toBeNull()
+    expect(compact.calls).toHaveLength(1)
+  })
+
   it('retains the original compaction-basic behavior without the optional plugin', async () => {
     const ctx = createContext(2_000)
     const compact = new TestCompactionEngine(ctx, {
@@ -1235,6 +1277,12 @@ describe('default one-shot summarizer', () => {
     })
     const instruction = adapter.lastOptions?.messages.at(-1)?.content[0]
     expect(instruction?.type === 'text' ? instruction.text : '').toContain('## Primary Request and Intent')
+  })
+
+  it('keeps recorded milestone titles in the compaction instruction', () => {
+    expect(compactionInstruction()).not.toContain('Recorded session milestones')
+    expect(compactionInstruction(['Auth landed', 'API route'])).toContain('- Auth landed')
+    expect(compactionInstruction(['Auth landed', 'API route'])).toContain('- API route')
   })
 
   it('replays the conversation prefix and appends the instruction as the final message', async () => {

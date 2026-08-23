@@ -18,6 +18,7 @@ import type {
   LlmModelInfo,
   LlmResolvedModelInfo,
   LlmProviderInfo,
+  LlmMetering,
   ModelModality,
   StreamChunk,
 } from './types.ts'
@@ -226,6 +227,7 @@ export abstract class LlmAdapter {
    * catalog membership stays advisory, so an unlisted route remains valid
    * for dispatch.
    * @param _provider - one provider route owned by this adapter.
+   * @returns whether the picker should list this route's models.
    */
   advertiseModels(_provider: string): Promise<boolean> {
     return Promise.resolve(true)
@@ -439,7 +441,11 @@ export class LlmRuntime extends Service {
         ?? resolveRetryPolicy(undefined, `llm: provider "${provider}" retryPolicy`)
       registrations.push({
         adapter,
-        provider: { id: info.id, name: info.name },
+        provider: {
+          id: info.id,
+          name: info.name,
+          ...info.metering === undefined ? {} : { metering: info.metering },
+        },
         retryPolicy,
       })
     }
@@ -469,6 +475,15 @@ export class LlmRuntime extends Service {
    */
   listProviders(): LlmProviderInfo[] {
     return [...this.adapters.values()].map(({ provider }) => ({ ...provider }))
+  }
+
+  /**
+   * Charged unit for one registered provider route.
+   * @param provider - route id passed to {@link GenerateOptions.provider}.
+   * @returns the adapter-declared metering, or `tokens` when the route is unregistered or undeclared.
+   */
+  providerMetering(provider: string): LlmMetering {
+    return this.adapters.get(provider)?.provider.metering ?? 'tokens'
   }
 
   /**
@@ -637,6 +652,7 @@ export class LlmRuntime extends Service {
   /**
    * Whether the advisory picker should list one registered provider's models.
    * @param provider - registered provider route to inspect.
+   * @returns whether the picker should list this route's models.
    */
   async advertiseModels(provider: string): Promise<boolean> {
     return this.registration(provider).adapter.advertiseModels(provider)

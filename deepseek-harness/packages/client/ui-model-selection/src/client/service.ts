@@ -30,22 +30,37 @@ interface LiveState {
   readonly directories: Map<SessionId, ModelDirectory>
 }
 
+interface ResolverConfig {
+  /** Unroutable-provider copy. */
+  readonly blockReason: () => string
+  /** Workflow request-metered planner with no worker selected. */
+  readonly workerBlockReason: () => string
+  /** Current Workflow worker chip, or null when unset. */
+  readonly workerSelected: () => { provider: string; model: string } | null
+  /** Subscribe to worker-chip changes so the composer block can clear. */
+  readonly subscribeWorker?: (listener: () => void) => () => void
+}
+
 /** The `ctx.modelDirectories` session model-selection service. */
 export class ModelDirectoryResolver extends Service {
   static inject = ['connection', 'sessions', 'remote']
 
   private readonly live: LiveState = { directories: new Map() }
-
-  /** Localized composer-block copy; this plugin owns the string it raises. */
   private readonly blockReason: () => string
+  private readonly workerBlockReason: () => string
+  private readonly workerSelected: () => { provider: string; model: string } | null
+  private readonly subscribeWorker: ((listener: () => void) => () => void) | undefined
 
   /**
    * @param ctx - owning root context (the service registers itself as `models`).
-   * @param config - the bound translator for this plugin's own dictionary.
+   * @param config - localized block copy and the Workflow worker chip.
    */
-  constructor(ctx: Context, config: { blockReason: () => string }) {
+  constructor(ctx: Context, config: ResolverConfig) {
     super(ctx, 'modelDirectories')
     this.blockReason = config.blockReason
+    this.workerBlockReason = config.workerBlockReason
+    this.workerSelected = config.workerSelected
+    this.subscribeWorker = config.subscribeWorker
     ctx.on('connection/reset', () => {
       for (const directory of this.live.directories.values()) directory.resetConnected()
     })
@@ -91,15 +106,27 @@ export class ModelDirectoryResolver extends Service {
     const conversation = this.ctx.get('conversation')
     if (conversation !== undefined) {
       const publish = (): void => {
-        conversation.blocks.set(sessionId, directory.store.getSnapshot().routable === false
-          ? { reason: this.blockReason() }
-          : undefined)
+        const snap = directory.store.getSnapshot()
+        if (snap.routable === false) {
+          conversation.blocks.set(sessionId, { reason: this.blockReason() })
+          return
+        }
+        const preset = sessions.list?.getSnapshot().byId[sessionId]?.agentPreset
+        if (preset === 'workflow'
+          && snap.currentMetering === 'requests'
+          && this.workerSelected() === null) {
+          conversation.blocks.set(sessionId, { reason: this.workerBlockReason() })
+          return
+        }
+        conversation.blocks.set(sessionId, undefined)
       }
       publish()
       actx.effect(() => {
-        const stop = directory.store.subscribe(publish)
+        const stops = [directory.store.subscribe(publish)]
+        if (this.subscribeWorker !== undefined) stops.push(this.subscribeWorker(publish))
+        if (sessions.list !== undefined) stops.push(sessions.list.subscribe(publish))
         return () => {
-          stop()
+          for (const stop of stops) stop()
           conversation.blocks.set(sessionId, undefined)
         }
       }, 'ui-model-selection: composer block')

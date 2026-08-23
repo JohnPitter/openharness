@@ -156,6 +156,14 @@ const PROMPT_CACHE_KEY_APIS = new Set<string>([
 
 const PROMPT_CACHE_KEY_MAX_LENGTH = 64
 
+/** Coding-plan routes billed per request, not per token. */
+const REQUEST_METERED_ROUTES = new Set([
+  'claude-code',
+  'openai-codex',
+  'zai',
+  'opencode',
+])
+
 function clampPromptCacheKey(key: string): string {
   const chars = Array.from(key)
   return chars.length <= PROMPT_CACHE_KEY_MAX_LENGTH
@@ -350,7 +358,11 @@ export class PiAiAdapter extends LlmAdapter {
     // The configured name, not the route key: `displayName` exists so a
     // deployment can label a route, and a label only the configuration surface
     // reads would leave every selector showing the raw key.
-    return { id: provider, name: this.current().profiles.get(provider)?.displayName ?? provider }
+    return {
+      id: provider,
+      name: this.current().profiles.get(provider)?.displayName ?? provider,
+      ...REQUEST_METERED_ROUTES.has(provider) ? { metering: 'requests' as const } : {},
+    }
   }
 
   override providerRetryPolicy(provider: string): ResolvedRetryPolicy | undefined {

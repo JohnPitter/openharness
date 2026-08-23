@@ -425,6 +425,9 @@
 - id: tool-todo
   disabled: true
 
+- id: tool-milestone
+  disabled: true
+
 - id: tool-web
   disabled: true
 

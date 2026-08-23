@@ -264,6 +264,31 @@
       }
     },
     {
+      "name": "milestone_write",
+      "description": "Record a durable session milestone when a finding, decision, or fix closes. Call it in the same tool step as the work that produced the fact — do not open a new turn only to write the milestone. Title is the one-line label the human and later model turns use as an index; body is the recorded fact. Do not use this for a task checklist (that is todo_write).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "One-line label for the rail and the model-visible index."
+          },
+          "body": {
+            "type": "string",
+            "description": "The recorded finding, decision, or fix."
+          },
+          "anchorSeq": {
+            "type": "integer",
+            "description": "Session seq this fact is about, when known."
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ]
+      }
+    },
+    {
       "name": "ralph",
       "description": "Run a foreground fresh-agent Ralph loop toward one immutable objective. Use only when the direct human explicitly asks for Ralph or fresh-agent iteration. Each round opens a new child with no parent conversation or prior child session; the shared workspace is long-term memory, and only a bounded structured report crosses rounds. The call returns when a worker reports completion or a concrete blocker, or at the round limit. Ordinary long-running same-session work belongs to goal tools.",
       "parameters": {

@@ -88,6 +88,7 @@ export class FakeApiClient implements IApiClient {
   onModels: (payload: unknown) => Promise<RpcResponse<SessionModels>> = () => Promise.resolve(ok({
     current: this.defaultModel,
     routable: true,
+    currentMetering: 'tokens',
     groups: [{
       id: 'deepseek-official',
       name: 'DeepSeek',
@@ -96,8 +97,11 @@ export class FakeApiClient implements IApiClient {
     failures: [],
   }))
   onSelectModel: (payload: { provider: string; model: string }) =>
-  Promise<RpcResponse<{ selected: ModelSelection }>> =
-    payload => Promise.resolve(ok({ selected: { provider: payload.provider, model: payload.model } }))
+  Promise<RpcResponse<{ selected: ModelSelection; metering: 'tokens' | 'requests' }>> =
+    payload => Promise.resolve(ok({
+      selected: { provider: payload.provider, model: payload.model },
+      metering: 'tokens',
+    }))
   onPrompt: (payload: unknown) => Promise<RpcResponse<{ accepted: true }>> = () => Promise.resolve(ok({ accepted: true as const }))
   onAttachment: (payload: unknown) => Promise<RpcResponse<{ attachment: { attachmentId: never; mediaType: 'image/png'; bytes: number; width: number; height: number }; data: string }>> =
     () => Promise.resolve(ok({ attachment: { attachmentId: 'a' as never, mediaType: 'image/png', bytes: 1, width: 1, height: 1 }, data: 'AA==' }))

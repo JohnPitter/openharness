@@ -148,6 +148,7 @@ describe('jsonrpc-agent keyless smoke', () => {
       expect(tools.map(tool => tool.function?.name).sort()).toEqual([
         'bash',
         'edit',
+        'milestone_write',
         'read',
         'subagent',
         'todo_write',

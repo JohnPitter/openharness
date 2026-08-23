@@ -10,6 +10,7 @@ The model-facing tools are:
 - `read`, `write`, and `edit`
 - `subagent`, using one foreground in-process spawn provider
 - `todo_write`
+- `milestone_write`
 
 The surrounding runtime also loads JSONL session persistence and automatic context compaction. `maxTokensAsSuccess` keeps a token-limited model turn as an accepted evaluation result while preserving its `max-tokens` reason.
 

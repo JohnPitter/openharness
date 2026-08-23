@@ -57,6 +57,9 @@
       "path": "../../todo/tool-todo"
     },
     {
+      "path": "../../milestone/tool-milestone"
+    },
+    {
       "path": "../ui-input-trigger"
     },
     {

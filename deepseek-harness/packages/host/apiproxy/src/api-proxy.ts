@@ -2234,7 +2234,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const current = selectionFor(found.agent).current
         const { groups, failures } = await buildModelCatalog(ctx)
         const routable = await routeAdvertised(current.provider)
-        return ok(request, { current: { ...current }, routable, groups, failures })
+        const currentMetering = ctx.llm.providerMetering(current.provider)
+        return ok(request, { current: { ...current }, routable, currentMetering, groups, failures })
       },
 
       async selectModel(request) {
@@ -2265,7 +2266,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 `api-proxy: the model switch applies to this session but was not saved as the default: ${String(error)}`,
               )
             }
-            return ok(request, { selected: { ...selected } })
+            return ok(request, {
+              selected: { ...selected },
+              metering: ctx.llm.providerMetering(resolved.provider),
+            })
           } catch (error: unknown) {
             return err(request, {
               code: 'model-unavailable',

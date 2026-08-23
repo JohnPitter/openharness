@@ -9,7 +9,7 @@ const sid = (k: string): SessionId => k as SessionId
 
 function empty(): ModelDirectoryState {
   return {
-    current: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, routable: null, currentMetering: null, groups: [], failures: [], status: 'idle', error: null,
   }
 }
 

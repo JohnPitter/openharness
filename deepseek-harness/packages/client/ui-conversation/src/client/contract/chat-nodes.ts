@@ -50,6 +50,15 @@ export interface RetryChatData {
   readonly current: ModelRetryNode
 }
 
+/** Transcript chip payload for one recorded milestone. */
+export interface MilestoneChatData {
+  readonly seq: number
+  readonly time: number
+  readonly title: string
+  readonly body: string
+  readonly origin: 'session' | 'worker'
+}
+
 /** Turn-local footer row that owns actions and optional feature contributions. */
 export interface TurnTailChatData {
   readonly turn: number

@@ -174,6 +174,17 @@ go vet ./...  # lint
   O Trabalhador recolhe informação e aplica as modificações, no modelo escolhido
   no chip da direita. Em criação/edição de código, o planejador põe no prompt
   do trabalhador trechos dos padrões (AGENTS.md etc.), não o arquivo inteiro.
+  Planejador cobrado por request sem trabalhador no chip **não herda** a rota
+  do pai: a delegação falha e o composer bloqueia até haver trabalhador.
+- **Marcos:** o modelo que fecha o trabalho grava `milestone_write` (título +
+  corpo). O transcript não é índice: o trilho à esquerda salta para o chip;
+  compactação preserva os títulos. No Workflow o trabalhador escreve; o
+  planejador não vê a tool.
+- **Custo por rota:** coding plans (Kimi, Claude Code, Codex, GLM, OpenCode)
+  cobram por request; DeepSeek e plataformas pay-per-token cobram por token.
+  Em rota de request o harness não dispara título-LLM nem compact-LLM por
+  pressão (overflow e `/compact` continuam). A unidade vem do adapter
+  (`metering`), não do nome do provedor.
 - **Busca na web:** padrão é DuckDuckGo (HTML, sem chave). A busca nativa
   DeepSeek fica desativada; ela cobra saldo DeepSeek mesmo se o chat for Kimi.
 - **J-Space:** skill empacotada em `apps/cli/config/skills/j-space`, nos presets

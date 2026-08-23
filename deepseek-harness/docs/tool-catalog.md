@@ -39,6 +39,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
+| `@deepseek-ai/dsh-tool-milestone` | `milestone_write` | `ctx.tools`, `ctx.systemPrompt`, `owning Agent session` | `tool/call`, `milestone/write`, `tool/result` | - | milestone_write is append-only session state. UIs render each milestone/write as a chip and rail waypoint. A delegated child mirrors the same identity onto a live parent log. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
@@ -2073,6 +2074,42 @@ Record and update a structured task list for the current work. Send the ENTIRE l
 Source: [`packages/todo/tool-todo/src/index.ts`](../packages/todo/tool-todo/src/index.ts)
 
 todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task.
+
+<a id="deepseek-aidsh-tool-milestone"></a>
+
+## `@deepseek-ai/dsh-tool-milestone`
+
+### `milestone_write`
+
+Record a durable session milestone when a finding, decision, or fix closes. Call it in the same tool step as the work that produced the fact — do not open a new turn only to write the milestone. Title is the one-line label the human and later model turns use as an index; body is the recorded fact. Do not use this for a task checklist (that is todo_write).
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "One-line label for the rail and the model-visible index."
+    },
+    "body": {
+      "type": "string",
+      "description": "The recorded finding, decision, or fix."
+    },
+    "anchorSeq": {
+      "type": "integer",
+      "description": "Session seq this fact is about, when known."
+    }
+  },
+  "required": [
+    "title",
+    "body"
+  ]
+}
+```
+
+Source: [`packages/milestone/tool-milestone/src/index.ts`](../packages/milestone/tool-milestone/src/index.ts)
+
+milestone_write is append-only session state. UIs render each milestone/write as a chip and rail waypoint. A delegated child mirrors the same identity onto a live parent log.
 
 <a id="deepseek-aidsh-tool-workflow"></a>
 

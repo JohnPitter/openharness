@@ -36,6 +36,17 @@ export class SubagentDepthError extends Error {
 }
 
 /**
+ * Workflow child creation refused because the planner is request-metered and
+ * no worker model is selected. The child must not inherit that route.
+ */
+export class WorkflowWorkerRequiredError extends Error {
+  constructor() {
+    super('Workflow requires an explicit worker model when the planner is request-metered')
+    this.name = 'WorkflowWorkerRequiredError'
+  }
+}
+
+/**
  * Resolve the child's delegation depth from its parent and enforce an optional
  * cap. The persisted parent header is the monotone floor, so a resumed parent
  * cannot delegate as if it were top-level.
@@ -64,6 +75,7 @@ export function resolveChildDepth(parent: Agent, maxDepth: number | undefined): 
  * @param requested - per-child overrides, if any.
  * @param childDepth - the resolved delegation depth to stamp.
  * @returns the resolved options for `ctx.agents.create()`.
+ * @throws {WorkflowWorkerRequiredError} when a Workflow planner is request-metered and no worker route is selected.
  */
 export function resolveChildAgentOptions(
   parent: Agent,
@@ -74,6 +86,11 @@ export function resolveChildAgentOptions(
   const parentModel = parent.options.model
   const parentMaxTokens = parent.options.maxTokens
   const worker = workflowWorkerRoute(parent)
+  if (worker === undefined
+    && requested?.provider === undefined
+    && workflowPlannerRequestMetered(parent)) {
+    throw new WorkflowWorkerRequiredError()
+  }
   return {
     ...parentProvider !== undefined ? { provider: parentProvider } : {},
     ...parentModel !== undefined ? { model: parentModel } : {},
@@ -96,6 +113,14 @@ function workflowWorkerRoute(parent: Agent): { provider: string; model: string }
   const selected = defaults?.currentWorkerSelection?.()
   if (selected === undefined || selected.provider === '' || selected.model === '') return undefined
   return { provider: selected.provider, model: selected.model }
+}
+
+/** Planner billed per request with no worker chip: the child must not inherit that route. */
+function workflowPlannerRequestMetered(parent: Agent): boolean {
+  if (parent.ctx.get('agentPresets')?.composedPreset(parent.ctx) !== 'workflow') return false
+  const provider = parent.options.provider
+  if (provider === undefined || provider === '') return false
+  return parent.ctx.get('llm')?.providerMetering(provider) === 'requests'
 }
 
 /**
@@ -202,7 +227,9 @@ export const WORKFLOW_WORKER_PERSONA
     + 'and apply the modifications (edit, write, shell, tests). Do not redesign the overall solution; '
     + 'execute the task you were given and report what you found and what you changed. '
     + 'Honor coding-standard excerpts and named instruction files in the task; read those files when '
-    + 'you need the rest. Do not invent a conflicting architecture or skip tests the task named.'
+    + 'you need the rest. Do not invent a conflicting architecture or skip tests the task named. '
+    + 'When a finding, decision, or fix closes, call milestone_write in the same tool step with a '
+    + 'one-line title and the recorded fact — do not open a new turn only to write the milestone.'
 
 /** Tools a workflow orchestrator must not see or call; workers keep them through the standing mount. */
 export const WORKFLOW_ORCHESTRATOR_WORK_TOOLS = [
@@ -219,6 +246,7 @@ export const WORKFLOW_ORCHESTRATOR_WORK_TOOLS = [
   'job_output',
   'job_list',
   'job_kill',
+  'milestone_write',
 ] as const
 
 /**

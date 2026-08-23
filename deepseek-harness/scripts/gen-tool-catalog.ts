@@ -61,6 +61,7 @@ import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
+import * as ToolMilestone from '@deepseek-ai/dsh-tool-milestone'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import VmWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
@@ -572,6 +573,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-milestone',
+    dir: 'tool-milestone',
+    source: 'packages/milestone/tool-milestone/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'owning Agent session'],
+    writes: ['tool/call', 'milestone/write', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolMilestone)
+    },
+    note:
+      'milestone_write is append-only session state. UIs render each milestone/write as a chip and rail waypoint. A delegated child mirrors the same identity onto a live parent log.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-workflow',

@@ -500,6 +500,23 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
 
+### `milestone/*`
+
+<a id="milestonewrite--log-only"></a>
+
+#### `milestone/write` — log-only
+
+```ts persistence-catalog
+/**
+ * One append-only session milestone. Log-only: the model sees titles through
+ * the runtime-context snapshot, not a second derived-history message.
+ * @param data - identity, title, body, optional anchor, and origin.
+ */
+'milestone/write': MilestoneWriteData
+```
+
+来源：[`packages/milestone/tool-milestone/src/types.ts:39`](../packages/milestone/tool-milestone/src/types.ts)
+
 ### `permission/*`
 
 <a id="permissionpreset--log-only"></a>

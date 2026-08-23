@@ -207,6 +207,7 @@ describe('sessions domain schemas', () => {
     expect(sessionModelsValueSchema.parse({
       current: { provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'max' },
       routable: true,
+      currentMetering: 'tokens',
       groups: [{
         id: 'deepseek-official',
         name: 'DeepSeek',
@@ -233,6 +234,7 @@ describe('sessions domain schemas', () => {
     }).reasoningEffort).toBe('max')
     expect(sessionSelectModelValueSchema.parse({
       selected: { provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'max' },
+      metering: 'tokens',
     }).selected.reasoningEffort).toBe('max')
     expect(() => sessionSelectModelRequestSchema.parse({
       sessionId: 's1',

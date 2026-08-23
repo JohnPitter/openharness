@@ -155,6 +155,9 @@
   config:
     allowParallelInProgress: true
 
+- id: tool-milestone
+  name: '@deepseek-ai/dsh-tool-milestone'
+
 # Identical repeat calls trigger advisory context, never a block, at the default
 # thresholds [3, 5, 8]. Only the repeat-tool-reminder snapshot scenario reaches them.
 - id: repeat-tool-reminder

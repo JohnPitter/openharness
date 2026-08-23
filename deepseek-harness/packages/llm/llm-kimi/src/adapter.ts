@@ -269,7 +269,7 @@ export class KimiAdapter extends LlmAdapter {
   }
 
   override providerInfo(provider: string): LlmProviderInfo {
-    return { id: provider, name: 'Kimi for Code' }
+    return { id: provider, name: 'Kimi for Code', metering: 'requests' }
   }
 
   override providerRetryPolicy(_provider: string): ResolvedRetryPolicy {

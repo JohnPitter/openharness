@@ -23,6 +23,11 @@ export interface ModelDirectoryState {
    * from the groups yet perfectly usable.
    */
   routable: boolean | null
+  /**
+   * Charged unit of the current provider, as the host reports it — null before
+   * the first load. The client must not infer this from the provider id.
+   */
+  currentMetering: SessionModels['currentMetering'] | null
   /** Successfully loaded provider groups (last good load). */
   groups: readonly ModelProviderGroup[]
   /** Provider-local failures from the last load; usable groups stay usable. */
@@ -37,7 +42,7 @@ export interface ModelDirectoryState {
 export class ModelDirectory {
   /** The shared snapshot both entries render from (uSES-safe store). */
   readonly store: SnapshotStore<ModelDirectoryState> = createSnapshotStore<ModelDirectoryState>({
-    current: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, routable: null, currentMetering: null, groups: [], failures: [], status: 'idle', error: null,
   })
 
   /** Latest operation wins; an older response never overwrites a newer one. */
@@ -73,10 +78,11 @@ export class ModelDirectory {
       this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
       throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
     }
-    const { current, routable, groups, failures } = result.value
+    const { current, routable, currentMetering, groups, failures } = result.value
     this.store.update((s) => {
       s.current = current
       s.routable = routable
+      s.currentMetering = currentMetering
       s.groups = groups
       s.failures = failures
       s.status = 'ready'
@@ -116,6 +122,7 @@ export class ModelDirectory {
     this.store.update((s) => {
       s.current = result.value.selected
       s.routable = true
+      s.currentMetering = result.value.metering
       s.status = 'ready'
       s.error = null
     })
@@ -132,6 +139,7 @@ export class ModelDirectory {
     this.store.update((s) => {
       s.current = null
       s.routable = null
+      s.currentMetering = null
       s.groups = []
       s.failures = []
       s.status = 'idle'

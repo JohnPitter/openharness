@@ -152,6 +152,9 @@ export const modelSelectionSchema = z.object({
   reasoningEffort: z.string().min(1).optional(),
 }) satisfies z.ZodType<Wire<ModelSelection>>
 
+/** Charged unit declared by the adapter for one provider route. */
+export const llmMeteringSchema = z.enum(['tokens', 'requests'])
+
 /** One adapter-owned reasoning effort. */
 export const modelReasoningEffortSchema = z.object({
   id: z.string().min(1),
@@ -252,6 +255,7 @@ export const sessionModelsRequestSchema = z.object({
 export const sessionModelsValueSchema = z.object({
   current: modelSelectionSchema,
   routable: z.boolean(),
+  currentMetering: llmMeteringSchema,
   groups: z.array(modelProviderGroupSchema),
   failures: z.array(modelCatalogFailureSchema),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.models'>>>
@@ -267,6 +271,7 @@ export const sessionSelectModelRequestSchema = z.object({
 /** session.selectModel response value. */
 export const sessionSelectModelValueSchema = z.object({
   selected: modelSelectionSchema,
+  metering: llmMeteringSchema,
 }) satisfies z.ZodType<Wire<ResponseValue<'session.selectModel'>>>
 
 /** ContentBlock passthrough: core is merge-extensible — the type discriminant envelope is strict, the rest stays wide. */

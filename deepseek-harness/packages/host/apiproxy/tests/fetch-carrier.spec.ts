@@ -64,6 +64,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
             value: {
               current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
               routable: true,
+              currentMetering: 'tokens',
               groups: [],
               failures: [],
             },
@@ -83,6 +84,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
                   ? {}
                   : { reasoningEffort: request.payload.reasoningEffort },
               },
+              metering: 'tokens',
             },
           },
         }

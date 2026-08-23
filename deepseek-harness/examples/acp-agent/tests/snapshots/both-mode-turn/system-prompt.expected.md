@@ -107,6 +107,15 @@ interface ToolArgsMap {
     /** children (default) lists direct children only; descendants walks the complete tree below you. */
     scope?: "children" | "descendants";
   } & Record<string, JsonValue>;
+  /** Record a durable session milestone when a finding, decision, or fix closes. Call it in the same tool step as the work that produced the fact — do not open a new turn only to write the milestone. Title is the one-line label the human and later model turns use as an index; body is the recorded fact. Do not use this for a task checklist (that is todo_write). */
+  milestone_write: {
+    /** One-line label for the rail and the model-visible index. */
+    title: string;
+    /** The recorded finding, decision, or fix. */
+    body: string;
+    /** Session seq this fact is about, when known. */
+    anchorSeq?: number;
+  } & Record<string, JsonValue>;
   /** Run a foreground fresh-agent Ralph loop toward one immutable objective. Use only when the direct human explicitly asks for Ralph or fresh-agent iteration. Each round opens a new child with no parent conversation or prior child session; the shared workspace is long-term memory, and only a bounded structured report crosses rounds. The call returns when a worker reports completion or a concrete blocker, or at the round limit. Ordinary long-running same-session work belongs to goal tools. */
   ralph: {
     /** The immutable completion objective for every fresh Ralph round. */
@@ -333,6 +342,10 @@ interface ToolOutputMap {
     parent?: string;
     depth?: number;
   })[];
+  milestone_write: {
+    milestoneId: string;
+    title: string;
+  };
   ralph: {
     runId: string;
     agentsStarted: number;

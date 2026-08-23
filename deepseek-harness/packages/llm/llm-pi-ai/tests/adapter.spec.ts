@@ -211,6 +211,40 @@ describe('PiAiAdapter provider routing', () => {
     expect(adapter.providerInfo('departed')).toEqual({ id: 'departed', name: 'departed' })
   })
 
+  it('declares request metering on coding-plan routes and omits it on custom gateways', () => {
+    const adapter = adapterOf({
+      'claude-code': { displayName: 'Claude Code', apiKeyEnv: 'CLAUDE_CODE_OAUTH_TOKEN', catalog: 'anthropic' },
+      'openai-codex': { displayName: 'Codex', apiKeyEnv: 'CODEX_ACCESS_TOKEN' },
+      zai: { displayName: 'GLM Coding Plan', apiKeyEnv: 'ZAI_API_KEY' },
+      opencode: {
+        displayName: 'OpenCode',
+        apiKeyEnv: 'OPENCODE_API_KEY',
+        api: 'openai-completions',
+        baseURL: 'https://opencode.ai/zen/v1',
+        models: [{ id: 'kimi-k2.7-code' }],
+      },
+      'acme-gateway': {
+        displayName: 'Acme Gateway',
+        api: 'openai-completions',
+        baseURL: 'https://acme.test/v1',
+        models: [{ id: 'acme-large' }],
+      },
+    })
+    expect(adapter.providerInfo('claude-code')).toEqual({
+      id: 'claude-code', name: 'Claude Code', metering: 'requests',
+    })
+    expect(adapter.providerInfo('openai-codex')).toEqual({
+      id: 'openai-codex', name: 'Codex', metering: 'requests',
+    })
+    expect(adapter.providerInfo('zai')).toEqual({
+      id: 'zai', name: 'GLM Coding Plan', metering: 'requests',
+    })
+    expect(adapter.providerInfo('opencode')).toEqual({
+      id: 'opencode', name: 'OpenCode', metering: 'requests',
+    })
+    expect(adapter.providerInfo('acme-gateway')).toEqual({ id: 'acme-gateway', name: 'Acme Gateway' })
+  })
+
   it('reports unsupported stop sequences rather than silently ignoring them', async () => {
     const server = await mockServer([])
     const ctx = await harness(server.url)

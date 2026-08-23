@@ -390,6 +390,47 @@ interface LlmProviderInfo {
   id: string
   /** Human-readable provider name for selectors and diagnostics. */
   name: string
+  /**
+   * Charged unit for this route. Adapters declare it; consumers must not
+   * infer it from the provider id. Omitted means {@link LlmMetering} `tokens`.
+   */
+  metering?: LlmMetering
+}
+```
+
+```ts type-equiv
+/** How the provider bills this route. */
+type LlmMetering = 'tokens' | 'requests'
+```
+
+```ts type-equiv
+/** One account-level quota window reported by an adapter. */
+interface LlmAccountUsageWindow {
+  /** Stable window id (`weekly`, `rate`, …). */
+  id: string
+  /** Consumed units in this window. */
+  used: number
+  /** Window capacity in the same units as {@link used}. */
+  limit: number
+  /** Occupancy percent, integer 0–100. */
+  percent: number
+  /** Unix seconds when this window resets, when the provider discloses one. */
+  resetsAt?: number
+  /** Rate-limit window length in minutes, when the provider discloses one. */
+  windowMinutes?: number
+}
+```
+
+```ts type-equiv
+/**
+ * Account-level quota for one provider route. Distinct from per-session token
+ * meters: every session that shares the provider's stored key shares this.
+ */
+interface LlmAccountUsage {
+  /** Human-readable plan name when the adapter can infer one. */
+  plan?: string
+  /** Quota windows in adapter-preferred order. */
+  windows: readonly LlmAccountUsageWindow[]
 }
 ```
 
@@ -719,6 +760,24 @@ declare abstract class LlmAdapter {
    */
   listModels(_provider: string): Promise<readonly LlmModelInfo[]>;
   /**
+   * Whether the advisory picker catalog should list this route's models.
+   * Default true (test adapters, gateways with no credential). Key-backed
+   * adapters return false until a usable API key or OAuth session exists;
+   * catalog membership stays advisory, so an unlisted route remains valid
+   * for dispatch.
+   * @param _provider - one provider route owned by this adapter.
+   * @returns whether the picker should list this route's models.
+   */
+  advertiseModels(_provider: string): Promise<boolean>;
+  /**
+   * Report account-level quota windows for one owned provider, using the same
+   * stored credentials as generation. Default is unsupported (`undefined`).
+   * @param _provider - one provider route owned by this adapter.
+   * @param _signal - cancellation for the quota lookup.
+   * @returns quota windows, or `undefined` when this adapter has no quota surface.
+   */
+  accountUsage(_provider: string, _signal?: AbortSignal): Promise<LlmAccountUsage | undefined>;
+  /**
    * Resolve all metadata available for one exact model. This query is
    * independent of the advisory catalog and does not validate request routing.
    * @param provider - one provider route owned by this adapter.
@@ -785,6 +844,13 @@ registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHa
 listProviders(): LlmProviderInfo[]
 
 /**
+ * Charged unit for one registered provider route.
+ * @param provider - route id passed to {@link GenerateOptions.provider}.
+ * @returns the adapter-declared metering, or `tokens` when the route is unregistered or undeclared.
+ */
+providerMetering(provider: string): LlmMetering
+
+/**
  * Declare provider routes an adapter plugin can activate through
  * configuration. Registration is all-or-nothing: an empty list, invalid
  * entry, or a provider already declared by any registration throws
@@ -829,6 +895,22 @@ async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, ): 
  * @returns the provider-owned policy, with normal defaults already resolved.
  */
 providerRetryPolicy(provider: string): ResolvedRetryPolicy
+
+/**
+ * Report account-level quota for one registered provider, when its adapter
+ * can read it from the same credentials used for generation.
+ * @param provider - registered provider route to inspect.
+ * @param signal - optional cancellation for the adapter lookup.
+ * @returns quota windows, or `undefined` when the adapter has no quota surface.
+ */
+async accountUsage(provider: string, signal?: AbortSignal): Promise<LlmAccountUsage | undefined>
+
+/**
+ * Whether the advisory picker should list one registered provider's models.
+ * @param provider - registered provider route to inspect.
+ * @returns whether the picker should list this route's models.
+ */
+async advertiseModels(provider: string): Promise<boolean>
 
 /**
  * Discover models advertised by one registered provider. Catalog membership

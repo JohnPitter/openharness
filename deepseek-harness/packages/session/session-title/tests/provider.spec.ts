@@ -1,6 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import LlmRuntime, { createUserMessage, deepFreeze, markAgentLoopRequest  } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createUserMessage, deepFreeze, markAgentLoopRequest, LlmAdapter } from '@deepseek-ai/dsh-llm'
+import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SessionTitleService, {
   SessionTitleProviderId,
@@ -370,5 +371,35 @@ describe('SessionTitleService Provider lifecycle', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('automatic title generation failed'))
     await expect(ctx.sessionTitle.refresh(session)).rejects.toThrow('title backend failed')
     warn.mockRestore()
+  })
+
+  it('skips the automatic title provider on a request-metered route and keeps the fallback', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['main-route'], new class extends LlmAdapter {
+      override providerInfo(provider: string) {
+        return { id: provider, name: provider, metering: 'requests' as const }
+      }
+
+      async * stream(): AsyncIterable<StreamChunk> {
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      }
+    }())
+    await ctx.plugin(SessionTitleService, CONFIG)
+    const generate = vi.fn(async () => ({ title: 'Should not run', messageSeqs: [1] }))
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('metered'),
+      automatic: 'first-prompt',
+      generate,
+    })
+    const session = ctx.sessions.create(SessionId('metered-title'))
+    session.append('turn/start', { turn: 1 })
+    appendHumanPrompt(session, 'Keep a fallback title here')
+    await settle()
+    appendRoute(session)
+    await settle()
+    expect(generate).not.toHaveBeenCalled()
+    expect(ctx.sessionTitle.get(session)?.source.kind).toBe('fallback')
   })
 })

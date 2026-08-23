@@ -8,7 +8,9 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import {
   applyChildComposition,
+  resolveChildAgentOptions,
   restrictWorkflowOrchestrator,
+  WorkflowWorkerRequiredError,
   WORKFLOW_WORKER_PERSONA,
 } from '../src/child-agent.ts'
 
@@ -55,6 +57,7 @@ describe('workflow orchestrator tool restriction', () => {
     const ctx = await mount()
     ctx.tools.register(tool('grep'))
     ctx.tools.register(tool('edit'))
+    ctx.tools.register(tool('milestone_write'))
     ctx.tools.register(tool('subagent'))
     const parent = await mint(ctx, 'parent')
     const child = await mint(ctx, 'child')
@@ -64,7 +67,7 @@ describe('workflow orchestrator tool restriction', () => {
     restrictWorkflowOrchestrator(child)
 
     expect(ctx.tools.schemas(parent).map(schema => schema.name).sort()).toEqual(['subagent'])
-    expect(ctx.tools.schemas(child).map(schema => schema.name).sort()).toEqual(['edit', 'grep', 'subagent'])
+    expect(ctx.tools.schemas(child).map(schema => schema.name).sort()).toEqual(['edit', 'grep', 'milestone_write', 'subagent'])
   })
 
   it('does not restrict a non-workflow agent', async () => {
@@ -79,6 +82,7 @@ describe('workflow orchestrator tool restriction', () => {
     expect(WORKFLOW_WORKER_PERSONA).toMatch(/grep/)
     expect(WORKFLOW_WORKER_PERSONA).toMatch(/edit/)
     expect(WORKFLOW_WORKER_PERSONA).toMatch(/coding-standard excerpts/)
+    expect(WORKFLOW_WORKER_PERSONA).toMatch(/milestone_write/)
     expect(WORKFLOW_WORKER_PERSONA).not.toMatch(/orchestrator/i)
   })
 
@@ -95,5 +99,52 @@ describe('workflow orchestrator tool restriction', () => {
     const namedAssembled = await named.ctx.systemPrompt.assemble({ scope: named })
     expect(namedAssembled.sections.some(section => section.text === 'You are the named child.')).toBe(true)
     expect(namedAssembled.sections.some(section => section.text === WORKFLOW_WORKER_PERSONA)).toBe(false)
+  })
+})
+
+describe('workflow worker route inherit', () => {
+  it('refuses to inherit a request-metered planner when no worker is selected', async () => {
+    const ctx = await mount()
+    ctx.provide('llm', { providerMetering: (provider: string) => provider === 'zai' ? 'requests' : 'tokens' })
+    const parent = await mint(ctx, 'parent')
+    Object.assign(parent, { options: { provider: 'zai', model: 'glm-4.5' } })
+    expect(() => resolveChildAgentOptions(parent, undefined, 1)).toThrow(WorkflowWorkerRequiredError)
+  })
+
+  it('inherits a token-metered planner when the worker chip is empty', async () => {
+    const ctx = await mount()
+    ctx.provide('llm', { providerMetering: () => 'tokens' })
+    const parent = await mint(ctx, 'parent')
+    Object.assign(parent, { options: { provider: 'deepseek-official', model: 'deepseek-chat' } })
+    expect(resolveChildAgentOptions(parent, undefined, 1)).toMatchObject({
+      provider: 'deepseek-official',
+      model: 'deepseek-chat',
+      subagentDepth: 1,
+    })
+  })
+
+  it('uses the explicit worker even when the planner is request-metered', async () => {
+    const ctx = await mount()
+    ctx.provide('llm', { providerMetering: () => 'requests' })
+    ctx.provide('agentDefaultModel', {
+      currentWorkerSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+    })
+    const parent = await mint(ctx, 'parent')
+    Object.assign(parent, { options: { provider: 'zai', model: 'glm-4.5' } })
+    expect(resolveChildAgentOptions(parent, undefined, 1)).toMatchObject({
+      provider: 'deepseek-official',
+      model: 'deepseek-chat',
+    })
+  })
+
+  it('keeps a requested child provider even when the planner is request-metered', async () => {
+    const ctx = await mount()
+    ctx.provide('llm', { providerMetering: () => 'requests' })
+    const parent = await mint(ctx, 'parent')
+    Object.assign(parent, { options: { provider: 'zai', model: 'glm-4.5' } })
+    expect(resolveChildAgentOptions(parent, { provider: 'openai', model: 'gpt-5' }, 1)).toMatchObject({
+      provider: 'openai',
+      model: 'gpt-5',
+    })
   })
 })
