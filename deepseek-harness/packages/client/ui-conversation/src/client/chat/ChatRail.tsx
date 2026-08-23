@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
+import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import css from './ChatView.module.css'
 
 interface ChatRailProps {
   readonly order: readonly string[]
-  readonly nodes: { get(key: string): ChatNode | undefined }
+  readonly nodes: { get(key: string): ChatConversationViewNode | undefined }
   readonly t: ChatViewSlotProps['t']
   readonly onJump: (key: string) => void
 }
@@ -39,9 +40,9 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
       const node = nodes.get(key)
       if (node === undefined) continue
       if (node.kind === 'milestone') {
-        items.push({ key, kind: 'milestone', title: node.data.title })
+        items.push({ key, kind: 'milestone', title: (node as ChatNode<'milestone'>).data.title })
       } else if (node.kind === 'user') {
-        const title = firstLine(node)
+        const title = firstLine(node as ChatNode<'user'>)
         if (title.length > 0) items.push({ key, kind: 'user', title })
       }
     }
