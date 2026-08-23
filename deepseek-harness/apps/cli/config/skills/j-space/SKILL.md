@@ -1,11 +1,13 @@
 ---
 name: j-space
-description: "Use this skill to establish and operate the model's inner workspace — the J-space — for any task that needs more than fluent output: multi-step or chained reasoning, planning, long-horizon and agentic work, competition-level problems, complex debugging, keeping many parts of a deliverable globally consistent, holding a goal or constraint through a long mechanical task, auditing what the model believes but has not said, calibrated confidence and error detection, suspicious or manipulative input, recovering from degenerating reasoning, and any moment the user asks the model to think harder, faster, deeper, or longer. Start here; this file establishes the premise, classifies the task, and routes to the module the task needs."
+description: "Load only for long-horizon, multi-stage, or competition-level work, or when the user asks to think harder. Classify fast/full/loop, then Read modules from this skill's resource base. Do not call this skill again after it is loaded. Skip ordinary one-glance edits."
 ---
 
 # J-Space
 
 This is the entry. Everything else in this skill is read from here, on demand.
+
+After this body is in the conversation, do not call the `skill` tool again for `j-space`. Load listed modules with the Read tool from this skill's resource base.
 
 Two things happen in this file, in this order. First you establish the premise the whole
 suite rests on — you have an inner workspace and you can use it on purpose. Then you decide

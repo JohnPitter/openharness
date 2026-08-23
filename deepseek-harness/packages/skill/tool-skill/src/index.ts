@@ -128,6 +128,12 @@ export function apply(ctx: Context, config: Config = {}): void {
       if (!isSkillName(args.name)) {
         throw new Error(`invalid skill name "${args.name}"`)
       }
+      if (exec.agent !== undefined && visibleSuccessfulSkillLoad(exec.agent, args.name)) {
+        throw new Error(
+          `skill "${args.name}" is already loaded. Follow the existing <skill_content> block; `
+          + 'do not call the skill tool again for this name.',
+        )
+      }
       // The agent is its own scope key, so the lookup resolves the layered
       // registry exactly as this agent's composition sees it.
       const lookup = { cwd: exec.agent?.session.header.cwd, signal: exec.signal, scope: exec.agent }
@@ -391,6 +397,48 @@ function catalogMessage(
 function catalogDescription(value: string, maxLength: number): string {
   const normalized = value.replaceAll(/\s+/g, ' ').trim()
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`
+}
+
+/**
+ * Whether this agent still has a successful `skill` result for `skillName` on
+ * the visible surface. A compacted-away load may be fetched again; a visible
+ * body must not be reloaded.
+ */
+function visibleSuccessfulSkillLoad(agent: Agent, skillName: string): boolean {
+  const session = agent.session
+  const events = session.events
+  const nodes = session.surface?.nodes
+  if (!Array.isArray(events) || nodes === undefined) return false
+  const visible = new Set(nodes)
+  const successByCallId = new Set<string>()
+  for (const event of events) {
+    if (!visible.has(event.seq) || event.type !== 'tool/result') continue
+    const block = event.data.message.content[0]
+    /* v8 ignore next -- tool/result content is a tool-result block at the session validator. */
+    if (block?.type !== 'tool-result') continue
+    if (block.isError === true || event.data.error !== undefined) continue
+    successByCallId.add(String(block.toolCallId))
+  }
+  for (const event of events) {
+    if (event.type !== 'tool/call') continue
+    if (event.data.name !== 'skill') continue
+    if (skillNameFromCallArguments(event.data.arguments) !== skillName) continue
+    if (successByCallId.has(String(event.data.callId))) return true
+  }
+  return false
+}
+
+/** Parse a `skill` tool-call arguments JSON string for the loaded skill name. */
+function skillNameFromCallArguments(raw: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return undefined
+    const name = (parsed as { name?: unknown }).name
+    return typeof name === 'string' ? name : undefined
+  } catch {
+    // Malformed model argument JSON cannot name a prior load.
+    return undefined
+  }
 }
 
 function assertPositiveInteger(name: string, value: number, minimum = 1): void {

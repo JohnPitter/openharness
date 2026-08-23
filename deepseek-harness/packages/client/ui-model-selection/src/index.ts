@@ -7,15 +7,16 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-skill'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import {
-  JSPACE_DEFAULT_ENABLED, JSPACE_SETTINGS_NAMESPACE, JspaceSettingsSchema,
+  JSPACE_DEFAULT_ENABLED, JSPACE_SETTINGS_NAMESPACE, JSPACE_SKILL_NAME, JspaceSettingsSchema,
   jspaceProtocolText, type JspaceSettings,
 } from './jspace-settings.ts'
 
 export {
   JSPACE_DEFAULT_ENABLED, JSPACE_ENABLED_FIELD, JSPACE_PROTOCOL,
-  JSPACE_SETTINGS_NAMESPACE, jspaceProtocolText,
+  JSPACE_SETTINGS_NAMESPACE, JSPACE_SKILL_NAME, jspaceProtocolText,
 } from './jspace-settings.ts'
 
 const NS = settingsNamespace(JSPACE_SETTINGS_NAMESPACE)
@@ -48,4 +49,17 @@ export function apply(ctx: Context): void {
     order: 1,
     text: () => jspaceProtocolText(readEnabled(ctx)),
   }), 'jspace.section()')
+  ctx.inject(['skills', 'settings'], (gateCtx) => {
+    let hide: (() => void) | undefined
+    const sync = (): void => {
+      hide?.()
+      hide = undefined
+      if (!readEnabled(gateCtx)) hide = gateCtx.skills.hideFromModel(JSPACE_SKILL_NAME)
+    }
+    sync()
+    gateCtx.on('settings/updated', (ns) => {
+      if (ns === NS) sync()
+    })
+    gateCtx.effect(() => () => { hide?.() }, 'jspace.hideFromModel()')
+  })
 }

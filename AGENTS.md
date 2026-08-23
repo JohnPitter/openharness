@@ -179,6 +179,9 @@ go vet ./...  # lint
 - **J-Space:** skill empacotada em `apps/cli/config/skills/j-space`, nos presets
   Standard, Code e Workflow. Protocolo de construção (fast/full/loop); se a
   tarefa admite duas leituras com ações diferentes, carrega `problem-model`.
+  Desligado esconde `j-space` do catálogo e da ferramenta `skill` (o `/j-space`
+  do usuário continua). A skill carrega no máximo uma vez; módulos seguintes
+  são Read no resource base, não outro `skill`.
 - **Perguntas de subagente:** `ask_user_question` no filho não espera o composer
   do pai. Escolhe a opção `(Recommended)` (senão a primeira). Sem opções, falha
   com `DELEGATED_CALLER` em vez de travar.

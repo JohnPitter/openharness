@@ -17,6 +17,7 @@
 - `ctx.skills.list({ cwd?, signal?, scope? })` 借用只读视图选项，然后返回当前工作区中的全部胜出摘要；这些摘要在全局层与观察 scope 链之间合并，并按名称排序。消费方在自身边界调用 `isModelInvocable(skill)` 或 `isUserInvocable(skill)`。
 - `ctx.skills.get(name, { cwd?, signal?, scope? })` 在发现和加载中使用同一组只读选项和胜出候选项；在发现或缓存命中后重新检查取消，让提供方加载与信号竞速，验证已加载定义，然后无论调用策略如何都将其返回。
 - `ctx.skills.register(skill): () => void` 将只读运行时嵌入式 skill 注册进调用方上下文所在层，省略时添加允许模型和用户调用的策略以及 `provider: "runtime"`。同层同名运行时注册使用先到先得：重复项会记录警告，并获得无操作 disposer。成功注册会返回精确的 Cordis disposer，以供有序组合拆卸。
+- `ctx.skills.hideFromModel(name): () => void` 在 disposer 有效期间，把一个 kebab-case 名称从面向模型的目录和 `skill` 工具中隐藏。`list`、`snapshot` 和 `get` 对该名称报告 `modelInvocable: false`；正文仍可加载，`/name` 仍可供用户调用。重复隐藏会计数。非法名称会抛错。失效路径与提供方目录变更相同，走 `skills/change`。
 
 ### 事件
 
@@ -43,7 +44,7 @@
 
 `renderSkillContent(skill)` 把一个已加载 skill 渲染为规范的 `<skill_content>` 块（转义后的 `name` 属性、资源提示、原样正文）。它是两条加载路径的唯一真源：`dsh-tool-skill` 将其作为 `skill` 工具结果返回，并在用户显式的手势边界将其注入，因此无论加载由谁发起，模型看到的都是同一种形态。`escapeText` 随之一并导出，供要在同一标记框架中嵌入文案的消费方使用。该包还声明 `skill-invocation` 这个 `MessageSource` kind（{ name, form: 'instructions' }），用户显式注入会把它打在自己的消息上——transcript（文本记录）消费方依据这份元数据呈现该次调用，而不是重新解析正文。
 
-`isModelInvocable(skill)` 和 `isUserInvocable(skill)` 分别直接读取对应的正向字段。`ctx.skills.get()` 仍是受信且与策略无关的加载原语，因此每个面向用户或模型的消费方都必须先执行与自身接口匹配的判定，再暴露或加载 skill。
+`isModelInvocable(skill)` 和 `isUserInvocable(skill)` 分别直接读取对应的正向字段。`ctx.skills.get()` 仍会加载正文，不论调用策略如何。有效的 `hideFromModel` 会在 `list`、`snapshot` 和 `get` 读取时改写 `modelInvocable`；每个面向用户或模型的消费方仍须先执行与自身接口匹配的判定，再暴露或加载 skill。
 
 ## 提供方约定
 

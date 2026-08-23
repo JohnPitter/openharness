@@ -12,6 +12,8 @@ Directories are per-session, resolved lazily through `ctx.modelDirectories.direc
 
 Every resident directory refetches directly on forwarded `llm/adapters-updated` and `settings/document-updated` owner events. Provider topology, provider catalogs, and the default selection therefore converge without the Host or client runtime deriving a separate model-change alias.
 
+The Host half also owns the J-space toggle (`ui-jspace.enabled`). Off omits the construction-protocol prompt section and calls `ctx.skills.hideFromModel('j-space')`, so the model catalog and `skill` tool no longer expose that name; `/j-space` stays user-invocable. On injects the protocol and restores model invocation. Toggling republishes the skill catalog on the next step.
+
 The `/client` exports are the plugin body (`apply`/`inject`), `ModelDirectoryResolver`, `ModelDirectory` with its state fields, and the seat's injected face type.
 
 ## Model Experience

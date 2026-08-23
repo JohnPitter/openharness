@@ -188,6 +188,44 @@ describe('SkillRegistry registry', () => {
     expect((await ctx.skills.get('both'))?.invocation).toEqual({ modelInvocable: true, userInvocable: true })
   })
 
+  it('hides a name from model invocation until the last hide disposer runs', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    ctx.skills.register({
+      name: 'demo-skill',
+      description: 'Demo',
+      source: 'runtime',
+      content: 'Demo body.',
+    })
+    ctx.skills.register({
+      name: 'user-only-skill',
+      description: 'User only',
+      invocation: { modelInvocable: false, userInvocable: true },
+      source: 'runtime',
+      content: 'User-only body.',
+    })
+
+    expect(() => ctx.skills.hideFromModel('Bad_Name')).toThrow('invalid skill name')
+
+    const first = ctx.skills.hideFromModel('demo-skill')
+    const second = ctx.skills.hideFromModel('demo-skill')
+    expect((await ctx.skills.list()).find(skill => skill.name === 'demo-skill')?.invocation)
+      .toEqual({ modelInvocable: false, userInvocable: true })
+    expect((await ctx.skills.get('demo-skill'))).toMatchObject({
+      content: 'Demo body.',
+      invocation: { modelInvocable: false, userInvocable: true },
+    })
+    expect((await ctx.skills.list()).find(skill => skill.name === 'user-only-skill')?.invocation)
+      .toEqual({ modelInvocable: false, userInvocable: true })
+
+    first()
+    expect((await ctx.skills.list()).find(skill => skill.name === 'demo-skill')?.invocation)
+      .toEqual({ modelInvocable: false, userInvocable: true })
+    second()
+    expect((await ctx.skills.list()).find(skill => skill.name === 'demo-skill')?.invocation)
+      .toEqual({ modelInvocable: true, userInvocable: true })
+  })
+
   it('validates parsed candidate fields', async () => {
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)

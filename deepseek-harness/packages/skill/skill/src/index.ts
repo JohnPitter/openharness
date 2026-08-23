@@ -370,11 +370,40 @@ export class SkillRegistry extends Service {
   /** Stable identities for cache keys; scope keys are opaque identity-compared objects. */
   private readonly scopeIds = new WeakMap<ScopeKey, number>()
   private nextScopeId = 1
+  /** Refcounted names whose `list`/`snapshot`/`get` reads report `modelInvocable: false`. */
+  private readonly modelHidden = new Map<string, number>()
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'skills')
     this.collectCacheMaxEntries = config.collectCacheMaxEntries ?? DEFAULT_COLLECT_CACHE_ENTRIES
     assertPositiveInteger('collectCacheMaxEntries', this.collectCacheMaxEntries)
+  }
+
+  /**
+   * Hide a skill from model-facing catalogs and the `skill` tool without
+   * changing its stored invocation policy or user-facing `/name` path.
+   * `list`, `snapshot`, and `get` rewrite `modelInvocable` to false for that
+   * name while the disposer is live; the body still loads. Duplicate hides
+   * refcount. Invalidation follows the same `skills/change` path as a provider
+   * catalog change so consumers republish.
+   * @param name - kebab-case skill name to hide from the model.
+   * @returns the calling fiber's disposer; disposing the last hide restores model invocation.
+   */
+  hideFromModel(name: string): () => void {
+    if (!isSkillName(name)) {
+      throw new TypeError(`skills.hideFromModel: invalid skill name "${name}"`)
+    }
+    return this.ctx.effect(() => {
+      this.modelHidden.set(name, (this.modelHidden.get(name) ?? 0) + 1)
+      this.invalidateCache()
+      return () => {
+        const current = this.modelHidden.get(name)
+        /* v8 ignore next -- Cordis effect disposers run once; a missing key is a second dispose. */
+        if (current === undefined || current <= 1) this.modelHidden.delete(name)
+        else this.modelHidden.set(name, current - 1)
+        this.invalidateCache()
+      }
+    }, 'skills.hideFromModel()')
   }
 
   /**
@@ -461,9 +490,10 @@ export class SkillRegistry extends Service {
   }
 
   /**
-   * List invocation-neutral skill summaries for a workspace. Consumers apply
-   * model or user invocation policy at their operational boundary. Lookup
-   * options and provider candidates are readonly same-process values borrowed
+   * List skill summaries for a workspace. `hideFromModel` rewrites
+   * `modelInvocable` on the returned summaries. Consumers still apply
+   * `isModelInvocable` or `isUserInvocable` at their operational boundary.
+   * Lookup options and provider candidates are readonly same-process values borrowed
    * throughout discovery.
    * @param options - view options; `scope` selects the viewing agent's layers, `cwd` selects project roots, and `signal` cancels discovery.
    * @returns all sorted winning summaries.
@@ -473,7 +503,8 @@ export class SkillRegistry extends Service {
   }
 
   /**
-   * Observe the current invocation-neutral catalog and whether discovery completed within a stable revision.
+   * Observe the current catalog and whether discovery completed within a stable revision.
+   * `hideFromModel` rewrites `modelInvocable` on the returned summaries.
    * Incomplete observations are never cached, allowing consumers to retain last-good state and
    * retry on their next request boundary.
    * @param options - view options; `scope` selects the viewing agent's layers, `cwd` selects project roots, and `signal` cancels discovery.
@@ -483,7 +514,7 @@ export class SkillRegistry extends Service {
     const collected = await this.collect(options)
     return {
       skills: [...collected.entries.values()]
-        .map(entry => toSummary(entry.candidate))
+        .map(entry => this.applyModelHidden(toSummary(entry.candidate)))
         .sort(compareSkillSummary),
       complete: collected.cacheable,
     }
@@ -496,7 +527,9 @@ export class SkillRegistry extends Service {
    * @param name - kebab-case skill name.
    * @param options - view options; `scope` selects the viewing agent's layers,
    *   `cwd` selects workspace-sensitive skills, and `signal` cancels work.
-   * @returns the full skill, including body content, or `undefined`.
+   * @returns the full skill, including body content, or `undefined`. A live
+   *   `hideFromModel` for this name reports `modelInvocable: false` on the
+   *   returned definition; the body still loads.
    */
   async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition | undefined> {
     if (!isSkillName(name)) return undefined
@@ -514,7 +547,16 @@ export class SkillRegistry extends Service {
       this.invalidateEntry(match)
       return undefined
     }
-    return definition
+    return this.applyModelHidden(definition)
+  }
+
+  /**
+   * Report `modelInvocable: false` for a hideFromModel name. User invocation
+   * and the loaded body are unchanged.
+   */
+  private applyModelHidden<T extends { readonly name: string; readonly invocation: SkillInvocationPolicy }>(skill: T): T {
+    if ((this.modelHidden.get(skill.name) ?? 0) <= 0 || !skill.invocation.modelInvocable) return skill
+    return { ...skill, invocation: { modelInvocable: false, userInvocable: skill.invocation.userInvocable } }
   }
 
   private async collect(options: SkillViewOptions): Promise<CollectResult> {

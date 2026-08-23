@@ -135,7 +135,7 @@ Load referenced resources only as needed.
 
 #### 模型看到的内容
 
-无效或陈旧选择会精确返回 `Error: invalid skill name "<name>"`、`Error: skill "<name>" is unknown or no longer available` 或 `Error: skill "<name>" is not available for model invocation`。提供方抛出的查找文本取决于数据，并套用同一个 `Error: <message>` 包装层。
+无效或陈旧选择会精确返回 `Error: invalid skill name "<name>"`、`Error: skill "<name>" is unknown or no longer available` 或 `Error: skill "<name>" is not available for model invocation`。若该名称已有成功结果仍留在会话 surface 上，再次调用 `skill` 会精确返回 `Error: skill "<name>" is already loaded. Follow the existing <skill_content> block; do not call the skill tool again for this name.`。提供方抛出的查找文本取决于数据，并套用同一个 `Error: <message>` 包装层。
 
 #### Token 影响
 

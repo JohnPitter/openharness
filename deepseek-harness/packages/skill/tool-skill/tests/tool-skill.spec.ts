@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, CallId, type Message } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, CallId, createToolResultMessage, type Message } from '@deepseek-ai/dsh-llm'
 import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import { Session, SessionId, type SessionEvent, type UserMessage } from '@deepseek-ai/dsh-session'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
@@ -638,6 +638,152 @@ describe('dsh-tool-skill', () => {
     expect(result.isError).toBe(false)
     expect(JSON.stringify(result.content)).toContain('Second body.')
     expect(JSON.stringify(result.content)).not.toContain('First body.')
+  })
+
+  it('refuses a second load while the first successful result remains visible', async () => {
+    const home = await tempDir('tool-already-loaded')
+    await writeSkill(join(home, '.dsh/skills'), 'once-skill', 'Once', 'Once body.')
+    const ctx = await setup(home)
+    const session = Session.create(SessionId('already-loaded'))
+    const agent = sessionAgent(session)
+    openMessageTurn(session)
+    const callId = CallId('once-load')
+    const first = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId,
+      name: 'skill',
+      arguments: { name: 'once-skill' },
+      agent,
+    })
+    expect(first.isError).toBe(false)
+    session.append('tool/call', {
+      turn: 1,
+      step: 1,
+      callId,
+      name: 'skill',
+      arguments: JSON.stringify({ name: 'once-skill' }),
+    })
+    session.append('tool/result', {
+      turn: 1,
+      step: 1,
+      message: createToolResultMessage({
+        callId,
+        content: [{ type: 'text', text: 'Once body.' }],
+        isError: false,
+      }),
+    }, { surfaceOp: 'append' })
+
+    const second = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('once-reload'),
+      name: 'skill',
+      arguments: { name: 'once-skill' },
+      agent,
+    })
+    expect(second.isError).toBe(true)
+    const block = second.content[0]
+    if (block?.type !== 'text') throw new Error('expected text tool result')
+    expect(block.text).toContain('skill "once-skill" is already loaded')
+  })
+
+  it('allows a retry after a failed skill load', async () => {
+    const home = await tempDir('tool-failed-then-retry')
+    await writeSkill(join(home, '.dsh/skills'), 'retry-skill', 'Retry', 'Retry body.')
+    const ctx = await setup(home)
+    const session = Session.create(SessionId('failed-then-retry'))
+    const agent = sessionAgent(session)
+    openMessageTurn(session)
+    const failedId = CallId('failed-load')
+    session.append('tool/call', {
+      turn: 1, step: 1, callId: failedId, name: 'skill', arguments: JSON.stringify({ name: 'retry-skill' }),
+    })
+    session.append('tool/result', {
+      turn: 1,
+      step: 1,
+      message: createToolResultMessage({
+        callId: failedId,
+        content: [{ type: 'text', text: 'boom' }],
+        isError: true,
+      }),
+      error: { name: 'Error', code: 'TOOL_ERROR' },
+    }, { surfaceOp: 'append' })
+    const retry = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('retry-load'),
+      name: 'skill',
+      arguments: { name: 'retry-skill' },
+      agent,
+    })
+    expect(retry.isError).toBe(false)
+  })
+
+  it('ignores malformed prior skill-call arguments when deciding a reload', async () => {
+    const home = await tempDir('tool-malformed-prior')
+    await writeSkill(join(home, '.dsh/skills'), 'fresh-skill', 'Fresh', 'Fresh body.')
+    const ctx = await setup(home)
+    const session = Session.create(SessionId('malformed-prior'))
+    const agent = sessionAgent(session)
+    openMessageTurn(session)
+    session.append('tool/call', {
+      turn: 1, step: 1, callId: CallId('other-tool'), name: 'read', arguments: '{}',
+    })
+    session.append('tool/call', {
+      turn: 1, step: 1, callId: CallId('bad-json'), name: 'skill', arguments: '{',
+    })
+    session.append('tool/call', {
+      turn: 1, step: 1, callId: CallId('json-null'), name: 'skill', arguments: 'null',
+    })
+    session.append('tool/call', {
+      turn: 1, step: 1, callId: CallId('not-object'), name: 'skill', arguments: '1',
+    })
+    session.append('tool/call', {
+      turn: 1, step: 1, callId: CallId('bad-name'), name: 'skill', arguments: JSON.stringify({ name: 1 }),
+    })
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('fresh-load'),
+      name: 'skill',
+      arguments: { name: 'fresh-skill' },
+      agent,
+    })
+    expect(result.isError).toBe(false)
+    const stub = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('stub-load'),
+      name: 'skill',
+      arguments: { name: 'fresh-skill' },
+      agent: { session: { header: { cwd: home }, events: [] } } as never,
+    })
+    expect(stub.isError).toBe(false)
+  })
+
+  it('omits a hideFromModel skill from the catalog and the loader', async () => {
+    const home = await tempDir('tool-hide-from-model')
+    const ctx = await setup(home)
+    ctx.skills.register({
+      name: 'gated-skill',
+      description: 'Gated skill',
+      source: 'runtime',
+      content: 'Gated body.',
+    })
+    const session = Session.create(SessionId('hide-from-model'))
+    const agent = sessionAgent(session)
+    openMessageTurn(session)
+    expect(JSON.stringify(await composePrefixForAgent(ctx, agent))).toContain('gated-skill')
+    ctx.skills.hideFromModel('gated-skill')
+    await fireStep(ctx, agent, 1, 1)
+    expect(JSON.stringify(catalogMessages(session).at(-1)?.data.content)).not.toContain('gated-skill')
+    const denied = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('gated-load'),
+      name: 'skill',
+      arguments: { name: 'gated-skill' },
+      agent,
+    })
+    expect(denied.isError).toBe(true)
+    const block = denied.content[0]
+    if (block?.type !== 'text') throw new Error('expected text tool result')
+    expect(block.text).toContain('is not available for model invocation')
   })
 
   it('resolves the layered registry as the calling agent sees it', async () => {

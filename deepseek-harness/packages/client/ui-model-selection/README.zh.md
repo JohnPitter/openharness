@@ -12,6 +12,8 @@ Host 报告的 `ModelSelection` 是唯一的选择事实，其中包含提供方
 
 每一份常驻目录都会直接在转发的 owner 事件 `llm/adapters-updated` 与 `settings/document-updated` 上重拉。因此提供方拓扑、提供方目录与默认选择都能收敛，Host 与 client runtime 无需再派生一个单独的模型变更别名。
 
+Host 半边还持有 J-space 开关（`ui-jspace.enabled`）。关闭时会省略构建协议提示词段，并调用 `ctx.skills.hideFromModel('j-space')`，因此模型目录和 `skill` 工具不再暴露该名称；`/j-space` 仍可供用户调用。打开时注入协议并恢复模型调用。切换会在下一步重发 skill 目录。
+
 `/client` 导出面为插件本体（`apply`/`inject`）、`ModelDirectoryResolver`、`ModelDirectory` 及其状态形状、slot 注入面类型。
 
 ## 模型体验

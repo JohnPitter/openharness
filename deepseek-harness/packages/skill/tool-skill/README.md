@@ -135,7 +135,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 #### What the model sees
 
-Invalid or stale selections return exactly `Error: invalid skill name "<name>"`, `Error: skill "<name>" is unknown or no longer available`, or `Error: skill "<name>" is not available for model invocation`. Provider-thrown lookup text is data-dependent and receives the same `Error: <message>` wrapper.
+Invalid or stale selections return exactly `Error: invalid skill name "<name>"`, `Error: skill "<name>" is unknown or no longer available`, or `Error: skill "<name>" is not available for model invocation`. A second `skill` call for a name whose successful result is still on the session surface returns exactly `Error: skill "<name>" is already loaded. Follow the existing <skill_content> block; do not call the skill tool again for this name.` Provider-thrown lookup text is data-dependent and receives the same `Error: <message>` wrapper.
 
 #### Token effect
 

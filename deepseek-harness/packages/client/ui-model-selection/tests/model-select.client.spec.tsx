@@ -221,7 +221,7 @@ describe('ModelSelect J-space toggle', () => {
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /J-space/ }))
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
-      .toEqual(['开加载 j-space skill，按 fast/full/loop 工作。', '关不注入 J-space 协议。'])
+      .toEqual(['开按 fast/full/loop 工作；最多加载一次 j-space skill。', '关不注入协议，并对模型隐藏 j-space。'])
 
     fireEvent.click(screen.getByRole('menuitemradio', { name: /关/ }))
     await waitFor(() => {
