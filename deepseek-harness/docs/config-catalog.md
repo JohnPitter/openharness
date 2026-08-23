@@ -3140,6 +3140,22 @@ export interface Config {
 
 Source: [`packages/web/web-search-deepseek/src/index.ts:46`](../packages/web/web-search-deepseek/src/index.ts)
 
+<a id="deepseek-aidsh-web-search-duckduckgo"></a>
+
+## `@deepseek-ai/dsh-web-search-duckduckgo`
+
+Requires: `web`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
+export interface Config {
+  /** HTML search endpoint; the provider POSTs `q=` here. Defaults to DuckDuckGo's no-JS page. */
+  baseURL?: string
+}
+```
+
+Source: [`packages/web/web-search-duckduckgo/src/index.ts:44`](../packages/web/web-search-duckduckgo/src/index.ts)
+
 <a id="deepseek-aidsh-web-search-exa"></a>
 
 ## `@deepseek-ai/dsh-web-search-exa`

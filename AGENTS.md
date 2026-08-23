@@ -169,9 +169,15 @@ go vet ./...  # lint
   enquanto o PC estiver ligado e o OpenHarness aberto. Quem tiver o link tem o
   mesmo poder que o desktop. Precisa de internet no PC; a primeira vez baixa
   `cloudflared` para `%LOCALAPPDATA%\openharness\cloudflared`.
-- **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell); o
-  Trabalhador recolhe informação e aplica as modificações, no modelo escolhido
+- **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell); uma
+  ou duas tarefas vão só por `subagent` — a ferramenta `workflow` não é shell.
+  O Trabalhador recolhe informação e aplica as modificações, no modelo escolhido
   no chip da direita.
+- **Busca na web:** padrão é DuckDuckGo (HTML, sem chave). A busca nativa
+  DeepSeek fica desativada; ela cobra saldo DeepSeek mesmo se o chat for Kimi.
+- **J-Space:** skill empacotada em `apps/cli/config/skills/j-space`, nos presets
+  Standard, Code e Workflow. Protocolo de construção (fast/full/loop); se a
+  tarefa admite duas leituras com ações diferentes, carrega `problem-model`.
 - O SQLite de sessão do rc.8 (v2) **não** lê o storage antigo: dados em
   `%LOCALAPPDATA%\openharness\dsh-home` de um exe rc.5 podem quebrar. Se a UI
   não subir sessões, apague (ou renomeie) essa pasta e reabra o app.

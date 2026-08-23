@@ -378,6 +378,8 @@ describe('dsh-tool-workflow', () => {
     const sections = (await ctx.systemPrompt.assemble()).sections
     const section = sections.find(s => s.name === 'tool:orchestrate')
     expect(section?.text).toContain('orchestrate')
+    expect(section?.text).toMatch(/not a shell/)
+    expect(section?.text).toMatch(/call subagent only/)
     expect(sections.some(s => s.name === 'tool:workflow')).toBe(false)
     await fiber.dispose()
     expect(ctx.tools.get('orchestrate')).toBeUndefined()

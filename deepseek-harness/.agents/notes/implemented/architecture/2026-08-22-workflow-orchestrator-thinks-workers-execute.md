@@ -10,7 +10,7 @@ Workflow mode selected a planner model and a worker model, but the root session 
 
 ## Decision
 
-The workflow standing mount still registers the same tools as `standard` so in-process children inherit grep, filesystem, and shell. After a root workflow agent publishes, `restrictWorkflowOrchestrator` denies those work tools on that agent's scope only. Children join the standing mount as siblings, not as nested scopes under the parent agent, so the denial does not reach them. In-process children of a workflow parent receive `WORKFLOW_WORKER_PERSONA` unless the start request already named a persona. The orchestrator persona tells the model those work tools are unavailable and that every inspect-or-mutate step must be delegated.
+The workflow standing mount still registers the same tools as `standard` so in-process children inherit grep, filesystem, and shell. After a root workflow agent publishes, `restrictWorkflowOrchestrator` denies those work tools on that agent's scope only. Children join the standing mount as siblings, not as nested scopes under the parent agent, so the denial does not reach them. In-process children of a workflow parent receive `WORKFLOW_WORKER_PERSONA` unless the start request already named a persona. The orchestrator persona and the `workflow` tool's `tool:<toolName>` prompt section name `subagent` as the only path for one or two tasks: `workflow` runs a JavaScript script that starts workers through `agent()`, and is not a shell or a substitute for grep, edit, or pwsh.
 
 ## Alternatives considered
 
@@ -18,8 +18,12 @@ The workflow standing mount still registers the same tools as `standard` so in-p
 
 **Keep tools and change only the persona.** The model can still call grep and edit; persona is not enforcement.
 
+**Treat `subagent` and `workflow` as interchangeable in the orchestrator persona.** The planner then calls `workflow` as a stand-in for the denied shell, and a script that returns without `agent()` starts zero workers. Naming `subagent` as the one-or-two-task path and stating that `workflow` is not a shell is the cheaper correction than hiding the tool.
+
+**Hide the `workflow` tool from the orchestrator catalog.** Large fan-out still needs the script; the misuse is substituting it for grep, edit, or pwsh, not the capability itself.
+
 **Parent the child scope under the orchestrator agent and allow-list tools on the child.** Ancestor restrictions already propagate to nested scopes, so a parent deny would hide tools from workers unless the child re-registered them. Sibling join plus parent-only restrict matches the existing createScope topology.
 
 ## Consequences
 
-A workflow root cannot call grep, edit, or shell even if it ignores the persona. Workers still can. A start request that passes its own persona replaces the worker default. Out-of-process product providers are unchanged.
+A workflow root cannot call grep, edit, or shell even if it ignores the persona. Workers still can. A start request that passes its own persona replaces the worker default. Out-of-process product providers are unchanged. The planner still sees the `workflow` tool; guidance, not a catalog restriction, steers one-or-two-task work onto `subagent`.

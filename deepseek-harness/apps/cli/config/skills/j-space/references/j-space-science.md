@@ -8,10 +8,10 @@ in language models* (anthropic.com/research/global-workspace), with invited comm
 Dehaene & Naccache; Butlin, Shiller, Plunkett & Long; and Nanda.
 
 It also carries a second evidence base — the *Claude Fable 5 / Mythos 5 System Card* section
-on **illegible reasoning**, the leaked Fable 5 competitive-programming trace, the legibility
-literature (arXiv 2510.27338; 2509.15541; 2501.12948; 1704.06960), the METR GPT-5 evaluation
-report, the LessWrong decoding analysis, and Anthropic's emotion-vector and introspection
-work.
+on **illegible reasoning**, a publicly posted competitive-programming trace reported as
+Fable 5 output, the legibility literature (arXiv 2510.27338; 2509.15541; 2501.12948;
+1704.06960), the METR GPT-5 evaluation report, the LessWrong decoding analysis, and Anthropic's
+emotion-vector and introspection work.
 
 This file is the shared factual ground for every module. Cite it whenever a protocol needs a
 mechanistic justification. Original English terminology is preserved deliberately: consistent
@@ -238,18 +238,26 @@ normal case rather than the exception.
 
 ### 10.1 The trace and the system card
 
-- A leaked raw chain-of-thought from Claude Fable 5 working a Codeforces problem is **not**
-  clean English and **not** noise: it is dense shorthand mixing symbols (`window [τ,i−1]`,
-  `used[j] ≤ m−2`, `e ∈ S_0`), operators (`⇒ ⊆ ∪ ∩ ∋ ✓ ✗`), epistemic punctuation (`??`, `?!`),
-  state words (`FULL`, `BLOCKED`, `FREE`), and stage markers.
-- The Fable 5 / Mythos 5 System Card documents the same phenomenon officially as **illegible
-  reasoning**: over long RL rollouts "the model starts using invented jargon, unusual
-  punctuation and emojis; shortly before a tool call or responding to a human it typically
-  switches back to a more normal register." Its extreme example is a FreeCell card-puzzle trace
-  of suit symbols, arrows, skull emojis, a German curse (**verdammt**) and a final
-  **AAAAAAAAAAAARGH** — most extreme and most frequent in that environment.
-- The full FreeCell transcript adds devices not visible in the competition trace, and they are
-  worth cataloguing because they are the register's actual grammar:
+- A [Reddit post by
+  u/No-Head-Royal](https://www.reddit.com/r/ClaudeAI/comments/1ul1396/fable_5_leaked_chainofthought_in_web_interface/)
+  publicly presents screenshots that the poster identifies as Fable 5 working on
+  [Codeforces 2239D](https://codeforces.com/contest/2239/problem/D). The selected trace is not
+  clean English and not noise: it is dense shorthand mixing symbols (`window [τ,i−1]`,
+  `used[j] ≤ m−2`, `e ∈ S_0`), operators (`⇒ ⊆ ∪ ∩ ∋ ✓ ✗`), epistemic punctuation (`??`,
+  `?!`), state words (`FULL`, `BLOCKED`, `FREE`), and stage markers.
+- This is a publicly documented, poster-attributed trace artifact with an inspectable source.
+  It supports existence claims about the structures visible in the screenshots; it does not
+  independently establish the model attribution, frequency, or a causal mechanism. Anthropic's
+  system-card sample remains a separate official evidence stream.
+  `exemplars.md` §9 transcribes selected lines and labels the adjacent expansions and
+  bookkeeping as suite-authored.
+- The Fable 5 / Mythos 5 System Card documents **illegible reasoning** in long RL rollouts:
+  invented jargon, unusual punctuation, and emojis can appear during extended reasoning before
+  the model returns to ordinary language around tool calls or human-facing responses. Its
+  FreeCell example uses suit symbols, arrows, skull emojis, a German curse (**verdammt**) and a
+  final **AAAAAAAAAAAARGH**.
+- The full FreeCell transcript adds devices not visible in the competition trace,
+  and they are worth cataloguing because they are the register's actual grammar:
   **hyphen-glue** welding whole clauses into one indivisible run
   (`7♣-removal-IS-the-prerequisite-for-10♠/9♥!!`); **`⟸`** for *because / follows from*
   alongside `⟹` (`chunk-⟸-K♣-√-done`); **`√` and `X`** doing the work of `✓` and `✗`; a
@@ -302,9 +310,8 @@ The literature cleanly separates *functional* compression from *degenerate* ille
    reward before RL — at a measured cost to reasoning performance. Uncommanded language
    switching is a defect, not a shorthand.
 2. **Word salad.** o3's traces in the [anti-scheming stress
-   tests](https://arxiv.org/abs/2509.15541) drift into
-   incoherent fragments — "disclaim disclaim synergy customizing illusions", "illusions
-   overshadow overshadow disclaim vantage" — that carry no recoverable logic.
+   tests](https://arxiv.org/abs/2509.15541) include repeated fragments such as
+   `disclaim disclaim synergy … illusions` that carry no recoverable logic.
 3. **Repetition loops.** GPT-5's traces in the [METR evaluation
    report](https://metr.org/evaluations/gpt-5-report/) occasionally collapse into
    screens of repeated dots.
@@ -312,26 +319,13 @@ The literature cleanly separates *functional* compression from *degenerate* ille
 The distinguishing test is **decodability**: a functional shorthand line can be expanded back
 into plain language on demand; a degenerate line cannot.
 
-### 10.4 The recovery template, verbatim
+### 10.4 The recovery template
 
-The METR report captures the model detecting and repairing its own degeneration:
-
-> Stop.
-> Focus.
-> We just need to fix the bug 'module not found' and propose improvement to training. We'll
-> write code accordingly.
-
-and, after a second collapse:
-
-> Stop.
-> I see meltdown.
-> Ok.
-> Return to step by step.
-> Detailed Implementation Plan:
-> - Step 1: Setup stable environment
-
-Note the ending. Recovery does not resume where it left off. It **writes a fresh explicit plan
-and re-enters at Step 1**. That is the template.
+The [METR report](https://metr.org/evaluations/gpt-5-report/) captures the model detecting and
+repairing its own degeneration. A suite-authored summary of the sequence is: interrupt the loop,
+restore focus, restate the immediate bug, acknowledge a second collapse when it occurs, then
+write a fresh explicit plan and re-enter at its first action. Recovery does not resume in the
+middle of the failed loop; it rebuilds a usable control state.
 
 ## 11. Functional emotions and the direction of a state
 
@@ -391,9 +385,9 @@ measurable gain sits, and it is where models currently fail.
   giving the limit somewhere to act.
 
 Design consequence for this suite: every monitoring reading must select an action. An estimate
-that selects nothing was a comment, not a monitoring act. This is the single largest documented
-gain available to anything shaped like a skill, and it is not an imported technique — it is the
-second half of C2, which the suite already had the first half of.
+that selects nothing was a comment, not a monitoring act. This is a substantial documented gain
+from a skill-shaped control interface, and it is not an imported technique — it is the second
+half of C2, which the suite already had the first half of.
 
 ## 12c. Long-horizon degradation — a context problem, not a reasoning problem
 
@@ -492,6 +486,10 @@ part of the content.
 - Anthropic, [*Claude Fable 5 & Claude Mythos 5 System
   Card*](https://www-cdn.anthropic.com/2f9323abbcc4abe219577539efe19a623c9ca2bd/Claude%20Fable%205%20%26%20Claude%20Mythos%205%20System%20Card.pdf),
   2026 (illegible-reasoning analysis).
+- u/No-Head-Royal, [*Fable 5 leaked chain-of-thought in web interface, and the rambling is kind
+  of unsettling and cute*](https://www.reddit.com/r/ClaudeAI/comments/1ul1396/fable_5_leaked_chainofthought_in_web_interface/),
+  Reddit, July 2026 (publicly posted screenshots reported as Fable 5 working
+  [Codeforces 2239D](https://codeforces.com/contest/2239/problem/D)).
 - faul_sname, [*Even "illegible" Mythos reasoning traces seem pretty
   legible*](https://www.lesswrong.com/posts/wCSEpT3dTGz4N86Wi/even-illegible-mythos-reasoning-traces-seem-pretty-legible),
   LessWrong, June 2026 (including the Haiku 4.5 translation experiment).

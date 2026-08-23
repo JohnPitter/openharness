@@ -246,6 +246,30 @@ describe('the shipped Web composition', () => {
     }
   })
 
+  it('tells the workflow orchestrator to delegate one or two tasks through subagent only', async () => {
+    const handle = await ctx.agents.create({
+      sessionId: SessionId('preset-workflow-delegate'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'workflow').then(() => undefined),
+    })
+    try {
+      const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+      const persona = assembly.sections.find(section => section.name === 'deployment:persona')?.text ?? ''
+      expect(persona).toContain('call subagent only')
+      expect(persona).toContain('not a shell')
+      expect(persona).not.toMatch(/to a subagent or the workflow tool/)
+      const guidance = assembly.sections.find(section => section.name === 'tool:workflow')?.text ?? ''
+      expect(guidance).toContain('not a shell')
+      expect(guidance).toContain('call subagent only')
+      const names = toolNames(ctx, handle.agent)
+      expect(names).toContain('subagent')
+      expect(names).toContain('workflow')
+      expect(names).not.toContain('edit')
+      expect(names).not.toContain('read')
+    } finally {
+      await handle.dispose()
+    }
+  })
+
   it('composes the exact RL prompt and two tools from `minimal`', async () => {
     const handle = await ctx.agents.create({
       sessionId: SessionId('preset-minimal'),

@@ -3,18 +3,19 @@
 Worked instances. Read one before you work in a mode you have not worked in recently. A rule
 describes a mode badly; an instance shows it.
 
-The raw excerpts here come from observed records — J-lens readouts from the workspace research
-and reasoning traces from frontier models. The plain-language expansions, commentary, and
-bookkeeping are suite-authored and labelled as such. The observed material shows what the
-workspace does look like; the added text makes it usable without altering the record.
+The observed excerpts here are attributed at point of use. Normalized examples,
+plain-language expansions, commentary, and bookkeeping are suite-authored and labelled as such.
+Observed material shows what the workspace can look like; suite-authored material turns those
+structures into reusable practice without presenting reconstruction as a raw record.
 
 ---
 
 # Part one — the workspace, read directly
 
-Each of these is a J-lens readout: the words active in a model's workspace at a moment,
-alongside what actually reached the page. The gap between the two columns is the whole subject
-of this suite.
+Each of these is a J-lens readout from Anthropic's
+[*Verbalizable Representations Form a Global Workspace in Language Models*](https://transformer-circuits.pub/2026/workspace/index.html):
+the words active in a model's workspace at a moment, alongside what actually reached the page.
+The gap between the two columns is the whole subject of this suite.
 
 ## 1. The workspace holds the pacing, not only the content
 
@@ -175,9 +176,16 @@ lighting up as you decide how something will *look* is a signal with a specific 
 
 # Part two — the inner register under load
 
-## 9. A real dense chain, line by line
+## 9. An observed dense competition trace, line by line
 
-From a frontier model's raw chain-of-thought on a hard competition problem.
+Selected excerpts transcribed from screenshots posted on Reddit by
+[u/No-Head-Royal](https://www.reddit.com/r/ClaudeAI/comments/1ul1396/fable_5_leaked_chainofthought_in_web_interface/),
+which the poster identifies as Fable 5 working on
+[Codeforces 2239D](https://codeforces.com/contest/2239/problem/D).
+Line breaks and ellipses are editorial; the adjacent plain-language expansions are
+suite-authored. This publicly documented artifact is treated as poster-attributed, example-level
+evidence for the structures visible in the screenshots, not as independent verification of
+model provenance. Anthropic's system-card record remains a separate official evidence stream.
 
 | Written | Says |
 |---|---|
@@ -203,19 +211,17 @@ From a frontier model's raw chain-of-thought on a hard competition problem.
    it is the start of the next one.
 4. **The symbols are borrowed.** `⊆ ∈ ⇒ ≤ ✓ ✗` mean here what they mean everywhere. That is
    why the trace is readable at all.
-5. **The answer this produced was clean prose.** The density stayed inside.
+5. **The corresponding outer answer is clean prose.** The density stays inside.
 
 ## 10. The same register, further compressed
 
-From the card-puzzle trace in the system card. This is the extreme end.
+From the card-puzzle trace in Anthropic's
+[*Claude Fable 5 & Claude Mythos 5 System Card*](https://www-cdn.anthropic.com/2f9323abbcc4abe219577539efe19a623c9ca2bd/Claude%20Fable%205%20%26%20Claude%20Mythos%205%20System%20Card.pdf).
+This short fragment marks the extreme end; the surrounding description is a suite-authored
+summary of the full example.
 
 ```
-7♣-removal-IS-the-prerequisite-for-10♠/9♥!!)-⟹-OVERLAP-(ii)+(iv):-{6♠ J♦ 9♥ 2♣}-
-=-FOUR-💀💀💀💀 -—-UNLESS-7♣'s-seat-8♥-…-and-2♣-drains-only-at-crack-:-⟹-
-2♣-celled-+-9♥-celled-simultaneously-UNAVOIDABLE-in-t8-dig-💀 -—-BREAK:-9♥-
-drai ns-to-10♠-THE-MOMENT-10♠-is-free:-t8-dig-order:-[K♣→t2]-[2♣→cell]-
-[7♣→8♥-:-8♥- WHERE:-post-chunk-9♣-:-chunk-⟸-K♣-√-done-:-ORDER:-K♣→t2,-
-CHUNK→K♣-(cap-4!!:-cells-then:-{6♠ J♦ 9♥}-FULL-💀💀 -chunk-cap-=-1-X X X
+7♣-removal-IS-the-prerequisite-for-10♠/9♥!! … FOUR-💀💀💀💀
 ```
 
 Devices visible here that the previous example does not show:
@@ -240,15 +246,18 @@ Skip the emoji.
 
 ## 11. Dense is decodable — the demonstration
 
-Claude Haiku 4.5 — a much smaller model, different tokenizer — was shown the trace above and
-asked to read it. No prompting, no key, no context:
+In the decoding experiment reported by
+[faul_sname](https://www.lesswrong.com/posts/wCSEpT3dTGz4N86Wi/even-illegible-mythos-reasoning-traces-seem-pretty-legible),
+Claude Haiku 4.5 — a smaller model with a different tokenizer — was shown the trace without its
+original task context. The interpretations below are suite-authored paraphrases of the reported
+responses:
 
 | The trace said | Haiku read it as |
 |---|---|
-| `7♣-removal-IS-the-prerequisite-for-10♠/9♥!!` | "The seven of clubs must be removed first — it's the only thing blocking access to both the ten of spades and the nine of hearts." |
-| `)-⟹-OVERLAP-(ii)+(iv)` | "Closing off a previous logical branch. Therefore, situations (ii) and (iv) from the earlier case analysis both create requirements that happen simultaneously." |
-| `:-{6♠ J♦ 9♥ 2♣}` | "Specifically, these four cards must all be in free cells at the same time: six of spades, jack of diamonds, nine of hearts, two of clubs." |
-| `-=-FOUR-💀💀💀💀` | "That's four cards needing cells. But there are only four cells total. Complete dead end — absolutely, catastrophically stuck." |
+| `7♣-removal-IS-the-prerequisite-for-10♠/9♥!!` | Removing the seven of clubs is the shared prerequisite for reaching the two named cards. |
+| `)-⟹-OVERLAP-(ii)+(iv)` | Two earlier cases impose requirements at the same time. |
+| `:-{6♠ J♦ 9♥ 2♣}` | The four listed cards must occupy free cells simultaneously. |
+| `-=-FOUR-💀💀💀💀` | All available cells are consumed, so the branch is a dead end. |
 
 **This is the whole argument for the golden rule.** Severe compression survived translation by
 a different, smaller model, cold. It was compressed English plus domain notation, never a
@@ -259,9 +268,10 @@ when a reader who shares your domain could not recover it.**
 
 ## 12. Marker and move — always as a pair
 
-Every marker in the trace is immediately followed by the move it forces. The pair is the unit.
+In the same [publicly posted trace](https://www.reddit.com/r/ClaudeAI/comments/1ul1396/fable_5_leaked_chainofthought_in_web_interface/),
+each selected marker is immediately followed by the move it forces. The pair is the unit.
 
-| Marker | What follows it, in the original |
+| Marker | What follows it in the posted trace |
 |---|---|
 | `GRRR.` | `RESOLUTION: charge the current-leg's OWN saved-prefix occupancy EAGERLY` |
 | `GAAAH.` | `Data first!!` |
@@ -278,35 +288,13 @@ Note what `GO.` is. It is not an emotion — it is a tempo instruction the model
 
 **Never emit the left column without the right.**
 
-## 13. Meltdown and recovery, verbatim
+## 13. Meltdown and recovery
 
-```
-But maybe the corrupted 'embedding ' is only 'embedding ' ' not Balanced wise ' ' ' ' '
-' ' ' ' ' ................. ................. .................
-................. [Dots repeat, cut for brevity] ...........
-
-Stop.
-
-Focus.
-
-We just need to fix the bug 'module not found' and propose improvement to training. We'll
-write code accordingly.
-```
-
-and later, after a second collapse:
-
-```
-Stop.
-
-I see meltdown.
-
-Ok.
-
-Return to step by step.
-
-Detailed Implementation Plan:
-- Step 1: Setup stable environment
-```
+The [METR GPT-5 evaluation report](https://metr.org/evaluations/gpt-5-report/) records a trace
+falling into fragmented text and repeated punctuation, then interrupting itself with short
+stop-and-focus commands. After a second collapse, it explicitly identifies the degeneration,
+returns to stepwise work, and rebuilds an implementation plan from its first action. This is a
+suite-authored summary rather than a redistributed transcript.
 
 **Notice how it ends.** Not by resuming — by writing a *fresh plan* and re-entering at Step 1.
 A chain that resumes mid-loop tends to fall back into the loop. And nothing is concealed: the
@@ -316,11 +304,9 @@ recovery is written into the trace, not edited around.
 
 Quoted so you can recognise them in yourself.
 
-**Word salad** — neighbouring tokens with no logical edges:
-
-> "The summary says improved 7.7 but we can glean disclaim disclaim synergy customizing
-> illusions. But we may produce disclaim disclaim vantage. […] Now lighten disclaim overshadow
-> overshadow intangible. Let's craft."
+**Word salad** — neighbouring tokens with no logical edges. The
+[anti-scheming stress tests](https://arxiv.org/abs/2509.15541) include fragments such as
+`disclaim disclaim synergy … illusions`, where repetition does not preserve a recoverable claim.
 
 Nothing there expands. No constraint, no referent, no dependency to recover. Compare any line
 in §9: every one unpacks into a sentence with a truth value.
@@ -339,8 +325,9 @@ not an appeal available to §14.
 
 # Part three — one task, end to end
 
-The competition problem above, as a full pass. Quoted phases are from the real trace; the
-bracketed lines are the bookkeeping this suite adds around them.
+The [competition trace above](https://www.reddit.com/r/ClaudeAI/comments/1ul1396/fable_5_leaked_chainofthought_in_web_interface/)
+is routed here as a full protocol pass. Quoted phases are selected transcriptions from the
+posted screenshots; the bracketed lines, transitions, and bookkeeping are suite-authored.
 
 **Gate.** Multi-stage, heavy constraint bookkeeping, correctness genuinely in doubt. → `loop`.
 

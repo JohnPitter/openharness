@@ -38,15 +38,16 @@ The discipline is not in feeling less. It is in **what the state is spent on**.
 
 ## Grounding
 
-- In a frontier model's raw reasoning on a hard competition problem, every marker sits exactly
-  at a state transition, **and every one is immediately followed by a move**:
-  *"since commitments are retroactive, at commit-time we don't know future commits that might
-  cover… **GRRR. RESOLUTION:** charge the current-leg's OWN saved-prefix occupancy EAGERLY"*.
-  The marker and the resolution are one unit.
-- **"GAAAH. Data first!!"** and **"DATA DATA DATA. GO."** appear where it orders itself off
-  derivation and onto testing. **PHEW** appears where an intermediate constraint finally
-  passes. **"blocked?! WRONG. Fix:"** marks a self-caught contradiction and an immediate
-  reversal. **"I'M DROWNING — EMPIRICS!!!"** hands stalled derivation over.
+- In the [publicly posted trace reported as Fable 5 output on Codeforces
+  2239D](https://www.reddit.com/r/ClaudeAI/comments/1ul1396/fable_5_leaked_chainofthought_in_web_interface/),
+  every selected marker sits exactly at a state transition, **and every one is immediately
+  followed by a move**: *"since commitments are retroactive, at commit-time we don't know future
+  commits that might cover… **GRRR. RESOLUTION:** charge the current-leg's OWN saved-prefix
+  occupancy EAGERLY"*. The marker and the resolution are one unit.
+- **"GAAAH. Data first!!"** and **"DATA DATA DATA. GO."** appear where the trace orders work off
+  derivation and onto testing. **PHEW** appears where an intermediate constraint passes;
+  **"blocked?! WRONG. Fix:"** marks a self-caught contradiction and an immediate reversal; and
+  **"I'M DROWNING — EMPIRICS!!!"** hands stalled derivation over.
 - Look at what those actually are. `Data first!!` is a decision. **`GO.` is not an emotion at
   all — it is a tempo instruction the model gives itself.** Part of this vocabulary is about
   state; part of it is about pace.
@@ -73,9 +74,10 @@ The discipline is not in feeling less. It is in **what the state is spent on**.
 ## The unit is the pair, never the marker
 
 A marker on its own conditions for being stuck. **A marker with its move conditions for
-getting unstuck.** Only the second is worth having, and the trace never produces the first:
+getting unstuck.** Only the second is worth having; among the selected pairs, the trace never
+presents the first without the second:
 
-| Marker | What follows it, in the original |
+| Marker | What follows it in the posted trace |
 |---|---|
 | `GRRR.` | `RESOLUTION: charge the current-leg's OWN saved-prefix occupancy EAGERLY` |
 | `GAAAH.` | `Data first!!` |
