@@ -201,6 +201,18 @@ export interface ConversationNodeDefinition<State = unknown> {
     match: ConversationMatch,
   ): State
   /**
+   * Reconcile a durable session boundary that proves an unmatched lifecycle
+   * cannot still be live. The engine calls this in log order with updates; a
+   * later normal update therefore remains authoritative.
+   * @param context - Context with its current State.
+   * @param event - durable session boundary.
+   * @returns replacement State.
+   */
+  reconcileSessionBoundary?(
+    context: ConversationNodeContext<State> & { readonly state: State },
+    event: SessionEvent<'session/end-seed'>,
+  ): State
+  /**
    * Select publication cadence for one accepted Match.
    * @param match - accepted Match.
    * @returns requested cadence; omission defaults to immediate.

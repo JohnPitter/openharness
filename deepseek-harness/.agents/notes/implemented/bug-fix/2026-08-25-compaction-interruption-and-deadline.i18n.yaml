@@ -1,0 +1,4 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state.
+2026-08-25-compaction-interruption-and-deadline.md: a016c063571996e63d07f76036edf34c187cb7af
+2026-08-25-compaction-interruption-and-deadline.zh.md: b233e4de5d09ba2f84cba24803a84149a4ed075a

@@ -5,6 +5,7 @@ import type {
   ConversationViewDefinition, ConversationViewNode, ConversationViewSnapshotMap,
   ConversationViewSnapshotStore,
 } from '../contract/conversation.ts'
+import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { conversationContextKey } from '../contract/conversation.ts'
 import {
   ConversationLocationIndex, type ConversationLocationDataChange,
@@ -54,6 +55,10 @@ const LOCATION_DATA_SCOPES: readonly ConversationLocationDataScope[] = ['step', 
 
 function emptyLocationData(): Record<ConversationLocationDataScope, ConversationLocationData | null> {
   return { step: null, turn: null }
+}
+
+function isSessionEndSeed(event: SessionEvent): event is SessionEvent<'session/end-seed'> {
+  return event.type === 'session/end-seed'
 }
 
 function maximumPublication(
@@ -179,6 +184,7 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     this.locationIndex.rebuild(sorted)
     this.timelineDirty = true
     for (const entry of sorted) this.matchInput(entry)
+    this.replayContexts(new Set(this.contexts.values()))
     this.replayDependencies()
     this.revised.clear()
     for (const context of this.contexts.values()) this.dirty.add(context)
@@ -209,6 +215,9 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
       this.locationIndex.appendNonBoundary(input.event)
     }
     publication = maximumPublication(publication, this.matchInput(input))
+    if (isSessionEndSeed(input.event)) {
+      if (this.reconcileSessionBoundary(input.event)) publication = 'immediate'
+    }
     if (this.replayRevisedDependents()) publication = 'immediate'
     this.revised.clear()
     return publication
@@ -239,6 +248,10 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     }
     this.applyPendingMatches(pending, affected)
     this.replayContexts(affected)
+    if (fresh.some(entry => isSessionEndSeed(entry.event))) {
+      this.replayContexts(new Set(this.contexts.values()))
+      publication = 'immediate'
+    }
     if ((this.revised.size > 0 || previousHasMore !== hasMore) && this.replayDependencies()) {
       publication = 'immediate'
     }
@@ -507,6 +520,28 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     for (const [kind, contexts] of startsByKind) this.indexStartedContexts(kind, contexts)
   }
 
+  private reconcileSessionBoundary(event: SessionEvent<'session/end-seed'>): boolean {
+    let changed = false
+    for (const context of this.contexts.values()) {
+      if (context.startSeq === undefined || context.startSeq >= event.seq
+        || context.definition.reconcileSessionBoundary === undefined || context.state === undefined) continue
+      const typed = contextSnapshot(context) as ConversationNodeContext & { readonly state: unknown }
+      const next = requireState(
+        context.definition,
+        'reconcileSessionBoundary',
+        context.definition.reconcileSessionBoundary(typed, event),
+      )
+      if (next !== context.state) {
+        context.state = next
+        context.revision++
+        this.revised.add(context)
+        this.dirty.add(context)
+        changed = true
+      }
+    }
+    return changed
+  }
+
   private replayContexts(contexts: ReadonlySet<InternalContext>): void {
     const ordered = [...contexts].sort((left, right) =>
       (left.startSeq ?? Number.POSITIVE_INFINITY) - (right.startSeq ?? Number.POSITIVE_INFINITY))
@@ -538,14 +573,34 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
       context.definition.start(contextSnapshot(context), start, reader),
     )
     this.replaceDependencies(context, dependencies)
-    for (let index = 1; index < context.matches.length; index++) {
-      const match = context.matches[index]
-      if (match === undefined || match.role !== 'update') continue
+    const lifecycle: Array<
+      | { readonly seq: number; readonly match: ConversationMatch }
+      | { readonly seq: number; readonly event: SessionEvent<'session/end-seed'> }
+    > = context.matches.slice(1)
+      .filter((match): match is ConversationMatch => match.role === 'update')
+      .map(match => ({ seq: match.event.seq, match }))
+    for (const input of this.inputs.values()) {
+      if (input.event.type === 'session/end-seed' && input.event.seq > start.event.seq) {
+        lifecycle.push({ seq: input.event.seq, event: input.event })
+      }
+    }
+    lifecycle.sort((left, right) => left.seq - right.seq)
+    for (const item of lifecycle) {
       const typed = contextSnapshot(context) as ConversationNodeContext & { readonly state: unknown }
+      if ('event' in item) {
+        if (context.definition.reconcileSessionBoundary !== undefined) {
+          context.state = requireState(
+            context.definition,
+            'reconcileSessionBoundary',
+            context.definition.reconcileSessionBoundary(typed, item.event),
+          )
+        }
+        continue
+      }
       context.state = requireState(
         context.definition,
         'update',
-        context.definition.update(typed, match),
+        context.definition.update(typed, item.match),
       )
     }
     context.revision++
@@ -792,7 +847,7 @@ function isLocationBoundary(type: string): boolean {
 
 function requireState(
   definition: ConversationNodeDefinition,
-  phase: 'start' | 'update',
+  phase: 'start' | 'update' | 'reconcileSessionBoundary',
   state: unknown,
 ): unknown {
   if (state === undefined) {

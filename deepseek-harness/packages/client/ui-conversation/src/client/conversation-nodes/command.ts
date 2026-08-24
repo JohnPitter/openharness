@@ -203,6 +203,15 @@ export const commandDefinition: ConversationNodeDefinition<CommandState> = {
     }
     return updateCompactionState(context.state, match)
   },
+  reconcileSessionBoundary: context => context.state.command.outcome === null
+    ? {
+      ...context.state,
+      command: {
+        ...context.state.command,
+        outcome: { kind: 'error', text: 'Command was interrupted before completion.' },
+      },
+    }
+    : context.state,
   buildViewNode: (context) => {
     const state = context.state ?? fallbackState(context)
     if (state === undefined) return null

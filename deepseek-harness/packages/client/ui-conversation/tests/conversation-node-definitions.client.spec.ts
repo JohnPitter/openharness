@@ -758,6 +758,35 @@ describe('built-in conversation node Definitions', () => {
     expect(snapshot(compactions).nodes.values().filter(candidate => candidate.kind === 'compaction')).toHaveLength(1)
   })
 
+  it('reconciles orphan commands only at a durable boundary and preserves a later done', () => {
+    const value = assembler([
+      at(1, 'command/run', { commandId: 'orphan', name: 'compact', source: { kind: 'user' } }),
+    ])
+    expect(((node(snapshot(value), 'manual-compaction')?.data as { command: { outcome: unknown } }).command.outcome)).toBeNull()
+
+    value.append(at(2, 'session/end-seed', {}))
+    value.flush()
+    expect(node(snapshot(value), 'manual-compaction')?.data).toMatchObject({
+      command: { commandId: 'orphan', outcome: { kind: 'error', text: 'Command was interrupted before completion.' } },
+    })
+
+    value.append(at(3, 'command/done', { commandId: 'orphan', kind: 'success', text: 'done' }))
+    value.flush()
+    expect(node(snapshot(value), 'manual-compaction')?.data).toMatchObject({
+      command: { commandId: 'orphan', outcome: { kind: 'success', text: 'done' } },
+    })
+  })
+
+  it('does not infer a boundary when the loaded window has older history', () => {
+    const value = assembler([
+      at(10, 'command/run', { commandId: 'live', name: 'compact', source: { kind: 'user' } }),
+    ], true)
+    expect(((node(snapshot(value), 'manual-compaction')?.data as { command: { outcome: unknown } }).command.outcome)).toBeNull()
+    value.prepend([at(5, 'session/end-seed', {})], true)
+    value.flush()
+    expect(((node(snapshot(value), 'manual-compaction')?.data as { command: { outcome: unknown } }).command.outcome)).toBeNull()
+  })
+
   it('fills a landed compaction marker when an older page supplies its summary', () => {
     const value = assembler([
       at(13, 'user/message', {

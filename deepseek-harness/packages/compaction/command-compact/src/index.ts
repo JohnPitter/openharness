@@ -11,7 +11,7 @@ export const name = 'command-compact'
 export const inject = ['commands', 'compaction']
 
 const USAGE = 'Usage: /compact (no arguments)'
-const ALLOWLISTED_CODES = new Set(['CONTEXT_WINDOW_EXCEEDED', 'MAX_TOKENS', 'NO_CONTEXT_CAPACITY', 'EMPTY_SUMMARY'])
+const ALLOWLISTED_CODES = new Set(['COMPACTION_TIMEOUT', 'CONTEXT_WINDOW_EXCEEDED', 'MAX_TOKENS', 'NO_CONTEXT_CAPACITY', 'EMPTY_SUMMARY'])
 
 /** Expose only stable, non-sensitive provider classifications. */
 function failureCode(error: unknown): string | undefined {

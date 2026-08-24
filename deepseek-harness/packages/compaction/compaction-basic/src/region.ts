@@ -16,7 +16,7 @@ import {
 } from '@deepseek-ai/dsh-compaction'
 import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
-import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage, errorChain, isContextWindowExceededError } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage, errorChain, isContextWindowExceededError, LlmError } from '@deepseek-ai/dsh-llm'
 import type { Message, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { TokenMeasurement, TokenMeter } from '@deepseek-ai/dsh-token-meter'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
@@ -33,6 +33,10 @@ interface RegionDependencies {
 export const SUMMARIZER_CONTEXT_WINDOW_FALLBACK = 128_000
 /** Explicit reserve for the summarizer system and instruction envelope. */
 export const SUMMARIZER_ENVELOPE_RESERVE = 16_384
+/** Stable failure code for a compaction transaction that exceeds its overall deadline. */
+export const COMPACTION_TIMEOUT_CODE = 'COMPACTION_TIMEOUT'
+/** Five minutes covers the existing adapter idle watchdog without allowing keepalives to extend a transaction forever. */
+export const COMPACTION_OPERATION_TIMEOUT_MS = 5 * 60 * 1_000
 
 /** Resolve a fail-closed summarizer span budget from the durable request context. */
 export function loggedSummarizerSpanBudget(session: Session, maxTokens: number): number {
@@ -261,6 +265,7 @@ export async function compactSurfaceRegion(
     turn: owner,
   }
   const startEvent = session.append('compaction/start', lifecycle)
+  const deadline = createCompactionDeadline(signal)
   const assertStable: StabilityCheck = options.stability === 'whole-surface'
     ? assertWholeSurfaceUnchanged
     : assertSelectedSpanStable
@@ -275,15 +280,15 @@ export async function compactSurfaceRegion(
     let prepared = prepareCompaction(dependencies, session, selection)
     for (let attempt = 0; ; attempt += 1) {
       try {
-        const summarized = await summarizeCompaction(
+        const summarized = await deadline.run(summarizeCompaction(
           dependencies,
           prepared,
           agent,
           compactionId,
           options.sourceCommandId,
-          signal,
-        )
-        if (options.owner === null) signal?.throwIfAborted()
+          deadline.signal,
+        ))
+        if (options.owner === null) deadline.signal.throwIfAborted()
         assertStable(dependencies, session, summarized)
         stage = 'commit'
         const pending = commitCompactionBody(session, startEvent, summarized)
@@ -294,7 +299,7 @@ export async function compactSurfaceRegion(
         break
       } catch (error: unknown) {
         if (errorCode(error) !== CONTEXT_WINDOW_EXCEEDED_CODE || attempt >= 2) throw error
-        if (options.owner === null) signal?.throwIfAborted()
+        if (options.owner === null && deadline.signal.reason !== deadline.timeoutError) deadline.signal.throwIfAborted()
         // Validate the original snapshot before selecting a smaller paired span.
         assertStable(dependencies, session, prepared)
         const budget = options.maxSpanTokens === undefined
@@ -331,6 +336,7 @@ export async function compactSurfaceRegion(
     }
   }
 
+  deadline.dispose()
   if (options.owner === null) signal?.throwIfAborted()
   if (failure !== undefined) {
     if (options.owner === null) throwManualFailure(failure)
@@ -346,6 +352,65 @@ export async function compactSurfaceRegion(
   /* v8 ignore next -- every path without a result records and throws a failure above. */
   if (result === undefined) throw new Error('compaction committed without a result')
   return result
+}
+
+/** Read a stable provider code through a local cause chain. */
+interface CompactionDeadline {
+  readonly signal: AbortSignal
+  readonly timeoutError: LlmError
+  run<T>(operation: Promise<T>): Promise<T>
+  dispose(): void
+}
+
+function createCompactionDeadline(callerSignal: AbortSignal | undefined): CompactionDeadline {
+  const controller = new AbortController()
+  const timeoutError = new LlmError(
+    'Compaction exceeded its overall deadline.',
+    COMPACTION_TIMEOUT_CODE,
+  )
+  let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+    controller.abort(timeoutError)
+  }, COMPACTION_OPERATION_TIMEOUT_MS)
+  const abortCaller = (): void => { controller.abort(callerSignal?.reason) }
+  if (callerSignal?.aborted) abortCaller()
+  else callerSignal?.addEventListener('abort', abortCaller, { once: true })
+  const timeout = new Promise<never>((_resolve, reject) => {
+    const rejectTimeout = (): void => {
+      if (controller.signal.reason === timeoutError) reject(timeoutError)
+    }
+    if (controller.signal.aborted) rejectTimeout()
+    else controller.signal.addEventListener('abort', rejectTimeout, { once: true })
+  })
+  let callerTimer: ReturnType<typeof setTimeout> | undefined
+  const callerAbort = new Promise<never>((_resolve, reject) => {
+    const rejectCaller = (): void => {
+      if (controller.signal.reason === timeoutError) return
+      // Let a provider's synchronous cancellation failure become the durable
+      // end reason; a provider that ignores the signal still gets a bound.
+      callerTimer = setTimeout(() => { reject(controller.signal.reason as Error) }, 0)
+    }
+    if (controller.signal.aborted) rejectCaller()
+    else controller.signal.addEventListener('abort', rejectCaller, { once: true })
+  })
+  return {
+    signal: controller.signal,
+    timeoutError,
+    run<T>(operation: Promise<T>): Promise<T> {
+      void operation.catch(() => undefined)
+      return Promise.race([operation, timeout, callerAbort])
+    },
+    dispose(): void {
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        timer = undefined
+      }
+      if (callerTimer !== undefined) {
+        clearTimeout(callerTimer)
+        callerTimer = undefined
+      }
+      callerSignal?.removeEventListener('abort', abortCaller)
+    },
+  }
 }
 
 /** Read a stable provider code through a local cause chain. */

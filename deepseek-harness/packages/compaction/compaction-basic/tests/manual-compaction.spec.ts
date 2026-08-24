@@ -9,13 +9,16 @@ import * as AgentInvariant from '@deepseek-ai/dsh-agent/invariant'
 import * as AgentLoopInvariant from '@deepseek-ai/dsh-agent-loop/invariant'
 import * as CompactionInvariant from '@deepseek-ai/dsh-compaction/invariant'
 import * as CompactionBasicInvariant from '@deepseek-ai/dsh-compaction-basic/invariant'
-import { BasicCompactionEngine } from '@deepseek-ai/dsh-compaction-basic'
+import { BasicCompactionEngine, COMPACTION_OPERATION_TIMEOUT_MS, COMPACTION_TIMEOUT_CODE } from '@deepseek-ai/dsh-compaction-basic'
+import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
 import { CompactionId, isCompactCheckpointSource, ManualCompactionError } from '@deepseek-ai/dsh-compaction'
 import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
 import {
+  CONTEXT_WINDOW_EXCEEDED_CODE,
   createAssistantMessage,
   createUserMessage,
   LlmAdapter,
+  LlmError,
 } from '@deepseek-ai/dsh-llm'
 import type {
   ContentBlock,
@@ -43,6 +46,9 @@ class GatedCompactionEngine extends BasicCompactionEngine {
   rawOutput: ContentBlock[] | undefined
   usage: TokenUsage | undefined
   error: unknown
+  summaryErrors: unknown[] = []
+  summaryDelays: number[] = []
+  gateFromCall = 1
   gate: Promise<undefined> | undefined
   duringSummary: (() => void) | undefined
   calls: SummarizationInput[] = []
@@ -54,7 +60,10 @@ class GatedCompactionEngine extends BasicCompactionEngine {
   ): Promise<SummaryResult> {
     this.calls.push(input)
     this.duringSummary?.()
-    if (this.gate !== undefined) await this.gate
+    const delay = this.summaryDelays.shift()
+    if (delay !== undefined) await new Promise<void>((resolve) => { setTimeout(resolve, delay) })
+    if (this.gate !== undefined && this.calls.length >= this.gateFromCall) await this.gate
+    if (this.summaryErrors.length > 0) throw this.summaryErrors.shift()
     if (this.error !== undefined) throw this.error
     return {
       summary: this.summary,
@@ -157,7 +166,7 @@ async function rejection(operation: Promise<unknown> | (() => Promise<unknown>))
 }
 
 /** The Error a classified failure wraps. */
-function causeOf(error: ManualCompactionError): Error {
+function causeOf(error: ManualCompactionError): Error & { readonly code?: string } {
   const { cause } = error
   if (!(cause instanceof Error)) throw new Error(`expected an Error cause, got ${String(cause)}`)
   return cause
@@ -217,7 +226,7 @@ function fakeAgent(
 }
 
 /** Service over a store-detached session for failure classification. */
-function detachedService(): { ctx: Context; compact: GatedCompactionEngine; flushes: () => number } {
+function detachedService(config: BasicCompactionConfig = {}): { ctx: Context; compact: GatedCompactionEngine; flushes: () => number } {
   const ctx = new Context()
   void new LlmRuntime(ctx)
   void new SessionStore(ctx)
@@ -228,7 +237,7 @@ function detachedService(): { ctx: Context; compact: GatedCompactionEngine; flus
     flushes += 1
     return Promise.resolve(false)
   })
-  return { ctx, compact: new GatedCompactionEngine(ctx, { auto: false }), flushes: () => flushes }
+  return { ctx, compact: new GatedCompactionEngine(ctx, { auto: false, ...config }), flushes: () => flushes }
 }
 
 function compactEvents(session: Session): Array<Session['events'][number]> {
@@ -807,6 +816,64 @@ describe('compactNow transaction and failure classification', () => {
     flushGate.resolve(false)
     await expect(running).rejects.toBe(reason)
     expect(released).toBe(1)
+  })
+
+  it('uses one overall deadline across context-overflow retries instead of resetting per attempt', async () => {
+    vi.useFakeTimers()
+    try {
+      const { compact } = detachedService({ maxTokens: 1 })
+      const session = closedConversation(2)
+      const agent = fakeAgent(session, () => () => undefined)
+      const overflow = () => new LlmError('context overflow', CONTEXT_WINDOW_EXCEEDED_CODE)
+      compact.summaryDelays = [2 * 60 * 1_000, 2 * 60 * 1_000]
+      compact.summaryErrors = [overflow(), overflow()]
+      compact.gateFromCall = 3
+      compact.gate = new Promise<undefined>(() => {})
+
+      const running = compact.compactNow(agent, SIGNAL)
+      void running.catch(() => undefined)
+      await vi.advanceTimersByTimeAsync(4 * 60 * 1_000)
+      expect(compact.calls).toHaveLength(3)
+      await vi.advanceTimersByTimeAsync(60 * 1_000)
+      const error = await rejection(running)
+
+      expect(error.code).toBe('summary')
+      expect(causeOf(error).code).toBe(COMPACTION_TIMEOUT_CODE)
+      expect(compactEvents(session).map(event => event.type)).toEqual(['compaction/start', 'compaction/end'])
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('bounds a provider that ignores AbortSignal, releases maintenance, and leaves no unhandled rejection', async () => {
+    vi.useFakeTimers()
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => { unhandled.push(reason) }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const { compact } = detachedService()
+      const session = closedConversation(2)
+      let released = 0
+      const agent = fakeAgent(session, () => () => { released += 1 })
+      compact.gate = new Promise<undefined>(() => {})
+
+      const running = compact.compactNow(agent, SIGNAL)
+      void running.catch(() => undefined)
+      await vi.advanceTimersByTimeAsync(COMPACTION_OPERATION_TIMEOUT_MS)
+      const error = await rejection(running)
+
+      expect(error.code).toBe('summary')
+      expect(causeOf(error).code).toBe(COMPACTION_TIMEOUT_CODE)
+      expect(compactEvents(session).map(event => event.type)).toEqual(['compaction/start', 'compaction/end'])
+      expect(released).toBe(1)
+      expect(vi.getTimerCount()).toBe(0)
+      await Promise.resolve()
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+      vi.useRealTimers()
+    }
   })
 
   it('preserves raw output and usage in the manual summary event', async () => {
