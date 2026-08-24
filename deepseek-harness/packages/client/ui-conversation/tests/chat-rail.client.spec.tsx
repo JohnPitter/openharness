@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// ChatRail waypoints: ticks in a viewport-height minimap. A click jumps and
-// pins a floating preview; titles stay out of the track until then.
+// ChatRail waypoints: ticks pack from the top on an 8px rhythm. A click
+// jumps and pins a floating preview; titles stay out of the track until then.
 
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -36,9 +36,20 @@ function milestoneNode(key: string, title: string, body = 'the fact'): ChatNode 
 }
 
 describe('ChatRail', () => {
-  it('renders nothing when the session has no waypoints', () => {
-    const view = render(<ChatRail order={['missing']} nodes={store([])} t={t} onJump={() => {}} />)
-    expect(view.queryByRole('navigation')).toBeNull()
+  it('places a single waypoint at the top pad', () => {
+    const view = render(
+      <ChatRail
+        order={['m1']}
+        nodes={store([milestoneNode('m1', 'Only')])}
+        t={t}
+        onJump={() => {}}
+      />,
+    )
+    const tick = view.getByRole('button') as HTMLElement
+    expect(tick.style.top).toBe('6px')
+    fireEvent.click(tick)
+    const preview = view.getByText('Only').parentElement as HTMLElement
+    expect(preview.style.top).toBe('10px')
   })
 
   it('keeps titles out of the minimap until a waypoint is pinned', () => {
@@ -62,6 +73,9 @@ describe('ChatRail', () => {
     )
     const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
     expect(nav.getAttribute('data-pinned')).toBeNull()
+    expect(nav.getAttribute('data-packed')).toBe('')
+    const ticks = view.getAllByRole('button')
+    expect(ticks.map(tick => (tick as HTMLElement).style.top)).toEqual(['6px', '14px', '22px'])
     expect(view.queryByText('do the thing')).toBeNull()
     expect(view.queryByText('Found the leak')).toBeNull()
     expect(nav.querySelector('[data-virtual-count]')?.getAttribute('data-virtual-count')).toBe('3')
@@ -115,7 +129,7 @@ describe('ChatRail', () => {
     expect(view.getByText('Found the leak')).toBeTruthy()
   })
 
-  it('packs many waypoints into one viewport-height track without listing titles', () => {
+  it('packs many waypoints from the top without listing titles', () => {
     const entries = Array.from({ length: 40 }, (_, index) => milestoneNode(`m${index}`, `Mile ${index}`))
     const view = render(
       <ChatRail
@@ -126,9 +140,30 @@ describe('ChatRail', () => {
       />,
     )
     const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
+    expect(nav.getAttribute('data-packed')).toBe('')
     expect(nav.querySelector('[data-virtual-count]')?.getAttribute('data-virtual-count')).toBe('40')
     expect(view.getAllByRole('button')).toHaveLength(40)
+    const last = view.getAllByRole('button').at(-1) as HTMLElement
+    expect(last.style.top).toBe('318px')
     expect(view.queryByText('Mile 0')).toBeNull()
     expect(view.queryByText('Mile 39')).toBeNull()
+  })
+
+  it('compresses past 80 waypoints into the column height', () => {
+    const entries = Array.from({ length: 81 }, (_, index) => milestoneNode(`m${index}`, `Mile ${index}`))
+    const view = render(
+      <ChatRail
+        order={entries.map(entry => entry.key)}
+        nodes={store(entries)}
+        t={t}
+        onJump={() => {}}
+      />,
+    )
+    const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
+    expect(nav.getAttribute('data-packed')).toBeNull()
+    const ticks = view.getAllByRole('button')
+    expect(ticks).toHaveLength(81)
+    expect((ticks[0] as HTMLElement).style.top).toBe('0%')
+    expect((ticks.at(-1) as HTMLElement).style.top).toBe('100%')
   })
 })

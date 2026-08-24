@@ -10,16 +10,20 @@ The in-app mark was a currentColor open ring with two node dots, and `BrandWordm
 
 ## Decision
 
-**The product mark is a cream-headed mascot sitting in the blue open-ring harness with mint node clasps.** `FishLogo` paints that character in fixed brand inks (`#4F8CFF`, `#7DDB6A`, `#F4EFE6`) inside a 24×24 box with no tile fill. `BrandWordmark` is that same mascot; `includeMark={false}` is an empty 24 box so `sidebar.brand.name` can sit beside the slotted mark. `apps/web/public/favicon.svg` and the desktop `logo.svg` draw the same glyph on a transparent canvas; tab contrast on light chrome comes from the blue ring and mint nodes, not a charcoal plate.
+**The product mark is the 3D cream-headed mascot sitting in the blue open-ring harness with mint node clasps, on a transparent canvas.** `FishLogo` scales that raster through an SVG `<image href="/mascot.png">` in a 24×24 box with no tile fill. `BrandWordmark` is that same mascot; `includeMark={false}` is an empty 24 box so `sidebar.brand.name` can sit beside the slotted mark. `apps/web/public/favicon.svg` wraps `mascot.png`; the desktop titlebar uses `logo.png`. Tab contrast on light chrome comes from the blue ring and mint nodes, not a charcoal plate.
 
 ## Alternatives considered
 
 **Keep currentColor and invert the favicon in dark scheme.** Rejected: the mascot's identity is the cream/blue/mint palette; a one-ink silhouette loses the character, and inverting a colored glyph would wash it out.
 
-**Put the raster 3D tile in the sidebar via `<img>`.** Rejected: the rail and hero marks are 24–34px SVG that must scale with `size` and ship inside the client bundle; the 3D PNG stays the desktop tile and app icon.
+**Paint the mascot as a 24px SVG path in brand inks.** Rejected: the product mark is the 3D clay render; a flat path is a different character.
+
+**Keep the charcoal rounded-square plate behind the mascot.** Rejected: the tile reads as a second mark in the titlebar and sidebar.
+
+**Inline a data-URI PNG inside the client bundle.** Rejected: `/mascot.png` is a public asset the web host already serves; embedding tens of kilobytes in every `FishLogo` import bloats the client.
 
 **Keep the `OH` SVG letters next to the mascot.** Rejected: the official name is already slotted HTML (`OpenHarness`); a second OH glyph duplicated the initials the mascot already replaced.
 
 ## Consequences
 
-Sidebar, hero, favicon, and the desktop window mark share one mascot geometry on a transparent canvas. Light-theme contrast of the cream head relies on the blue ring and mint nodes rather than a currentColor fill or a charcoal tile.
+Sidebar, hero, favicon, and the desktop window mark share the same transparent 3D raster. Light-theme contrast of the cream head relies on the blue ring and mint nodes rather than a currentColor fill or a charcoal tile.

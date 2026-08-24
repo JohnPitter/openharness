@@ -32,19 +32,41 @@ function clipBody(text: string): string {
   return line.length > 280 ? `${line.slice(0, 279)}…` : line
 }
 
-function tickOffset(index: number, count: number): string {
-  if (count <= 1) return '0%'
+/** Compact Codex-style rhythm: 8px per tick from the top, not stretched. */
+const TICK_STEP_PX = 8
+const TICK_PAD_PX = 6
+/** Beyond this count the stack would overflow a typical column; compress. */
+const PACK_LIMIT = 80
+
+function isPacked(count: number): boolean {
+  return count <= PACK_LIMIT
+}
+
+function tickTop(index: number, count: number): string {
+  if (count <= 1) return `${TICK_PAD_PX}px`
+  if (isPacked(count)) return `${TICK_PAD_PX + index * TICK_STEP_PX}px`
   return `${(index / (count - 1)) * 100}%`
 }
 
+function tickCenter(index: number, count: number): string {
+  if (count <= 1) return `${TICK_PAD_PX + TICK_STEP_PX / 2}px`
+  if (isPacked(count)) return `${TICK_PAD_PX + index * TICK_STEP_PX + TICK_STEP_PX / 2}px`
+  return `${(index / (count - 1)) * 100}%`
+}
+
+function packedTrackHeight(count: number): number {
+  return TICK_PAD_PX * 2 + Math.max(count, 1) * TICK_STEP_PX
+}
+
 /**
- * Viewport-height jump index: a virtual minimap of ticks, not a growing list.
- * Titles live in a floating preview for the hovered or pinned waypoint; a
- * click jumps and pins that preview, and Escape or a pointer down outside
- * the rail returns to ticks. ChatView mounts this in a full-flow overlay so
- * it can stick in the conversation scrollport. Narrow columns overlay the
- * preview on the transcript from the left padding — the track stays sticky
- * and never switches to absolute positioning.
+ * Jump index: ticks pack from the top on an 8px rhythm so a short session
+ * never stretches markers across the conversation column. Titles live in a
+ * floating preview for the hovered or pinned waypoint; a click jumps and
+ * pins that preview, and Escape or a pointer down outside the rail returns
+ * to ticks. ChatView mounts this in a full-flow overlay so it can stick in
+ * the conversation scrollport. Narrow columns overlay the preview on the
+ * transcript from the left padding — the track stays sticky and never
+ * switches to absolute positioning.
  * @param props - ordered Chat keys, node map, locale, and jump handler.
  * @returns the rail, or null when the session has no waypoints.
  */
@@ -89,6 +111,7 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
   }, [order, nodes])
 
   if (waypoints.length === 0) return null
+  const packed = isPacked(waypoints.length)
   const preview = previewKey === null
     ? undefined
     : waypoints.find(item => item.key === previewKey)
@@ -101,16 +124,21 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
       ref={navRef}
       className={css.rail}
       data-pinned={pinnedKey !== null ? '' : undefined}
+      data-packed={packed ? '' : undefined}
       aria-label={t('rail.aria')}
       onPointerLeave={() => { setHoveredKey(null) }}
     >
-      <div className={css.railTrack} data-virtual-count={waypoints.length}>
+      <div
+        className={css.railTrack}
+        data-virtual-count={waypoints.length}
+        style={packed ? { height: packedTrackHeight(waypoints.length) } : undefined}
+      >
         {waypoints.map((item, index) => (
           <button
             key={item.key}
             type="button"
             className={css.railTick}
-            style={{ top: tickOffset(index, waypoints.length) }}
+            style={{ top: tickTop(index, waypoints.length) }}
             data-kind={item.kind}
             data-active={previewKey === item.key ? '' : undefined}
             aria-label={item.kind === 'milestone'
@@ -132,7 +160,7 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
         <div
           id={previewDomId}
           className={css.railPreview}
-          style={{ top: tickOffset(Math.max(0, previewIndex), waypoints.length) }}
+          style={{ top: tickCenter(Math.max(0, previewIndex), waypoints.length) }}
           data-kind={preview.kind}
         >
           <div className={css.railPreviewTitle}>{preview.title}</div>

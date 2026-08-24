@@ -26,7 +26,7 @@ internal/
 frontend/dist/          shell estático (sem build step): titlebar própria
                         (logo, --wails-draggable, min/max/close via runtime
                         Wails) + iframe full-bleed para a URL do harness
-build/appicon.png       mascote transparente (cabeça no anel azul + nós verdes); windows/icon.ico idem
+build/appicon.png       mascote 3D transparente (cabeça no anel azul + nós verdes, sem placa); windows/icon.ico idem
 ```
 
 ## Pipeline do runtime embutido
@@ -74,10 +74,10 @@ pnpm --filter @deepseek-ai/dsh-web-frontend run build
 
 Arquivos da marca:
 
-- `apps/web/index.html` (title), `apps/web/public/favicon.svg` (mascote
-  transparente), `apps/web/public/manifest.webmanifest`
+- `apps/web/index.html` (title), `apps/web/public/mascot.png` (raster 3D sem
+  placa), `apps/web/public/favicon.svg` (wrapper), `apps/web/public/manifest.webmanifest`
 - `packages/client/ui-primitives/src/BrandWordmark.tsx` e `FishLogo.tsx`
-  (mascote; `includeMark=false` deixa o box vazio para o nome slotted)
+  (`<image href="/mascot.png">`; `includeMark=false` deixa o box vazio para o nome slotted)
 - `packages/client/ui-brand-official/src/client/` (`OfficialBrandMark` /
   `OfficialBrandName` nos slots sidebar/hero)
 - `packages/client/ui-conversation/src/client/locales.ts` (`hero.headline`)
@@ -179,8 +179,9 @@ go vet ./...  # lint
   do pai: a delegação falha e o composer bloqueia até haver trabalhador. Trocar
   o preset recompõe a sessão e compacta antes do próximo prompt comum.
 - **Marcos:** o modelo que fecha o trabalho grava `milestone_write` (título +
-  corpo). O transcript não é índice: o trilho à esquerda é um minimapa de
-  ticks que salta para o chip; compactação preserva os títulos. Clique ou
+  corpo). O transcript não é índice: o trilho à esquerda empilha ticks do topo
+  em ritmo de 8px (só passa de 80 waypoints comprime na altura da coluna) e
+  salta para o chip; compactação preserva os títulos. Clique ou
   hover abre o preview daquele marco; clicar fora (ou Escape) volta aos ticks,
   sem botão X. No Workflow o trabalhador escreve; o planejador não vê a tool.
   Em coluna estreita o preview cobre o texto a partir da margem esquerda;

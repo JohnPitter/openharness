@@ -215,59 +215,89 @@
   pointer-events: none;
 }
 
-/* Viewport-height minimap. Ticks pack into this box so a long session never
-   grows a native list scrollbar; titles live in `.railPreview`. The right
-   edge stays 28px left of the message column on a wide gutter. */
+/* Compact tick stack from the top (8px rhythm). A session past PACK_LIMIT
+   drops `[data-packed]` and the track fills the available column height.
+   Titles live in `.railPreview`. The right edge stays 28px left of the
+   message column on a wide gutter. */
 .rail {
   position: sticky;
   top: 16px;
   z-index: 2;
   display: block;
   width: 16px;
-  height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
+  height: auto;
+  max-height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
   margin-left: max(12px, calc(50% - min(var(--dsh-chat-content-width), 100%) / 2 - 28px));
   transform: translateX(-100%);
   overflow: visible;
   pointer-events: none;
 }
 
+.rail:not([data-packed]) {
+  height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
+}
+
 .railTrack {
   position: relative;
-  height: 100%;
   width: 16px;
+  height: 100%;
+}
+
+.railTrack::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--dsw-alias-border-l2);
+  pointer-events: none;
 }
 
 .railTick {
   pointer-events: auto;
   position: absolute;
-  left: 4px;
-  width: 10px;
-  height: 2px;
+  left: 0;
+  width: 16px;
+  height: 8px;
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 1px;
-  background: var(--dsw-alias-label-tertiary);
+  background: transparent;
   cursor: pointer;
-  transform: translateY(-50%);
 }
 
-.railTick[data-kind='milestone'] {
+.railTick::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.railTick[data-kind='milestone']::after {
   left: 2px;
-  width: 14px;
+  right: 2px;
   height: 3px;
+  top: 2.5px;
   background: var(--dsw-alias-state-business-primary);
 }
 
-.railTick[data-active] {
-  left: 6px;
-  width: 2px;
-  height: 12px;
+.railTick[data-active]::after {
+  left: 3px;
+  right: 3px;
   background: var(--dsw-alias-label-primary);
 }
 
-.railTick[data-kind='milestone'][data-active] {
+.railTick[data-kind='milestone'][data-active]::after {
   background: var(--dsw-alias-state-business-primary);
+}
+
+.rail:not([data-packed]) .railTick {
+  transform: translateY(-50%);
 }
 
 .railPreview {
@@ -315,7 +345,7 @@
 }
 
 @media (max-width: 480px) {
-  .rail {
+  .rail:not([data-packed]) {
     height: calc(100dvh - var(--dsh-composer-height, 152px) - 72px);
   }
 

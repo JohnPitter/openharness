@@ -3,7 +3,7 @@
 **O agente de código no seu PC. Um `.exe`. Os modelos que você já paga.**
 
 <p align="center">
-  <img src="frontend/dist/logo.svg" width="112" alt="OpenHarness" />
+  <img src="frontend/dist/logo.png" width="112" alt="OpenHarness" />
 </p>
 
 OpenHarness é o [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) em app Windows: sidecar Node local, UI oficial, sessões e chaves no seu disco. Sem nuvem no meio. Sem agente aninhado (Cursor Cloud / SDK). O loop fala direto com o provedor.
@@ -27,7 +27,7 @@ O app consulta as GitHub Releases públicas. Quando há uma tag mais nova, a tit
 | **No seu PC** | Sidecar local. Sessões e chaves em `%LOCALAPPDATA%\openharness\dsh-home`. |
 | **Os planos que você já tem** | Kimi for Code, Claude Code, Codex, GLM Coding Plan, OpenCode Zen, DeepSeek. Sign in no card ou cola o token. |
 | **Workflow** | O planejador só pensa e delega. O trabalhador pesquisa e edita, no modelo do chip da direita; trocar o preset compacta antes do próximo prompt. |
-| **Marcos** | O modelo que fecha o trabalho grava um marco; o trilho à esquerda é um minimapa de ticks, sem barra de lista. Clique abre o preview; clique fora volta ao padrão. |
+| **Marcos** | O modelo que fecha o trabalho grava um marco; o trilho à esquerda empilha ticks do topo, sem esticar na coluna. Clique abre o preview; clique fora volta ao padrão. |
 | **Editar mensagem** | Mensagens de usuário enviadas podem ser revisadas em uma nova sessão sem alterar a original. |
 | **Busca na web** | DuckDuckGo por padrão, sem chave extra. A busca nativa DeepSeek fica desligada (ela cobra saldo DeepSeek mesmo se o chat for outro). |
 | **Remote** | Opt-in na sidebar. Túnel HTTPS + QR; o celular usa o harness completo enquanto o PC está ligado. |
@@ -65,7 +65,7 @@ Opt-in. O exe publica um HTTPS público a partir de `127.0.0.1` (túnel Cloudfla
 ```powershell
 wails generate module
 Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
-wails build -ldflags "-X openharness/internal/update.Version=0.1.21"
+wails build -ldflags "-X openharness/internal/update.Version=0.1.22"
 go test ./...
 ```
 
@@ -89,9 +89,9 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | [Release](.github/workflows/release.yml) | tag `v*.*.*` | cria a GitHub Release |
 
 ```powershell
-git tag v0.1.21
-git push origin v0.1.21
-gh release upload v0.1.21 build/bin/openharness.exe
+git tag v0.1.22
+git push origin v0.1.22
+gh release upload v0.1.22 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.
