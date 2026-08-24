@@ -25,7 +25,10 @@ import (
 )
 
 // stampFile marks a complete extraction so a later launch can skip unzip.
-const stampFile = ".openharness-stamp"
+const (
+	stampFile    = ".openharness-stamp"
+	stampVersion = "v2:"
+)
 
 // sidecarJob é a cerca de processo do sidecar (job object no Windows, pgid no POSIX).
 type sidecarJob interface {
@@ -106,7 +109,7 @@ func (m *Manager) installRuntime(dir, stamp string) error {
 	if err := unzipRuntime(runtimeZip, dir); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, stampFile), []byte(stamp+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, stampFile), []byte(stampVersion+stamp+"\n"), 0o644); err != nil {
 		return err
 	}
 	if !runtimeReady(dir, stamp) {
@@ -130,11 +133,7 @@ func (m *Manager) adoptRuntime(dir, stamp string) bool {
 	if runtimeReady(dir, stamp) {
 		return true
 	}
-	if !onDiskMatchesEmbed(dir, runtimeZip, nodeExe) {
-		return false
-	}
-	_ = os.WriteFile(filepath.Join(dir, stampFile), []byte(stamp+"\n"), 0o644)
-	return runtimeReady(dir, stamp)
+	return m.installRuntime(dir, stamp) == nil
 }
 
 func (m *Manager) adoptHashedRuntime(stamp string) (string, bool) {
@@ -148,11 +147,10 @@ func (m *Manager) adoptHashedRuntime(stamp string) (string, bool) {
 		}
 		cand := filepath.Join(m.Root, e.Name())
 		_ = flattenNestedRuntime(cand)
-		if !onDiskMatchesEmbed(cand, runtimeZip, nodeExe) {
-			continue
-		}
-		_ = os.WriteFile(filepath.Join(cand, stampFile), []byte(stamp+"\n"), 0o644)
 		if runtimeReady(cand, stamp) {
+			return cand, true
+		}
+		if err := m.installRuntime(cand, stamp); err == nil {
 			return cand, true
 		}
 	}
@@ -164,7 +162,7 @@ func runtimeReady(dir, stamp string) bool {
 	if err != nil {
 		return false
 	}
-	if strings.TrimSpace(string(got)) != stamp {
+	if strings.TrimSpace(string(got)) != stampVersion+stamp {
 		return false
 	}
 	if _, err := os.Stat(filepath.Join(dir, "node.exe")); err != nil {
@@ -174,26 +172,6 @@ func runtimeReady(dir, stamp string) bool {
 		return false
 	}
 	return true
-}
-
-func onDiskMatchesEmbed(dir string, zipBytes, node []byte) bool {
-	fi, err := os.Stat(filepath.Join(dir, "node.exe"))
-	if err != nil || fi.Size() != int64(len(node)) {
-		return false
-	}
-	bin := filepath.Join(dir, "dsh-runtime", "lib", "bin.js")
-	if _, err := os.Stat(bin); err != nil {
-		return false
-	}
-	if _, err := os.Stat(filepath.Join(dir, "dsh-runtime", "package.json")); err != nil {
-		return false
-	}
-	want, ok := zipCRCSuffix(zipBytes, "lib/bin.js")
-	if !ok {
-		return false
-	}
-	got, err := fileCRC(bin)
-	return err == nil && got == want
 }
 
 func fileCRC(path string) (uint32, error) {
@@ -207,21 +185,6 @@ func fileCRC(path string) (uint32, error) {
 		return 0, err
 	}
 	return h.Sum32(), nil
-}
-
-func zipCRCSuffix(zipBytes []byte, suffix string) (uint32, bool) {
-	r, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
-	if err != nil {
-		return 0, false
-	}
-	suffix = strings.ReplaceAll(suffix, "\\", "/")
-	for _, f := range r.File {
-		name := strings.ReplaceAll(f.Name, "\\", "/")
-		if name == suffix || strings.HasSuffix(name, "/"+suffix) {
-			return f.CRC32, true
-		}
-	}
-	return 0, false
 }
 
 // flattenNestedRuntime corrige zip extraído para dest/dsh-runtime quando o

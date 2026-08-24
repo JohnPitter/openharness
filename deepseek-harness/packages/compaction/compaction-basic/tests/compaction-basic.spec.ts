@@ -64,7 +64,18 @@ class ContextAdapter extends LlmAdapter {
     })
   }
 
-  override async * stream(): AsyncIterable<StreamChunk> {
+  override async * stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+}
+
+class SummaryAdapter extends ContextAdapter {
+  readonly requests: GenerateOptions[] = []
+
+  override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    this.requests.push(options)
+    yield { type: 'block-start', index: 0, blockType: 'text' }
+    yield { type: 'block-end', index: 0, block: { type: 'text', text: 'REAL SESSION SUMMARY' } }
     yield { type: 'finish', reason: { kind: 'stop' } }
   }
 }
@@ -823,6 +834,23 @@ describe('pressure measurement and retention', () => {
     })
     await expect(compactIfNeeded(compact, overflowSession, 'context-overflow')).resolves.toBeNull()
     expect(streamCalls).toBe(0)
+  })
+
+  it('compacts the real 272K session using the production summarizer cap', async () => {
+    const ctx = new Context()
+    void new LlmRuntime(ctx)
+    void new TokenMeter(ctx)
+    const adapter = new SummaryAdapter(272_000)
+    ctx.llm.registerAdapter([MODEL], adapter)
+    const session = conversation(3)
+    session.append('request/context', { provider: MODEL, model: MODEL, contextWindow: 272_000 })
+    const compact = new BasicCompactionEngine(ctx, { auto: false })
+
+    const result = await compactIfNeeded(compact, session, 'context-overflow')
+
+    expect(result?.summary).toEqual([{ type: 'text', text: 'REAL SESSION SUMMARY' }])
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.maxTokens).toBe(8_192)
   })
 
   it('shrinks a head-anchored range until the span is within maxSpanTokens', () => {

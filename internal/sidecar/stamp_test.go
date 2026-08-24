@@ -71,7 +71,7 @@ func TestRuntimeReady(t *testing.T) {
 	if runtimeReady(dir, "abc") {
 		t.Fatal("empty dir reported ready")
 	}
-	if err := os.WriteFile(filepath.Join(dir, stampFile), []byte("abc\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, stampFile), []byte(stampVersion+"abc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if runtimeReady(dir, "abc") {
@@ -206,6 +206,115 @@ func TestUnzipRuntimeOverlaysChangedFile(t *testing.T) {
 	}
 }
 
+func TestEnsureExtractedSelfHealsLegacyStampWithStaleFiles(t *testing.T) {
+	oldNode, oldZip := nodeExe, runtimeZip
+	defer func() { nodeExe, runtimeZip = oldNode, oldZip }()
+	nodeExe = []byte("node-bytes")
+	runtimeZip = zipWith(t, map[string][]byte{
+		"dsh-runtime/lib/bin.js":   []byte("same-bin"),
+		"dsh-runtime/package.json": []byte(`{"name":"dsh"}`),
+		"dsh-runtime/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": []byte("new-index"),
+	}, time.Unix(2, 0))
+	stamp, err := contentStamp(nodeExe, runtimeZip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	m := &Manager{Root: dir}
+	if err := m.installRuntime(filepath.Join(dir, "runtime"), "old-stamp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "runtime", "dsh-runtime", "node_modules", "@deepseek-ai", "dsh-llm-pi-ai", "lib", "index.js"), []byte("stale-index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "runtime", stampFile), []byte(stamp+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gotDir, err := m.ensureExtracted()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(gotDir, "dsh-runtime", "node_modules", "@deepseek-ai", "dsh-llm-pi-ai", "lib", "index.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "new-index" {
+		t.Fatalf("stale file was not refreshed: %q", got)
+	}
+	stampGot, err := os.ReadFile(filepath.Join(gotDir, stampFile))
+	if err != nil || string(stampGot) != stampVersion+stamp+"\n" {
+		t.Fatalf("stamp = %q, err = %v", stampGot, err)
+	}
+}
+
+func TestEnsureExtractedFastPathPreservesFiles(t *testing.T) {
+	oldNode, oldZip := nodeExe, runtimeZip
+	defer func() { nodeExe, runtimeZip = oldNode, oldZip }()
+	nodeExe = []byte("node-bytes")
+	runtimeZip = zipWith(t, map[string][]byte{
+		"dsh-runtime/lib/bin.js":   []byte("bin"),
+		"dsh-runtime/package.json": []byte(`{}`),
+	}, time.Unix(1, 0))
+	stamp, err := contentStamp(nodeExe, runtimeZip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	m := &Manager{Root: dir}
+	runtimeDir := filepath.Join(dir, "runtime")
+	if err := m.installRuntime(runtimeDir, stamp); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(runtimeDir, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(sentinel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(runtimeDir, "dsh-runtime", "lib", "bin.js")
+	binBefore, err := os.Stat(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotDir, err := m.ensureExtracted()
+	if err != nil || gotDir != runtimeDir {
+		t.Fatalf("dir = %q, err = %v", gotDir, err)
+	}
+	after, err := os.Stat(sentinel)
+	if err != nil || !after.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("fast path changed sentinel: before=%v after=%v err=%v", before.ModTime(), after.ModTime(), err)
+	}
+	binAfter, err := os.Stat(bin)
+	if err != nil || !binAfter.ModTime().Equal(binBefore.ModTime()) {
+		t.Fatalf("fast path rewrote bin.js: before=%v after=%v err=%v", binBefore.ModTime(), binAfter.ModTime(), err)
+	}
+}
+
+func TestInstallRuntimeDoesNotWriteStampAfterExtractionFailure(t *testing.T) {
+	oldNode, oldZip := nodeExe, runtimeZip
+	defer func() { nodeExe, runtimeZip = oldNode, oldZip }()
+	nodeExe = []byte("node-bytes")
+	runtimeZip = []byte("not-a-zip")
+	dir := t.TempDir()
+	stampPath := filepath.Join(dir, stampFile)
+	if err := os.WriteFile(stampPath, []byte("old-stamp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{}
+	if err := m.installRuntime(dir, "new-stamp"); err == nil {
+		t.Fatal("invalid zip unexpectedly extracted")
+	}
+	got, err := os.ReadFile(stampPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "old-stamp\n" {
+		t.Fatalf("failed extraction changed stamp to %q", got)
+	}
+}
+
 func TestWriteFileIfUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "node.exe")
@@ -246,27 +355,5 @@ func TestShortStamp(t *testing.T) {
 	}
 	if got := shortStamp("abc"); got != "abc" {
 		t.Fatalf("got %q", got)
-	}
-}
-
-func TestOnDiskMatchesEmbed(t *testing.T) {
-	files := map[string][]byte{
-		"dsh-runtime/lib/bin.js":   []byte("bin-body"),
-		"dsh-runtime/package.json": []byte(`{"name":"dsh"}`),
-	}
-	z := zipWith(t, files, time.Unix(1, 0))
-	node := []byte("node-bytes")
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "node.exe"), node, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := unzipRuntime(z, dir); err != nil {
-		t.Fatal(err)
-	}
-	if !onDiskMatchesEmbed(dir, z, node) {
-		t.Fatal("complete extract should match zip")
-	}
-	if onDiskMatchesEmbed(dir, z, []byte("other-node-bytes!!")) {
-		t.Fatal("node size mismatch should not match")
 	}
 }
