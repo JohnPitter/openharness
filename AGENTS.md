@@ -98,9 +98,10 @@ e `k3` / `k3-256k` (K3). Diferenças do DeepSeek: K2.x usa `thinking: {type}`
 (off/high; K2.7 Code não desliga thinking); K3 usa `reasoning_effort`
 `low`/`high`/`max` (sempre pensa, sem Off). Sem headers `x-deepseek-harness-*`,
 `x-trace-id` como request id, e `prompt_cache_key = sessionId` (afinidade de
-cache do Kimi). Com chave configurada, o discovery busca o `GET /models` ao
-vivo do endpoint e mescla sobre o catálogo (capacidades reais enriquecem até
-ids não catalogados); sem chave ou falha, cai no catálogo estático. Editor de
+cache do Kimi). Com chave configurada, o picker consulta o `GET /models` ao
+vivo com abort de 2,5s e mescla sobre o catálogo (capacidades reais enriquecem até
+ids não catalogados); sem chave, timeout ou falha, cai no catálogo estático (e na
+última listagem ao vivo que tenha funcionado). Editor de
 settings igual ao DeepSeek (`layoutOf` em `ui-settings-models/ProviderEditor.tsx`
 mapeia `llm-kimi` → família `kimi`). Registrado em `packages/bundle/base/cordis.patch.yml` +
 `package.json` + referência em `tsconfig.host.json`. A chave se configura em

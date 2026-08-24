@@ -32,6 +32,7 @@ export {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_TOKENS,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  CATALOG_LISTING_TIMEOUT_MS,
   KimiAdapter,
 } from './adapter.ts'
 export { kimiPlanLabel, parseKimiCodeUsages } from './usages.ts'

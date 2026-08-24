@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-24-model-catalog-listing-timeout.md
+2026-08-24-model-catalog-listing-timeout.md: 13a309055bf2bf0872e63398b0cb7f1d732ecbc5
+2026-08-24-model-catalog-listing-timeout.zh.md: f4fc79bc5106dc2cd1c59bd17a4014534c41d03f

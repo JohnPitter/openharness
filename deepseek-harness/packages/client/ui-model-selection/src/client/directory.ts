@@ -63,32 +63,41 @@ export class ModelDirectory {
   /**
    * Refresh the advisory directory (both entries call this on open).
    * Failure preserves the last good groups and current selection.
+   * A thrown transport failure records `status: 'error'` so the picker does not stay on loading.
    * @returns the fresh directory value.
    */
   async load(): Promise<SessionModels> {
     this.assertAvailable()
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
-    const { result } = await this.sessions.models({ sessionId: this.sessionId })
-    if (this.disposed || generation !== this.generation) {
-      if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+    try {
+      const { result } = await this.sessions.models({ sessionId: this.sessionId })
+      if (this.disposed || generation !== this.generation) {
+        if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+        return result.value
+      }
+      if (!result.ok) {
+        this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
+        throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
+      }
+      const { current, routable, currentMetering, groups, failures } = result.value
+      this.store.update((s) => {
+        s.current = current
+        s.routable = routable
+        s.currentMetering = currentMetering
+        s.groups = groups
+        s.failures = failures
+        s.status = 'ready'
+        s.error = null
+      })
       return result.value
+    } catch (error: unknown) {
+      if (!this.disposed && generation === this.generation && this.store.getSnapshot().status === 'loading') {
+        const message = error instanceof Error ? error.message : String(error)
+        this.store.update((s) => { s.status = 'error'; s.error = message })
+      }
+      throw error
     }
-    if (!result.ok) {
-      this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
-      throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
-    }
-    const { current, routable, currentMetering, groups, failures } = result.value
-    this.store.update((s) => {
-      s.current = current
-      s.routable = routable
-      s.currentMetering = currentMetering
-      s.groups = groups
-      s.failures = failures
-      s.status = 'ready'
-      s.error = null
-    })
-    return result.value
   }
 
   /**
@@ -101,31 +110,39 @@ export class ModelDirectory {
     this.assertAvailable()
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'selecting'; s.error = null })
-    const { result } = await this.sessions.selectModel({
-      sessionId: this.sessionId,
-      provider: selection.provider,
-      model: selection.model,
-      ...selection.reasoningEffort === undefined
-        ? {}
-        : { reasoningEffort: selection.reasoningEffort },
-    })
-    if (this.disposed || generation !== this.generation) {
-      if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-      return
+    try {
+      const { result } = await this.sessions.selectModel({
+        sessionId: this.sessionId,
+        provider: selection.provider,
+        model: selection.model,
+        ...selection.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: selection.reasoningEffort },
+      })
+      if (this.disposed || generation !== this.generation) {
+        if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+        return
+      }
+      if (!result.ok) {
+        this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
+        throw new Error(`session.selectModel failed: ${result.error.code}: ${result.error.message}`)
+      }
+      // The Host validated the route before accepting it, so a selection that
+      // landed is by construction one it can serve.
+      this.store.update((s) => {
+        s.current = result.value.selected
+        s.routable = true
+        s.currentMetering = result.value.metering
+        s.status = 'ready'
+        s.error = null
+      })
+    } catch (error: unknown) {
+      if (!this.disposed && generation === this.generation && this.store.getSnapshot().status === 'selecting') {
+        const message = error instanceof Error ? error.message : String(error)
+        this.store.update((s) => { s.status = 'error'; s.error = message })
+      }
+      throw error
     }
-    if (!result.ok) {
-      this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
-      throw new Error(`session.selectModel failed: ${result.error.code}: ${result.error.message}`)
-    }
-    // The Host validated the route before accepting it, so a selection that
-    // landed is by construction one it can serve.
-    this.store.update((s) => {
-      s.current = result.value.selected
-      s.routable = true
-      s.currentMetering = result.value.metering
-      s.status = 'ready'
-      s.error = null
-    })
   }
 
   /**

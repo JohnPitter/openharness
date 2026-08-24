@@ -22,7 +22,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import type { RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
-import { createApiProxy } from '../src/api-proxy.ts'
+import { createApiProxy, MODEL_CATALOG_PROVIDER_TIMEOUT_MS } from '../src/api-proxy.ts'
 
 let nextRpc = 1
 function request<P>(payload: P): RpcRequest<P> {
@@ -304,6 +304,33 @@ describe('Web session model selection', () => {
       },
     ])
     await ctx.fiber.dispose()
+  })
+
+  it('records a hung provider listing as a failure without blocking other groups', async () => {
+    const { ctx, sessionId } = await harness()
+    ctx.llm.registerAdapter(['stuck'], new class extends CatalogAdapter {
+      override listModels(): Promise<readonly LlmModelInfo[]> {
+        return new Promise(() => {})
+      }
+    }('Stuck', [{ provider: 'stuck', id: 'never', name: 'Never' }]))
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp' })
+    vi.useFakeTimers()
+    try {
+      const pending = api.sessions.models(request({ sessionId }))
+      await vi.advanceTimersByTimeAsync(MODEL_CATALOG_PROVIDER_TIMEOUT_MS)
+      const catalog = expectValue(await pending)
+      expect(catalog.groups.map(group => group.id)).toContain('deepseek-official')
+      expect(catalog.failures).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: 'stuck',
+          name: 'Stuck',
+          message: `model listing timed out after ${MODEL_CATALOG_PROVIDER_TIMEOUT_MS}ms`,
+        }),
+      ]))
+    } finally {
+      vi.useRealTimers()
+      await ctx.fiber.dispose()
+    }
   })
 
   it('omits a registered route the adapter does not advertise from the picker', async () => {

@@ -87,6 +87,8 @@ export interface KimiAdapterOptions {
 
 /** Default maximum idle interval while an adapter stream read is outstanding. */
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
+/** Bound on the picker-path `GET {baseURL}/models` probe; a hang falls back to the configured catalog. */
+export const CATALOG_LISTING_TIMEOUT_MS = 2_500
 /** Default combined request/response context capacity. */
 export const DEFAULT_CONTEXT_WINDOW = 262_144
 /** Default per-request output-token cap. */
@@ -344,25 +346,29 @@ export class KimiAdapter extends LlmAdapter {
   /**
    * Fetch the endpoint's live model listing, merged over the configured
    * catalog. The listing needs the bearer token, so a missing credential, a
-   * network failure, or an unreadable body degrades to the configured
-   * advisory catalog — discovery must survive an endpoint that is down or a
-   * key that is not set yet.
-   * @returns the merged catalog for discovery consumers.
+   * network failure, a hang past {@link CATALOG_LISTING_TIMEOUT_MS}, or an
+   * unreadable body degrades to the configured catalog plus the last successful
+   * live listing — the picker catalog must not wait on an unbounded probe.
+   * @returns the merged catalog for picker and resolve consumers.
    */
   private async catalog(): Promise<readonly KimiCatalogModel[]> {
     const connection = this.config.options()
     try {
       const apiKey = await this.config.resolveApiKey(connection)
       const response = await fetch(`${connection.baseURL}/models`, {
-        headers: { authorization: `Bearer ${apiKey}` },
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          ...attributionHeaders(),
+        },
+        signal: AbortSignal.timeout(CATALOG_LISTING_TIMEOUT_MS),
       })
-      if (!response.ok) return connection.models
+      if (!response.ok) return mergeCatalogs(connection.models, this.liveCatalog)
       const live = parseLiveCatalog(await response.json() as LiveModelList)
-      if (live.length === 0) return connection.models
+      if (live.length === 0) return mergeCatalogs(connection.models, this.liveCatalog)
       this.liveCatalog = live
       return mergeCatalogs(connection.models, live)
-    } catch {
-      return connection.models
+    } catch (_probeFailed) {
+      return mergeCatalogs(connection.models, this.liveCatalog)
     }
   }
 

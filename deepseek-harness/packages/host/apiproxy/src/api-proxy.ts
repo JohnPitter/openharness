@@ -258,6 +258,21 @@ function ok<T>(request: RpcRequest<unknown>, value: T): RpcResponse<T> {
   return { rpcId: request.rpcId, result: { ok: true, value } }
 }
 
+/** Per-provider bound on `listModels` inside the picker catalog RPC. */
+export const MODEL_CATALOG_PROVIDER_TIMEOUT_MS = 4_000
+
+function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    work.finally(() => {
+      if (timer !== undefined) clearTimeout(timer)
+    }),
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms)
+    }),
+  ])
+}
+
 /**
  * Build the provider/model catalog over every registered route the adapter
  * currently advertises. Shared by the session-scoped `session.models` and
@@ -267,6 +282,7 @@ function ok<T>(request: RpcRequest<unknown>, value: T): RpcResponse<T> {
  * Routes without a usable credential (API key or OAuth) are omitted rather
  * than listed as empty or failed. Per-provider failures ride `failures`
  * without failing the sound groups; groups that advertise nothing are dropped.
+ * Each `listModels` is bounded so one hung adapter cannot stall the picker.
  */
 async function buildModelCatalog(ctx: Context): Promise<{
   groups: ModelProviderGroup[]
@@ -277,7 +293,11 @@ async function buildModelCatalog(ctx: Context): Promise<{
       if (!await ctx.llm.advertiseModels(provider.id)) {
         return { kind: 'hidden' as const }
       }
-      const models = await ctx.llm.listModels(provider.id)
+      const models = await withTimeout(
+        ctx.llm.listModels(provider.id),
+        MODEL_CATALOG_PROVIDER_TIMEOUT_MS,
+        `model listing timed out after ${MODEL_CATALOG_PROVIDER_TIMEOUT_MS}ms`,
+      )
       const entries = await Promise.all(models.map(async (model) => {
         const resolved = await ctx.llm.resolveModelInfo(provider.id, model.id)
         const reasoning: ModelReasoning | undefined = resolved.reasoning === undefined

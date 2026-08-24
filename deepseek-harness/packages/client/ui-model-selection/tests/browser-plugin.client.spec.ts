@@ -72,9 +72,11 @@ async function bench() {
     jobsBySession: {},
     currentAddress: undefined,
   })
+  let modelsError: Error | undefined
   ctx.provide('connection', { api: { sessions: {
     models: () => {
       calls.models += 1
+      if (modelsError !== undefined) return Promise.reject(modelsError)
       return Promise.resolve({
         result: { ok: true as const, value: { current, routable, currentMetering, groups: GROUPS, failures: [] } },
       })
@@ -203,6 +205,7 @@ async function bench() {
       })
     },
     blockOf: (key: string) => blocks.get(sid(key)),
+    rejectModels: (error: Error) => { modelsError = error },
   }
 }
 
@@ -295,6 +298,18 @@ describe('ui-model-selection dual entry', () => {
     expect(face.directory.getSnapshot()).toMatchObject({
       current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
       status: 'ready',
+    })
+  })
+
+  it('records a thrown session.models failure as error instead of staying loading', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const directory = b.ctx.modelDirectories.directoryFor(sid('s1'))
+    b.rejectModels(new Error('transport failure for /api/session.models: aborted'))
+    await expect(directory.load()).rejects.toThrow(/aborted/)
+    expect(directory.store.getSnapshot()).toMatchObject({
+      status: 'error',
+      error: 'transport failure for /api/session.models: aborted',
     })
   })
 
