@@ -211,31 +211,23 @@
   pointer-events: none;
 }
 
-/* Left waypoint rail: gutter immediately left of the centered message column.
-   User marks are dots; recorded milestones keep a one-line title. */
+/* Sticky jump index. The right edge stays 28px left of the message column
+   (translateX -100% from that anchor) so titles grow into the gutter, not
+   into the transcript. Dots only until hover, focus-within, or click-pin. */
 .rail {
   position: sticky;
   top: 16px;
   z-index: 2;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 6px;
   width: max-content;
-  max-width: 148px;
+  max-width: 168px;
   max-height: calc(100dvh - var(--dsh-composer-height, 152px) - 72px);
-  margin-left: max(8px, calc(50% - var(--dsh-chat-content-width) / 2 - 156px));
+  margin-left: max(28px, calc(50% - var(--dsh-chat-content-width) / 2 - 28px));
+  transform: translateX(-100%);
   overflow-y: auto;
-  pointer-events: none;
-}
-
-.rail::before {
-  content: '';
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 2.5px;
-  width: 1px;
-  background: var(--dsw-alias-border-l2);
   pointer-events: none;
 }
 
@@ -243,16 +235,23 @@
 .railUser {
   pointer-events: auto;
   display: flex;
+  flex-direction: row-reverse;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   min-width: 0;
   margin: 0;
-  padding: 0;
+  padding: 2px 0;
   border: none;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
-  text-align: left;
+  text-align: right;
+}
+
+.rail:hover .railMilestone,
+.rail:focus-within .railMilestone,
+.rail[data-expanded] .railMilestone {
+  gap: 8px;
 }
 
 .railUser {
@@ -261,21 +260,32 @@
 
 .railDot {
   flex: none;
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 100px;
-  background: var(--dsw-alias-label-quaternary);
+  background: var(--dsw-alias-label-tertiary);
 }
 
 .railDot[data-kind='milestone'] {
-  background: var(--dsw-alias-label-primary);
+  width: 10px;
+  height: 10px;
+  background: var(--dsw-alias-state-business-primary);
 }
 
 .railLabel {
   min-width: 0;
+  max-width: 0;
   overflow: hidden;
+  opacity: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
   font: var(--dsw-font-xs-13);
   color: var(--dsw-alias-label-secondary);
+}
+
+.rail:hover .railLabel,
+.rail:focus-within .railLabel,
+.rail[data-expanded] .railLabel {
+  max-width: 148px;
+  opacity: 1;
 }

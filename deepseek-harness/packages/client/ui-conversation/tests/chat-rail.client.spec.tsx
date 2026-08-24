@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// ChatRail waypoints: recorded milestones keep a visible title; user marks
-// are weaker dots whose accessible name is the first line.
+// ChatRail waypoints: dots by default; a click pins titles open. User marks
+// stay dots whose accessible name is the first line.
 
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -60,12 +60,14 @@ describe('ChatRail', () => {
         onJump={onJump}
       />,
     )
-    expect(view.getByRole('navigation', { name: zh['rail.aria'] })).toBeTruthy()
+    const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
+    expect(nav.getAttribute('data-expanded')).toBeNull()
     expect(view.queryByText('do the thing')).toBeNull()
     expect(view.getByText('Found the leak')).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: '消息：do the thing' }))
     fireEvent.click(view.getByRole('button', { name: `消息：${'a'.repeat(79)}…` }))
     fireEvent.click(view.getByRole('button', { name: '里程碑：Found the leak' }))
+    expect(nav.getAttribute('data-expanded')).toBe('')
     expect(onJump.mock.calls.map(call => call[0])).toEqual(['u1', 'u-long', 'm1'])
   })
 })

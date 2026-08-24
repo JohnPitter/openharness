@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
@@ -29,12 +29,13 @@ function firstLine(node: ChatNode<'user'>): string {
 }
 
 /**
- * Left rail of jumpable waypoints: recorded milestones plus weaker user-message marks.
+ * Sticky jump index: dots by default; titles appear on hover, keyboard focus, or click.
  * ChatView mounts this in a full-flow overlay so it can stick in the conversation scrollport.
  * @param props - ordered Chat keys, node map, locale, and jump handler.
  * @returns the rail, or null when the session has no waypoints.
  */
 export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
+  const [expanded, setExpanded] = useState(false)
   const waypoints = useMemo(() => {
     const items: Waypoint[] = []
     for (const key of order) {
@@ -52,7 +53,14 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
 
   if (waypoints.length === 0) return null
   return (
-    <nav className={css.rail} aria-label={t('rail.aria')}>
+    <nav
+      className={css.rail}
+      data-expanded={expanded ? '' : undefined}
+      aria-label={t('rail.aria')}
+      onClick={event => {
+        if (event.target === event.currentTarget) setExpanded(open => !open)
+      }}
+    >
       {waypoints.map(item => (
         <button
           key={item.key}
@@ -64,7 +72,10 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
           title={item.kind === 'milestone'
             ? t('rail.milestone', { title: item.title })
             : t('rail.user', { title: item.title })}
-          onClick={() => { onJump(item.key) }}
+          onClick={() => {
+            setExpanded(true)
+            onJump(item.key)
+          }}
         >
           <span className={css.railDot} data-kind={item.kind} aria-hidden />
           {item.kind === 'milestone' && <span className={css.railLabel}>{item.title}</span>}
