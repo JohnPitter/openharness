@@ -16,7 +16,7 @@ Workflow 通过 `WORKFLOW_ORCHESTRATOR_WORK_TOOLS` 对编排者隐藏 `milestone
 
 模型可见的索引是只含标题的运行时上下文快照 `milestone:index`（`ctx.systemPrompt.context`，order 125）。折叠标题变化时该通道才改写。compaction-basic 把这些标题追加到 Critical Context 下，使检查点保留索引。
 
-会话 UI 把 `milestone/write` 折成 `milestone` Chat Node（折叠 chip，可展开正文），左侧轨列出里程碑标题和用户消息航点，并通过 `[data-chat-anchor-key]` 跳转。
+会话 UI 把 `milestone/write` 折成 `milestone` Chat Node（折叠 chip，可展开正文），左侧轨列出里程碑标题和用户消息航点，并通过 `[data-chat-anchor-key]` 跳转。该轨放在铺满流程的 overlay 里并对齐会话滚动口，长 transcript 不会把它滚出屏幕。
 
 ## 曾考虑的替代方案
 

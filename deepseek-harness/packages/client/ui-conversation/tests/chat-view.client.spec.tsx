@@ -461,6 +461,16 @@ describe('ChatView', () => {
     HTMLElement.prototype.scrollIntoView = original
   })
 
+  it('mounts the waypoint rail in a full-flow overlay, not inside the message column', () => {
+    const h = makeHarness({ nodes: [user(1, 'do the thing')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const slot = view.container.querySelector('[data-chat-rail-slot]')
+    const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
+    const flow = view.container.querySelector('[data-chat-flow]')
+    expect(slot?.contains(nav)).toBe(true)
+    expect(flow?.contains(nav)).toBe(false)
+  })
+
   it('renders Host-pending steering at the flow tail and hands off to the durable node', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {

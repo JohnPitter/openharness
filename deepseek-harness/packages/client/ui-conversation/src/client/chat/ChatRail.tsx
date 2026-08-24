@@ -30,6 +30,7 @@ function firstLine(node: ChatNode<'user'>): string {
 
 /**
  * Left rail of jumpable waypoints: recorded milestones plus weaker user-message marks.
+ * ChatView mounts this in a full-flow overlay so it can stick in the conversation scrollport.
  * @param props - ordered Chat keys, node map, locale, and jump handler.
  * @returns the rail, or null when the session has no waypoints.
  */

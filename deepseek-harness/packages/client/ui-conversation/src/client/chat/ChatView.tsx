@@ -7,7 +7,8 @@
 // Scroll: when nested under `[data-conversation-scroll]` (active conversation
 // column), that host is the scrollport and this view is flow content; when
 // mounted alone (unit tests), `.scroll` owns overflow. Bottom-follow and
-// prepend anchoring always target the resolved scrollport.
+// prepend anchoring always target the resolved scrollport. The waypoint rail
+// is a full-flow overlay so it can stick in that scrollport.
 //
 // Render economics: order changes only when rows enter, leave or move. Each
 // ChatNodeSeat subscribes to one Node key, so Assistant deltas and Tool
@@ -427,7 +428,9 @@ export function ChatView({
 
   return (
     <div className={css.root}>
-      <ChatRail order={order} nodes={nodeStore} t={t} onJump={jumpTo} />
+      <div className={css.railSlot} data-chat-rail-slot="">
+        <ChatRail order={order} nodes={nodeStore} t={t} onJump={jumpTo} />
+      </div>
       <div ref={listRef} className={css.scroll}>
         <div ref={columnRef} className={css.column} data-chat-flow="">
           {openState === 'loading' && <div className={css.hint}>{t('chat.loadingHistory')}</div>}

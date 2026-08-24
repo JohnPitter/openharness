@@ -64,7 +64,7 @@ Opt-in. O exe publica um HTTPS público a partir de `127.0.0.1` (túnel Cloudfla
 ```powershell
 wails generate module
 Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
-wails build -ldflags "-X openharness/internal/update.Version=0.1.14"
+wails build -ldflags "-X openharness/internal/update.Version=0.1.15"
 go test ./...
 ```
 
@@ -88,9 +88,9 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | [Release](.github/workflows/release.yml) | tag `v*.*.*` | cria a GitHub Release |
 
 ```powershell
-git tag v0.1.14
-git push origin v0.1.14
-gh release upload v0.1.14 build/bin/openharness.exe
+git tag v0.1.15
+git push origin v0.1.15
+gh release upload v0.1.15 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.

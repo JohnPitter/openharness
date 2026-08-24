@@ -201,19 +201,41 @@
   min-width: 72px;
 }
 
-/* Left waypoint rail: sits in the side clearance so the transcript width is unchanged.
+/* Full-height overlay: the conversation scrollport is an ancestor, so an
+   absolute rail at the flow start scrolls off-screen on a long transcript.
+   Sticky inside this overlay stays in the visible column. */
+.railSlot {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Left waypoint rail: gutter immediately left of the centered message column.
    User marks are dots; recorded milestones keep a one-line title. */
 .rail {
-  position: absolute;
-  left: 8px;
+  position: sticky;
   top: 16px;
   z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: max-content;
   max-width: 148px;
-  max-height: calc(100% - 32px);
+  max-height: calc(100dvh - var(--dsh-composer-height, 152px) - 72px);
+  margin-left: max(8px, calc(50% - var(--dsh-chat-content-width) / 2 - 156px));
   overflow-y: auto;
+  pointer-events: none;
+}
+
+.rail::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 2.5px;
+  width: 1px;
+  background: var(--dsw-alias-border-l2);
   pointer-events: none;
 }
 
