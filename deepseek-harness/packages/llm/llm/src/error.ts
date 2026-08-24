@@ -90,7 +90,8 @@ const EXCEEDS_MODEL_CONTEXT = new RegExp(
  * @returns true when the detail identifies a request exceeding the model context window.
  */
 export function isContextWindowExceededError(detail: string): boolean {
-  return STRUCTURED_CONTEXT_OVERFLOW.test(detail)
+  return /\bcontext\s+overflow\b/i.test(detail)
+    || STRUCTURED_CONTEXT_OVERFLOW.test(detail)
     || /\b(?:maximum|max)(?:\s+(?:allowed|supported))?\s+context\s+(?:length|window)\b/i.test(detail)
     || TOO_LARGE_FOR_CONTEXT.test(detail)
     || /\b(?:input|prompt|request)\s+(?:is\s+)?too\s+(?:long|large)\s+for\s+(?:this|the)\s+model\b/i.test(detail)

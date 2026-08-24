@@ -16,7 +16,7 @@ import {
 } from '@deepseek-ai/dsh-compaction'
 import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
-import { createUserMessage, errorChain } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, createUserMessage, errorChain, isContextWindowExceededError } from '@deepseek-ai/dsh-llm'
 import type { Message, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { TokenMeasurement, TokenMeter } from '@deepseek-ai/dsh-token-meter'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
@@ -27,6 +27,21 @@ import type { SummarizationInput, SummaryResult } from './summarizer.ts'
 interface RegionDependencies {
   readonly meter: TokenMeter
   summarize(input: SummarizationInput, agent: Agent, signal?: AbortSignal): Promise<SummaryResult>
+}
+
+/** Safety window used when older sessions have no recorded request context. */
+export const SUMMARIZER_CONTEXT_WINDOW_FALLBACK = 128_000
+/** Explicit reserve for the summarizer system and instruction envelope. */
+export const SUMMARIZER_ENVELOPE_RESERVE = 16_384
+
+/** Resolve a fail-closed summarizer span budget from the durable request context. */
+export function loggedSummarizerSpanBudget(session: Session, maxTokens: number): number {
+  const recorded = session.requestContext()?.contextWindow as number | null | undefined
+  if (recorded === undefined) {
+    return summarizerSpanBudget(SUMMARIZER_CONTEXT_WINDOW_FALLBACK, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
+  }
+  if (recorded === null || !Number.isFinite(recorded) || recorded < 0) return 0
+  return summarizerSpanBudget(recorded, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
 }
 
 /** One validated inclusive span of current surface positions. */
@@ -59,6 +74,8 @@ interface CompactionTransactionOptions {
   readonly flush?: () => Promise<void>
   /** Manual command that initiated this transaction, when present. */
   readonly sourceCommandId?: CommandId
+  /** Initial safe span budget; context overflow retries halve this value. */
+  readonly maxSpanTokens?: number
 }
 
 interface CompactionEntryState {
@@ -255,23 +272,44 @@ export async function compactSurfaceRegion(
   let stage: TransactionFailure['stage'] = 'summary'
 
   try {
-    const prepared = prepareCompaction(dependencies, session, selection)
-    const summarized = await summarizeCompaction(
-      dependencies,
-      prepared,
-      agent,
-      compactionId,
-      options.sourceCommandId,
-      signal,
-    )
-    if (options.owner === null) signal?.throwIfAborted()
-    assertStable(dependencies, session, summarized)
-    stage = 'commit'
-    const pending = commitCompactionBody(session, startEvent, summarized)
-    closing = true
-    const endEvent = session.append('compaction/end', lifecycle)
-    closed = true
-    result = completeCompaction(pending, endEvent)
+    let prepared = prepareCompaction(dependencies, session, selection)
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const summarized = await summarizeCompaction(
+          dependencies,
+          prepared,
+          agent,
+          compactionId,
+          options.sourceCommandId,
+          signal,
+        )
+        if (options.owner === null) signal?.throwIfAborted()
+        assertStable(dependencies, session, summarized)
+        stage = 'commit'
+        const pending = commitCompactionBody(session, startEvent, summarized)
+        closing = true
+        const endEvent = session.append('compaction/end', lifecycle)
+        closed = true
+        result = completeCompaction(pending, endEvent)
+        break
+      } catch (error: unknown) {
+        if (errorCode(error) !== CONTEXT_WINDOW_EXCEEDED_CODE || attempt >= 2) throw error
+        if (options.owner === null) signal?.throwIfAborted()
+        // Validate the original snapshot before selecting a smaller paired span.
+        assertStable(dependencies, session, prepared)
+        const budget = options.maxSpanTokens === undefined
+          ? undefined
+          : Math.floor(options.maxSpanTokens / 2 ** (attempt + 1))
+        const nextRange = selectCompactableRange(
+          session,
+          dependencies.meter.measure(session),
+          0,
+          budget,
+        )
+        if (nextRange === null) throw error
+        prepared = prepareCompaction(dependencies, session, validateSurfaceRegion(session, nextRange.start, nextRange.end))
+      }
+    }
   } catch (error: unknown) {
     failure = { error, stage: closing ? 'commit' : stage }
     if (!closing) {
@@ -308,6 +346,20 @@ export async function compactSurfaceRegion(
   /* v8 ignore next -- every path without a result records and throws a failure above. */
   if (result === undefined) throw new Error('compaction committed without a result')
   return result
+}
+
+/** Read a stable provider code through a local cause chain. */
+function errorCode(error: unknown): string | undefined {
+  let current: unknown = error
+  for (let depth = 0; depth < 8 && current !== undefined; depth += 1) {
+    if (typeof current === 'object' && current !== null && 'code' in current) {
+      const code = (current as { code?: unknown }).code
+      if (typeof code === 'string') return code
+    }
+    current = current instanceof Error ? current.cause : undefined
+  }
+  if (error instanceof Error && isContextWindowExceededError(error.message)) return CONTEXT_WINDOW_EXCEEDED_CODE
+  return undefined
 }
 
 /** Classify one closed manual attempt without weakening cancellation precedence. */

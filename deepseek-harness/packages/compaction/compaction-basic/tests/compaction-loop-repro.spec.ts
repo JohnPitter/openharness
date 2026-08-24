@@ -117,7 +117,7 @@ class OverflowRecoveryAdapter extends LlmAdapter {
     this.conversationRequests.push(options)
     if (this.conversationRequests.length === 1) {
       if (this.delivery === 'thrown') {
-        throw new LlmError('request too large for model context', CONTEXT_WINDOW_EXCEEDED_CODE)
+        throw new LlmError('pi-ai detected context overflow for model "mock"', CONTEXT_WINDOW_EXCEEDED_CODE)
       }
       yield {
         type: 'finish',

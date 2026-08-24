@@ -25,8 +25,13 @@ import {
 import {
   assertNoActiveCompaction,
   compactSurfaceRegion,
+  loggedSummarizerSpanBudget,
   selectCompactableRange,
-  summarizerSpanBudget,
+} from './region.ts'
+
+export {
+  SUMMARIZER_CONTEXT_WINDOW_FALLBACK,
+  SUMMARIZER_ENVELOPE_RESERVE,
 } from './region.ts'
 import { summarizeWithLlm } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
@@ -75,22 +80,6 @@ function routedTarget(
   return { provider: config.provider, model: config.model }
 }
 
-/** Explicit reserve for the summarizer system/instruction envelope. */
-export const SUMMARIZER_ENVELOPE_RESERVE = 16_384
-
-/**
- * Cap a manual or overflow replayed span using only the latest recorded request.
- * Pressure intentionally remains uncapped because its normal request already fits.
- * @param session - session whose newest request context may carry `contextWindow`.
- * @param maxTokens - configured maximum summarizer output.
- * @returns a safe span cap, or `undefined` when no window was recorded.
- */
-function loggedSummarizerSpanBudget(session: Session, maxTokens: number): number | undefined {
-  const contextWindow = session.requestContext()?.contextWindow
-  return contextWindow === undefined
-    ? undefined
-    : summarizerSpanBudget(contextWindow, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
-}
 
 /** Resolve the conversation target used to select an optional policy override. */
 function conversationTarget(
@@ -336,7 +325,15 @@ export class BasicCompactionEngine extends CompactionEngine {
         loggedSummarizerSpanBudget(agent.session, policy.maxTokens),
       )
       if (range === null) return null
-      return this.compactRegion(range.start, range.end, agent, signal)
+      return compactSurfaceRegion(
+        this.regionDependencies(),
+        agent.session,
+        range.start,
+        range.end,
+        agent,
+        { owner: 'current-turn', stability: 'whole-surface', maxSpanTokens: loggedSummarizerSpanBudget(agent.session, policy.maxTokens) },
+        signal,
+      )
     }
 
     const context = (await this.ctx.llm.resolveModelInfo(target.provider, target.model, signal)).context
@@ -444,6 +441,7 @@ export class BasicCompactionEngine extends CompactionEngine {
             {
               owner: null,
               stability: 'selected-span',
+              maxSpanTokens: loggedSummarizerSpanBudget(agent.session, this.config.maxTokens),
               ...sourceCommandId === undefined ? {} : { sourceCommandId },
               flush: async () => {
                 await this.ctx.sessions.flush(agent.session)

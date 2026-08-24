@@ -44,7 +44,9 @@ import type {
 import {
   attributionHeaders,
   contentHasImage,
+  CONTEXT_WINDOW_EXCEEDED_CODE,
   INVALID_CREDENTIAL_CODE,
+  isContextWindowExceededError,
   isMissingCredential,
   LlmAdapter,
   LlmError,
@@ -589,6 +591,9 @@ export class PiAiAdapter extends LlmAdapter {
       }
       if (options.signal?.aborted) {
         throw new LlmError('pi-ai request aborted by caller', 'ABORTED', { cause: error })
+      }
+      if (error instanceof Error && isContextWindowExceededError(error.message)) {
+        throw new LlmError(error.message, CONTEXT_WINDOW_EXCEEDED_CODE, { cause: error })
       }
       throw error
     } finally {

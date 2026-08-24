@@ -219,6 +219,23 @@ describe('/compact human command', () => {
     expect(execution.commandId).toBe(expectLastLifecycle(test, '', execution.result))
   })
 
+  it('exposes only the allowlisted context-overflow code, not the raw cause chain', async () => {
+    const test = await harness()
+    const raw = new Error('pi-ai detected context overflow for model "mock"')
+    const coded = Object.assign(new Error('summary failed'), { code: 'CONTEXT_WINDOW_EXCEEDED', cause: raw })
+    test.compact.failure = new ManualCompactionError('summary', 'backend detail', { cause: coded })
+
+    const execution = await run(test)
+
+    expect(execution.result).toEqual({
+      kind: 'error',
+      text: 'Compaction could not produce a useful summary. The conversation is unchanged; the attempt is recorded in the session log. [CONTEXT_WINDOW_EXCEEDED]',
+    })
+    expect(execution.result.text).not.toContain('pi-ai detected context overflow')
+    expect(execution.result.text).not.toContain('backend detail')
+    expect(execution.commandId).toBe(expectLastLifecycle(test, '', execution.result))
+  })
+
   it('preserves cancellation and unexpected implementation failures', async () => {
     const cancelled = await harness()
     const controller = new AbortController()
