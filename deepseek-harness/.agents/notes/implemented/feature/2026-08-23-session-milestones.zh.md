@@ -16,7 +16,7 @@ Workflow 通过 `WORKFLOW_ORCHESTRATOR_WORK_TOOLS` 对编排者隐藏 `milestone
 
 模型可见的索引是只含标题的运行时上下文快照 `milestone:index`（`ctx.systemPrompt.context`，order 125）。折叠标题变化时该通道才改写。compaction-basic 把这些标题追加到 Critical Context 下，使检查点保留索引。
 
-会话 UI 把 `milestone/write` 折成 `milestone` Chat Node（折叠 chip，可展开正文），左侧轨列出里程碑标题和用户消息航点，并通过 `[data-chat-anchor-key]` 跳转。该轨放在铺满流程的 overlay 里并对齐会话滚动口；默认只显示圆点，悬停、键盘焦点或点击后才露出标题。点击航点会把标题固定展开；固定后可通过关闭按钮、Escape、在外部按下指针，或点击路轨自身背景收起（只有固定展开的路轨才接收背景指针事件，折叠的路轨不会遮挡正文侧沟）。视口宽度不超过 720px 时，固定展开的路轨变为绝对定位 overlay，宽度上限为 `min(168px, calc(100vw - 16px))`，标题超出部分显示省略号；折叠路轨仍保持零占位。
+会话 UI 把 `milestone/write` 折成 `milestone` Chat Node（折叠 chip，可展开正文），左侧轨列出里程碑标题和用户消息航点，并通过 `[data-chat-anchor-key]` 跳转。该轨放在铺满流程的 overlay 里并对齐会话滚动口；默认只显示圆点，悬停、键盘焦点或点击后才露出里程碑标题。点击航点会把全部标题固定展开，包括此前只显示圆点的用户消息首行；固定后可通过关闭按钮、Escape、在外部按下指针，或点击路轨自身背景收起（只有固定展开的路轨才接收背景指针事件，折叠的路轨不会遮挡正文侧沟）。视口宽度不超过 720px 时，固定展开的路轨保持 sticky，从左侧内边距覆盖 transcript，宽度上限为 `min(168px, calc(100vw - 16px))`，标题向右展开并带省略号；折叠路轨仍保持零占位。
 
 ## 曾考虑的替代方案
 

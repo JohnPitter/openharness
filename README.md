@@ -3,7 +3,7 @@
 **O agente de código no seu PC. Um `.exe`. Os modelos que você já paga.**
 
 <p align="center">
-  <img src="frontend/dist/logo.png" width="112" alt="OpenHarness" />
+  <img src="frontend/dist/logo.svg" width="112" alt="OpenHarness" />
 </p>
 
 OpenHarness é o [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) em app Windows: sidecar Node local, UI oficial, sessões e chaves no seu disco. Sem nuvem no meio. Sem agente aninhado (Cursor Cloud / SDK). O loop fala direto com o provedor.
@@ -65,7 +65,7 @@ Opt-in. O exe publica um HTTPS público a partir de `127.0.0.1` (túnel Cloudfla
 ```powershell
 wails generate module
 Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
-wails build -ldflags "-X openharness/internal/update.Version=0.1.19"
+wails build -ldflags "-X openharness/internal/update.Version=0.1.20"
 go test ./...
 ```
 
@@ -89,9 +89,9 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | [Release](.github/workflows/release.yml) | tag `v*.*.*` | cria a GitHub Release |
 
 ```powershell
-git tag v0.1.19
-git push origin v0.1.19
-gh release upload v0.1.19 build/bin/openharness.exe
+git tag v0.1.20
+git push origin v0.1.20
+gh release upload v0.1.20 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.

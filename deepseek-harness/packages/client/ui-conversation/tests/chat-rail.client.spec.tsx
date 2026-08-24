@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // ChatRail waypoints: dots by default; a click pins titles open. User marks
-// stay dots whose accessible name is the first line.
+// stay dots until pinned, when their first line joins the milestone titles.
 
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -41,7 +41,7 @@ describe('ChatRail', () => {
     expect(view.queryByRole('navigation')).toBeNull()
   })
 
-  it('jumps recorded milestones and weaker user marks without duplicating user text', () => {
+  it('jumps recorded milestones and weaker user marks; user first-lines appear only once pinned', () => {
     const onJump = vi.fn<(key: string) => void>()
     const long = `${'a'.repeat(80)}z`
     const nodes = store([
@@ -65,6 +65,7 @@ describe('ChatRail', () => {
     expect(view.queryByText('do the thing')).toBeNull()
     expect(view.getByText('Found the leak')).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: '消息：do the thing' }))
+    expect(view.getByText('do the thing')).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: `消息：${'a'.repeat(79)}…` }))
     fireEvent.click(view.getByRole('button', { name: '里程碑：Found the leak' }))
     expect(nav.getAttribute('data-expanded')).toBe('')

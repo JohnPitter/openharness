@@ -28,12 +28,15 @@ function firstLine(node: ChatNode<'user'>): string {
 }
 
 /**
- * Sticky jump index: dots by default; titles appear on hover, keyboard focus, or click.
- * A waypoint click pins the titles open; the pinned rail closes through its close
- * button, Escape, a pointer down outside it, or a click on its own background
- * (pointer events only reach the rail while pinned, so a collapsed rail never
- * blocks the transcript gutter). ChatView mounts this in a full-flow overlay so
- * it can stick in the conversation scrollport.
+ * Sticky jump index: dots by default; milestone titles appear on hover,
+ * keyboard focus, or click. A waypoint click pins every title open, including
+ * user first-lines that stay dots until then. The pinned rail closes through
+ * its close button, Escape, a pointer down outside it, or a click on its own
+ * background (pointer events only reach the rail while pinned, so a collapsed
+ * rail never blocks the transcript gutter). ChatView mounts this in a full-flow
+ * overlay so it can stick in the conversation scrollport. On viewports 720px
+ * or narrower the pinned rail overlays the transcript from the left padding
+ * and stays sticky — it does not switch to absolute positioning.
  * @param props - ordered Chat keys, node map, locale, and jump handler.
  * @returns the rail, or null when the session has no waypoints.
  */
@@ -110,7 +113,9 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
           }}
         >
           <span className={css.railDot} data-kind={item.kind} aria-hidden />
-          {item.kind === 'milestone' && <span className={css.railLabel}>{item.title}</span>}
+          {(item.kind === 'milestone' || expanded) && (
+            <span className={css.railLabel}>{item.title}</span>
+          )}
         </button>
       ))}
     </nav>

@@ -275,12 +275,18 @@
 
 .rail:hover .railMilestone,
 .rail:focus-within .railMilestone,
-.rail[data-expanded] .railMilestone {
+.rail[data-expanded] .railMilestone,
+.rail[data-expanded] .railUser {
   gap: 8px;
 }
 
 .railUser {
   width: 12px;
+}
+
+.rail[data-expanded] .railUser {
+  width: auto;
+  max-width: 100%;
 }
 
 .railDot {
@@ -308,26 +314,38 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.rail:hover .railLabel,
-.rail:focus-within .railLabel,
+/* Hover/focus reveals milestone titles only; a pinned rail reveals every
+   waypoint, including user first-lines that stay dots until then. */
+.rail:hover .railMilestone .railLabel,
+.rail:focus-within .railMilestone .railLabel,
 .rail[data-expanded] .railLabel {
   max-width: 148px;
   opacity: 1;
 }
 
-/* On narrow screens the pinned index overlays the transcript instead of
-   taking space beside it. The collapsed rail keeps its transparent gutter. */
+/* Narrow viewports have no leftover gutter. The index sits in the left
+   padding, titles grow into the transcript, and the pinned rail keeps
+   position:sticky so the overlay stays in the scrollport. Switching that
+   overlay to absolute would pin it to the transcript start and scroll away. */
 @media (max-width: 720px) {
+  .rail {
+    margin-left: 8px;
+    transform: none;
+    align-items: flex-start;
+  }
+
+  .railMilestone,
+  .railUser {
+    flex-direction: row;
+    text-align: left;
+  }
+
+  .rail:hover,
+  .rail:focus-within,
   .rail[data-expanded] {
-    position: absolute;
-    top: 16px;
-    left: 8px;
     width: min(168px, calc(100vw - 16px));
     max-width: calc(100vw - 16px);
-    margin-left: 0;
     padding: 8px;
-    transform: none;
-    align-items: flex-end;
     border: 1px solid var(--dsw-alias-border-l2);
     border-radius: 8px;
     background: var(--dsw-alias-button-floating-fill);
