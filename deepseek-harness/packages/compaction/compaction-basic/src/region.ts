@@ -88,20 +88,44 @@ interface TransactionFailure {
 }
 
 /**
+ * Maximum priced span for a summarizer request. The half-window bound tolerates
+ * a recorded/model context mismatch; output and envelope reserves keep a
+ * 262K-recorded conversation inside a 128K summarizer route.
+ * @param contextWindow - positive adapter-owned model capacity.
+ * @param maxTokens - configured summarizer output limit.
+ * @param envelopeReserve - explicit budget for system/instruction overhead.
+ * @returns a non-negative integer safe for selection. When the budget is zero,
+ * selection must produce no range, so callers make no summarizer request. The
+ * half-window arithmetic invariant applies only when this value is greater than zero.
+ */
+export function summarizerSpanBudget(
+  contextWindow: number,
+  maxTokens: number,
+  envelopeReserve = 16_384,
+): number {
+  const halfWindow = Math.floor(contextWindow / 2)
+  if (!Number.isFinite(halfWindow) || !Number.isFinite(maxTokens) || !Number.isFinite(envelopeReserve)) return 0
+  return Math.max(0, halfWindow - Math.max(0, maxTokens) - Math.max(0, envelopeReserve))
+}
+
+/**
  * Resolve the next head-anchored range while retaining a priced recent tail
  * and never splitting an assistant tool-call/result pair.
  * @param session - session supplying authoritative current surface positions.
  * @param measurement - unified pressure and surface measurement from the conversation meter.
  * @param retainTokens - minimum recent tail budget retained verbatim.
+ * @param maxSpanTokens - optional cap on the priced compact span so the summarizer request fits the window.
  * @returns the inclusive positional seq range to compact, or `null`.
  */
 export function selectCompactableRange(
   session: Session,
   measurement: TokenMeasurement,
   retainTokens: number,
+  maxSpanTokens?: number,
 ): { start: number; end: number } | null {
   const pricedNodes = measurement.nodes
   if (pricedNodes.length === 0) return null
+  if (maxSpanTokens !== undefined && maxSpanTokens <= 0) return null
 
   const surfaceNodes = session.surface.nodes
   if (surfaceNodes.length !== pricedNodes.length
@@ -117,20 +141,53 @@ export function selectCompactableRange(
     keepFromIdx = index
     if (accumulated >= retainTokens) break
   }
+  keepFromIdx = snapKeepFromToPairing(session, surfaceNodes, keepFromIdx)
   if (keepFromIdx === 0) return null
 
-  while (keepFromIdx > 0) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    if (toolPairingBalancedBefore(session, surfaceNodes[keepFromIdx]!)) break
-    keepFromIdx -= 1
+  if (maxSpanTokens !== undefined) {
+    let spanTokens = 0
+    for (let index = 0; index < keepFromIdx; index += 1) {
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      spanTokens += pricedNodes[index]!.tokens
+    }
+    while (keepFromIdx > 1 && spanTokens > maxSpanTokens) {
+      keepFromIdx -= 1
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      spanTokens -= pricedNodes[keepFromIdx]!.tokens
+    }
+    keepFromIdx = snapKeepFromToPairing(session, surfaceNodes, keepFromIdx)
+    if (keepFromIdx === 0) return null
+
+    // Pair snapping can move a boundary; validate the final balanced unit as
+    // well, and refuse an indivisible first unit rather than sending a doomed call.
+    let balancedSpanTokens = 0
+    for (let index = 0; index < keepFromIdx; index += 1) {
+      // oxlint-disable-next-line typescript/no-non-null-assertion
+      balancedSpanTokens += pricedNodes[index]!.tokens
+    }
+    if (balancedSpanTokens > maxSpanTokens) return null
   }
-  if (keepFromIdx === 0) return null
 
   // oxlint-disable-next-line typescript/no-non-null-assertion
   const first = surfaceNodes[0]!
   // oxlint-disable-next-line typescript/no-non-null-assertion
   const cutoff = surfaceNodes[keepFromIdx - 1]!
   return { start: first, end: cutoff }
+}
+
+/** Move `keepFromIdx` left until the node at that index is a balanced tool-pair cut. */
+function snapKeepFromToPairing(
+  session: Session,
+  surfaceNodes: readonly number[],
+  keepFromIdx: number,
+): number {
+  let index = keepFromIdx
+  while (index > 0) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion
+    if (toolPairingBalancedBefore(session, surfaceNodes[index]!)) break
+    index -= 1
+  }
+  return index
 }
 
 /**

@@ -43,7 +43,7 @@
   - button "Queue":
     - text: Queue
     - img
-  - text: Automatic compaction Compact history when context fills. /compact remains available when off.
+  - text: Automatic compaction Compact history when usage reaches the threshold, on every route including request-metered coding plans. /compact remains available when off.
   - button "On":
     - text: On
     - img

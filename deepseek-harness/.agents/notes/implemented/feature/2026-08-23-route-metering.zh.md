@@ -12,7 +12,7 @@ DeepSeek 按 token 加缓存计费；编码计划（Kimi for Code、Claude Code�
 
 每个适配器在 `LlmProviderInfo` 上声明 `metering?: 'tokens' | 'requests'`。消费方读取 `ctx.llm.providerMetering(provider)`，路由未注册或未声明时默认为 `tokens`。客户端不得从提供方 id 推断该单位。编码计划路由声明 `requests`；按 token 付费的路由省略该字段。
 
-按请求计费的路由不启动自动标题提供方，剪枝之后也不跑压力压缩 LLM。本地剪枝仍会运行。规范溢出和 `/compact` 仍会摘要，否则会话会卡住。按 token 计费的路由保持原先的自动标题和压力压缩行为。
+按请求计费的路由不启动自动标题提供方。本地剪枝仍会运行。压力压缩 LLM、规范溢出和 `/compact` 仍会摘要。[按请求路由的压力压缩 note](../bug-fix/2026-08-24-request-route-pressure-compact.zh.md) 拥有压力调用与摘要区间上限。按 token 计费的路由保持自动标题和压力压缩行为。
 
 `parseZaiUsage` 把捕获到的 GLM `TIME_LIMIT`（以及同类请求计数类型）映射为 `requests` / `requests-weekly` 窗口。现有配额 chip 和设置 → 用量会渲染这些 id。
 
@@ -32,8 +32,8 @@ DeepSeek 按 token 加缓存计费；编码计划（Kimi for Code、Claude Code�
 
 ## 后果
 
-辅助标题和压力压缩 LLM 不再消耗编码计划配额。溢出和手动压缩仍会花费一次请求，这是有意设计。GLM/Kimi/Claude Code 上的 Workflow 在第一次委派前必须有工人 chip。宿主 `session.models` 携带 `currentMetering`，客户端不必反推单位。
+辅助标题 LLM 不再消耗编码计划配额。压力压缩在占用率越过所配百分比时花费一次请求。溢出和 `/compact` 仍会花费一次请求，并限制摘要区间使该辅助调用装得进窗口。GLM/Kimi/Claude Code 上的 Workflow 在第一次委派前必须有工人 chip。宿主 `session.models` 携带 `currentMetering`，客户端不必反推单位。
 
 ## 测试
 
-适配器测试钉住已声明与省略的 `metering`。按请求计费适配器上的压缩压力会剪枝且不摘要；溢出仍会摘要。挂载按请求计费 `LlmRuntime` 适配器时，会话标题的自动 generate 不会被调用；回退标题仍会落地。`resolveChildAgentOptions` 覆盖抛出／继承／显式工人／请求提供方。GLM fixture 包含捕获的 `TIME_LIMIT`。composer 阻塞和配额标签覆盖 `blocked.worker` 与 `requests` 窗口。
+适配器测试钉住已声明与省略的 `metering`。按请求计费适配器上的压缩压力会剪枝，剪枝不够时仍摘要；溢出仍会摘要，并在已知容量时限制区间。挂载按请求计费 `LlmRuntime` 适配器时，会话标题的自动 generate 不会被调用；回退标题仍会落地。`resolveChildAgentOptions` 覆盖抛出／继承／显式工人／请求提供方。GLM fixture 包含捕获的 `TIME_LIMIT`。composer 阻塞和配额标签覆盖 `blocked.worker` 与 `requests` 窗口。

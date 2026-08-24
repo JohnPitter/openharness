@@ -26,6 +26,7 @@ import {
   assertNoActiveCompaction,
   compactSurfaceRegion,
   selectCompactableRange,
+  summarizerSpanBudget,
 } from './region.ts'
 import { summarizeWithLlm } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
@@ -72,6 +73,23 @@ function routedTarget(
     return undefined
   }
   return { provider: config.provider, model: config.model }
+}
+
+/** Explicit reserve for the summarizer system/instruction envelope. */
+export const SUMMARIZER_ENVELOPE_RESERVE = 16_384
+
+/**
+ * Cap a manual or overflow replayed span using only the latest recorded request.
+ * Pressure intentionally remains uncapped because its normal request already fits.
+ * @param session - session whose newest request context may carry `contextWindow`.
+ * @param maxTokens - configured maximum summarizer output.
+ * @returns a safe span cap, or `undefined` when no window was recorded.
+ */
+function loggedSummarizerSpanBudget(session: Session, maxTokens: number): number | undefined {
+  const contextWindow = session.requestContext()?.contextWindow
+  return contextWindow === undefined
+    ? undefined
+    : summarizerSpanBudget(contextWindow, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
 }
 
 /** Resolve the conversation target used to select an optional policy override. */
@@ -142,7 +160,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     super(ctx)
     this.config = resolveConfig(config)
     registerCompactionUserSettings(ctx)
-    if (this.config.auto) this._registerAutomaticCompaction()
+    this._registerAutomaticCompaction()
   }
 
   /** Live overlay wins when the settings namespace is registered; otherwise plugin Config. */
@@ -269,10 +287,12 @@ export class BasicCompactionEngine extends CompactionEngine {
 
   /**
    * Compact for replayed step-boundary pressure or one provider-confirmed context
-   * overflow. Both triggers price the latest durable routed request envelope;
-   * overflow bypasses the normal threshold and retained-tail policy so it can
-   * force one useful balanced reduction. A registered `compaction-basic` settings
-   * section overlays `thresholdRatio` for pressure; it does not change overflow.
+   * overflow. Both triggers price the latest durable routed request envelope.
+   * Overflow bypasses the pressure threshold; when the last `request/context`
+   * record carries a window, the summarized span is capped so the auxiliary call
+   * fits. A zero safe span budget produces no range and therefore no auxiliary
+ * LLM request. A registered `compaction-basic` settings section overlays
+   * `thresholdRatio` for pressure; it does not change overflow.
    * @param agent - agent whose latest durable routed request is measured.
    * @param trigger - normal step-boundary pressure or context-overflow recovery.
    * @param signal - live turn cancellation signal forwarded to summarization.
@@ -309,7 +329,12 @@ export class BasicCompactionEngine extends CompactionEngine {
         prune.pruneSession(agent.session)
         measurement = meter.measure(agent.session)
       }
-      const range = selectCompactableRange(agent.session, measurement, 0)
+      const range = selectCompactableRange(
+        agent.session,
+        measurement,
+        0,
+        loggedSummarizerSpanBudget(agent.session, policy.maxTokens),
+      )
       if (range === null) return null
       return this.compactRegion(range.start, range.end, agent, signal)
     }
@@ -337,8 +362,6 @@ export class BasicCompactionEngine extends CompactionEngine {
       measurement = meter.measure(agent.session)
     }
     if (measurement.totalTokens < spec.thresholdTokens) return null
-
-    if (this.ctx.llm.providerMetering(target.provider) === 'requests') return null
 
     let result: CompactionResult | null = null
     for (let attempt = 0; attempt <= spec.compactionRetries; attempt += 1) {
@@ -409,6 +432,7 @@ export class BasicCompactionEngine extends CompactionEngine {
             agent.session,
             this.ctx.tokenMeter.measure(agent.session),
             0,
+            loggedSummarizerSpanBudget(agent.session, this.config.maxTokens),
           )
           if (range === null) return null
           return await compactSurfaceRegion(

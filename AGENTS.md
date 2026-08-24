@@ -188,9 +188,10 @@ go vet ./...  # lint
   recolhido, o trilho mantém ocupação zero.
 - **Custo por rota:** coding plans (Kimi, Claude Code, Codex, GLM, OpenCode)
   cobram por request; DeepSeek e plataformas pay-per-token cobram por token.
-  Em rota de request o harness não dispara título-LLM nem compact-LLM por
-  pressão (overflow e `/compact` continuam). A unidade vem do adapter
-  (`metering`), não do nome do provedor.
+  Em rota de request o harness não dispara título-LLM (o fallback de primeiras
+  palavras continua). Compactação automática no percentual da aba Geral ainda
+  resume; overflow e `/compact` limitam o intervalo para o summarizer caber.
+  A unidade vem do adapter (`metering`), não do nome do provedor.
 - **Busca na web:** padrão é DuckDuckGo (HTML, sem chave). A busca nativa
   DeepSeek fica desativada; ela cobra saldo DeepSeek mesmo se o chat for Kimi.
 - **J-Space:** skill empacotada em `apps/cli/config/skills/j-space`, nos presets

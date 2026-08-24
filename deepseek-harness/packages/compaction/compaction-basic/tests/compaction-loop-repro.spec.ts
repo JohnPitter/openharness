@@ -91,7 +91,8 @@ class OverflowRecoveryAdapter extends LlmAdapter {
       provider,
       id: model,
       name: model,
-      context: { contextWindow: 128 },
+      // Leave room for the explicit 16K envelope reserve plus maxTokens.
+      context: { contextWindow: 40_000 },
     })
   }
 

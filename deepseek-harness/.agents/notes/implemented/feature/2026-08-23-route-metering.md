@@ -12,7 +12,7 @@ DeepSeek bills tokens plus cache; coding plans (Kimi for Code, Claude Code, Code
 
 Each adapter declares `metering?: 'tokens' | 'requests'` on `LlmProviderInfo`. Consumers read `ctx.llm.providerMetering(provider)`, which defaults to `tokens` when the route is unregistered or undeclared. The client must not infer the unit from the provider id. Coding-plan routes declare `requests`; pay-per-token routes omit the field.
 
-A request-metered route does not start the automatic title provider and does not run pressure compact LLM after prune. Local prune still runs. Canonical overflow and `/compact` still summarize, otherwise the session wedges. Token-metered routes keep the previous automatic title and pressure compact behavior.
+A request-metered route does not start the automatic title provider. Local prune still runs. Pressure compact LLM, canonical overflow, and `/compact` still summarize. The [request-route pressure compact note](../bug-fix/2026-08-24-request-route-pressure-compact.md) owns the pressure call and the summarizer-span cap. Token-metered routes keep automatic title and pressure compact behavior.
 
 `parseZaiUsage` maps captured GLM `TIME_LIMIT` (and sibling request-count types) onto `requests` / `requests-weekly` windows. The existing quota chip and Settings → Usages render those ids.
 
@@ -32,8 +32,8 @@ When the parent is Workflow, the planner is request-metered, and no worker chip 
 
 ## Consequences
 
-Auxiliary title and pressure-compact LLMs stop spending coding-plan quota. Overflow and manual compact still cost a request, by design. Workflow on GLM/Kimi/Claude Code requires a worker chip before the first delegation. Host `session.models` carries `currentMetering` so the client does not reverse-engineer the unit.
+Auxiliary title LLMs stop spending coding-plan quota. Pressure compact spends one request when occupancy crosses the configured percent. Overflow and `/compact` still cost a request, and cap the summarized span so that auxiliary call fits. Workflow on GLM/Kimi/Claude Code requires a worker chip before the first delegation. Host `session.models` carries `currentMetering` so the client does not reverse-engineer the unit.
 
 ## Testing
 
-Adapter tests pin declared vs omitted `metering`. Compaction pressure on a request-metered adapter prunes and does not summarize; overflow still summarizes. Session-title automatic generate is not called on a request-metered `LlmRuntime` adapter; the fallback title still lands. `resolveChildAgentOptions` covers throw / inherit / explicit worker / requested provider. GLM fixtures include captured `TIME_LIMIT`. Composer block and quota labels cover `blocked.worker` and `requests` windows.
+Adapter tests pin declared vs omitted `metering`. Compaction pressure on a request-metered adapter prunes and summarizes when prune is insufficient; overflow still summarizes and caps the span when capacity is known. Session-title automatic generate is not called on a request-metered `LlmRuntime` adapter; the fallback title still lands. `resolveChildAgentOptions` covers throw / inherit / explicit worker / requested provider. GLM fixtures include captured `TIME_LIMIT`. Composer block and quota labels cover `blocked.worker` and `requests` windows.

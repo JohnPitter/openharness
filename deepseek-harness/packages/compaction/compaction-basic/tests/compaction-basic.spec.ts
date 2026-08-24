@@ -7,12 +7,13 @@ import {
   COMPACTION_SETTINGS_NAMESPACE,
   DEFAULT_COMPACTION_AUTO,
   DEFAULT_COMPACTION_THRESHOLD_PERCENT,
+  SUMMARIZER_ENVELOPE_RESERVE,
 } from '@deepseek-ai/dsh-compaction-basic'
 import {
   asCompactionUserSettings,
   registerCompactionUserSettings,
 } from '@deepseek-ai/dsh-compaction-basic/src/user-settings.ts'
-import { selectCompactableRange } from '@deepseek-ai/dsh-compaction-basic/src/region.ts'
+import { selectCompactableRange, summarizerSpanBudget } from '@deepseek-ai/dsh-compaction-basic/src/region.ts'
 import type { SummarizationInput, SummaryResult } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { compactionInstruction } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { CompactionId, toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
@@ -797,6 +798,49 @@ describe('pressure measurement and retention', () => {
     const priced = ctx.tokenMeter.measure(session)
     expect(selectCompactableRange(session, priced, 1)).toBeNull()
   })
+
+  it('reserves output and envelope headroom inside half the context window', async () => {
+    const maxTokens = 8_192
+    const spanBudget = summarizerSpanBudget(272_144, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
+    expect(spanBudget).toBe(Math.max(
+      0,
+      Math.floor(272_144 / 2) - maxTokens - SUMMARIZER_ENVELOPE_RESERVE,
+    ))
+    expect(spanBudget + maxTokens + SUMMARIZER_ENVELOPE_RESERVE).toBe(Math.floor(272_144 / 2))
+    expect(summarizerSpanBudget(128, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)).toBe(0)
+    const ctx = createContext()
+    const session = conversation(2)
+    expect(selectCompactableRange(session, ctx.tokenMeter.measure(session), 0, 0)).toBeNull()
+
+    const overflowContext = createContext()
+    const overflowSession = conversation(3)
+    overflowSession.append('request/context', { provider: MODEL, model: MODEL, contextWindow: 128 })
+    const compact = new BasicCompactionEngine(overflowContext, { auto: false })
+    let streamCalls = 0
+    overflowContext.on('llm/stream', (_options, next) => {
+      streamCalls += 1
+      return next()
+    })
+    await expect(compactIfNeeded(compact, overflowSession, 'context-overflow')).resolves.toBeNull()
+    expect(streamCalls).toBe(0)
+  })
+
+  it('shrinks a head-anchored range until the span is within maxSpanTokens', () => {
+    const ctx = createContext()
+    const session = conversation(6)
+    const priced = ctx.tokenMeter.measure(session)
+    const uncapped = selectCompactableRange(session, priced, 0)
+    expect(uncapped).not.toBeNull()
+    const cap = Math.max(1, Math.floor(priced.nodes.slice(0, -1)
+      .reduce((sum, node) => sum + node.tokens, 0) / 3))
+    const capped = selectCompactableRange(session, priced, 0, cap)
+    expect(capped).not.toBeNull()
+    expect(capped!.end).toBeLessThan(uncapped!.end)
+    const spanTokens = priced.nodes
+      .filter(node => node.seq >= capped!.start && node.seq <= capped!.end)
+      .reduce((sum, node) => sum + node.tokens, 0)
+    expect(spanTokens).toBeLessThanOrEqual(Math.max(cap, priced.nodes[0]!.tokens))
+  })
 })
 
 describe('optional model-free tool-result pruning', () => {
@@ -852,7 +896,7 @@ describe('optional model-free tool-result pruning', () => {
     expect(summarizedText(compact.calls[0]!.input)).not.toContain('result 1 '.repeat(300))
   })
 
-  it('skips LLM summarization on a request-metered route when pruning cannot clear pressure', async () => {
+  it('summarizes a request-metered route when pruning cannot clear pressure', async () => {
     const ctx = createRequestMeteredContext(2_000)
     void new ToolResultPruner(ctx, pruneConfig)
     const compact = new TestCompactionEngine(ctx, {
@@ -862,8 +906,8 @@ describe('optional model-free tool-result pruning', () => {
     })
     const session = toolConversation()
 
-    expect(await compactIfNeeded(compact, session, 'pressure')).toBeNull()
-    expect(compact.calls).toHaveLength(0)
+    expect(await compactIfNeeded(compact, session, 'pressure')).not.toBeNull()
+    expect(compact.calls).toHaveLength(1)
   })
 
   it('still summarizes a request-metered route on canonical overflow', async () => {
@@ -877,6 +921,19 @@ describe('optional model-free tool-result pruning', () => {
 
     expect(await compactIfNeeded(compact, session, 'context-overflow')).not.toBeNull()
     expect(compact.calls).toHaveLength(1)
+  })
+
+  it('overflow-compacts a session larger than the window by capping the summarizer span', async () => {
+    const ctx = createContext(400)
+    const compact = new TestCompactionEngine(ctx, {
+      auto: false,
+      thresholdRatio: 1,
+      retainTokens: 350,
+    })
+    const session = conversation(8, 'overflow '.repeat(60).trim())
+    expect(ctx.tokenMeter.measure(session).totalTokens).toBeGreaterThan(400)
+    expect(await compactIfNeeded(compact, session, 'context-overflow')).not.toBeNull()
+    expect(compact.calls.length).toBeGreaterThanOrEqual(1)
   })
 
   it('retains the original compaction-basic behavior without the optional plugin', async () => {
@@ -1991,7 +2048,7 @@ describe('automatic listener and loader composition', () => {
     const ctx = createContext()
     await ctx.plugin(MemorySettings).await()
     const compact = service({ auto: false, thresholdRatio: 0.8, retainTokens: 400 }, ctx)
-    expect(() => registerCompactionUserSettings(ctx)).not.toThrow()
+    expect(() => { registerCompactionUserSettings(ctx) }).not.toThrow()
     const ns = settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)
     expect(ctx.settings.get(ns)).toEqual({
       auto: DEFAULT_COMPACTION_AUTO,
@@ -2005,6 +2062,33 @@ describe('automatic listener and loader composition', () => {
 
     await ctx.settings.update(ns, { thresholdPercent: 100 })
     await expect(compactIfNeeded(compact, conversation(1))).resolves.toBeNull()
+  })
+
+  it('re-reads auto at event time as settings toggle pressure off and on', async () => {
+    const ctx = createContext(10_000)
+    await ctx.plugin(MemorySettings).await()
+    const compact = new TestCompactionEngine(ctx, {
+      thresholdRatio: 0.5,
+      retainTokens: 180,
+    })
+    const ns = settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)
+    const compactIfNeededSpy = vi.spyOn(compact, 'compactIfNeeded')
+
+    await ctx.settings.update(ns, { auto: false })
+    await preStep(ctx, agent(conversation(4), MODEL))
+    expect(compactIfNeededSpy).toHaveBeenCalledTimes(0)
+
+    await ctx.settings.update(ns, { auto: true })
+    await preStep(ctx, agent(conversation(4), MODEL))
+    expect(compactIfNeededSpy).toHaveBeenCalledTimes(1)
+
+    await ctx.settings.update(ns, { auto: false })
+    await preStep(ctx, agent(conversation(4), MODEL))
+    expect(compactIfNeededSpy).toHaveBeenCalledTimes(1)
+
+    await ctx.settings.update(ns, { auto: true })
+    await preStep(ctx, agent(conversation(4), MODEL))
+    expect(compactIfNeededSpy).toHaveBeenCalledTimes(2)
   })
 
   it('skips automatic pressure and overflow recovery when the overlay disables auto', async () => {
