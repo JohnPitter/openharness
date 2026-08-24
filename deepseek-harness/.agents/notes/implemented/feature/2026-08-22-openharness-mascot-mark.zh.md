@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-**产品商标是坐在蓝色开口环挽具里、带薄荷色节点扣的米色脑袋吉祥物。** `FishLogo` 在 24×24 方框里用固定品牌色（`#4F8CFF`、`#7DDB6A`、`#F4EFE6`）绘制该角色。`BrandWordmark` 就是同一吉祥物；`includeMark={false}` 是空的 24 方框，好让 `sidebar.brand.name` 坐在 slotted 商标旁边。`apps/web/public/favicon.svg` 在炭色圆角瓷砖（`#2C2C34`）上画同一图形，标签图标在浅色与深色浏览器铬上都可见，无需按配色方案反相。
+**产品商标是坐在蓝色开口环挽具里、带薄荷色节点扣的米色脑袋吉祥物。** `FishLogo` 在 24×24 方框里用固定品牌色（`#4F8CFF`、`#7DDB6A`、`#F4EFE6`）绘制该角色，不铺底砖。`BrandWordmark` 就是同一吉祥物；`includeMark={false}` 是空的 24 方框，好让 `sidebar.brand.name` 坐在 slotted 商标旁边。`apps/web/public/favicon.svg` 与桌面 `logo.svg` 在透明画布上画同一图形；浅色浏览器铬上的对比靠蓝环和薄荷节点，而不是炭色底砖。
 
 ## 考虑过的替代方案
 
@@ -22,4 +22,4 @@ Status: implemented
 
 ## 后果
 
-侧栏、英雄区和 favicon 共用一套吉祥物几何。桌面 `logo.png` / `appicon.png` 保留同一角色的带阴影 3D 磁贴。浅色主题下米色脑袋的对比靠蓝环和薄荷节点，而不是 currentColor 填充。
+侧栏、英雄区、favicon 和桌面窗口标共用一套吉祥物几何，画在透明画布上。浅色主题下米色脑袋的对比靠蓝环和薄荷节点，而不是 currentColor 填充或炭色底砖。

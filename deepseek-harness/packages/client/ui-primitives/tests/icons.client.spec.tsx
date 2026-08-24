@@ -65,6 +65,7 @@ describe('FishLogo', () => {
     expect(container.innerHTML).toContain('#4F8CFF')
     expect(container.innerHTML).toContain('#7DDB6A')
     expect(container.innerHTML).not.toContain('M0 0L23.16')
+    expect(container.innerHTML).not.toMatch(/<rect\b/)
   })
 })
 

@@ -26,9 +26,10 @@ it('ships install metadata with the built web application', async () => {
   })
 })
 
-it('ships a favicon that paints the mascot in brand inks on a charcoal tile', async () => {
+it('ships a favicon that paints the mascot in brand inks without a tile background', async () => {
   const favicon = await readFile(join(DIST_ROOT, 'favicon.svg'), 'utf8')
-  expect(favicon).toContain('fill="#2C2C34"')
+  expect(favicon).not.toContain('fill="#2C2C34"')
+  expect(favicon).not.toMatch(/<rect\b/)
   expect(favicon).toContain('stroke="#4F8CFF"')
   expect(favicon).toContain('fill="#7DDB6A"')
   expect(favicon).toContain('fill="#F4EFE6"')

@@ -9,6 +9,10 @@
   flex-direction: column;
   min-height: 0;
   flex: 1 1 auto;
+  /* Size container for the waypoint rail: overlay vs gutter is a function of
+     this column, not the window (a squeezed center on a wide desktop is
+     still a narrow conversation). */
+  container-type: inline-size;
 }
 
 .scroll {
@@ -211,154 +215,111 @@
   pointer-events: none;
 }
 
-/* Sticky jump index. The right edge stays 28px left of the message column
-   (translateX -100% from that anchor) so titles grow into the gutter, not
-   into the transcript. Dots only until hover, focus-within, or click-pin. */
+/* Viewport-height minimap. Ticks pack into this box so a long session never
+   grows a native list scrollbar; titles live in `.railPreview`. The right
+   edge stays 28px left of the message column on a wide gutter. */
 .rail {
   position: sticky;
   top: 16px;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  width: max-content;
-  max-width: 168px;
-  max-height: calc(100dvh - var(--dsh-composer-height, 152px) - 72px);
-  margin-left: max(28px, calc(50% - var(--dsh-chat-content-width) / 2 - 28px));
+  display: block;
+  width: 16px;
+  height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
+  margin-left: max(12px, calc(50% - min(var(--dsh-chat-content-width), 100%) / 2 - 28px));
   transform: translateX(-100%);
-  overflow-y: auto;
+  overflow: visible;
   pointer-events: none;
 }
 
-/* Only the pinned rail receives background clicks (its own toggle target); a
-   collapsed rail must stay transparent so the gutter under it stays usable. */
-.rail[data-expanded] {
-  pointer-events: auto;
+.railTrack {
+  position: relative;
+  height: 100%;
+  width: 16px;
 }
 
-.railClose {
+.railTick {
   pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
+  position: absolute;
+  left: 4px;
+  width: 10px;
+  height: 2px;
   margin: 0;
   padding: 0;
   border: none;
-  background: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
-}
-
-.railClose:hover {
-  color: var(--dsw-alias-label-primary);
-}
-
-.railMilestone,
-.railUser {
-  pointer-events: auto;
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  gap: 0;
-  min-width: 0;
-  margin: 0;
-  padding: 2px 0;
-  border: none;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  text-align: right;
-}
-
-.rail:hover .railMilestone,
-.rail:focus-within .railMilestone,
-.rail[data-expanded] .railMilestone,
-.rail[data-expanded] .railUser {
-  gap: 8px;
-}
-
-.railUser {
-  width: 12px;
-}
-
-.rail[data-expanded] .railUser {
-  width: auto;
-  max-width: 100%;
-}
-
-.railDot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 100px;
+  border-radius: 1px;
   background: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transform: translateY(-50%);
 }
 
-.railDot[data-kind='milestone'] {
-  width: 10px;
-  height: 10px;
+.railTick[data-kind='milestone'] {
+  left: 2px;
+  width: 14px;
+  height: 3px;
   background: var(--dsw-alias-state-business-primary);
 }
 
-.railLabel {
-  min-width: 0;
-  max-width: 0;
-  overflow: hidden;
-  opacity: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.railTick[data-active] {
+  left: 6px;
+  width: 2px;
+  height: 12px;
+  background: var(--dsw-alias-label-primary);
+}
+
+.railTick[data-kind='milestone'][data-active] {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.railPreview {
+  pointer-events: auto;
+  position: absolute;
+  left: 22px;
+  z-index: 3;
+  width: max-content;
+  max-width: min(240px, calc(100cqi - 40px));
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-floating-fill);
+  box-shadow: var(--dsw-shadow-lv2);
+  transform: translateY(-50%);
+}
+
+.railPreviewTitle {
+  font: var(--dsw-font-s-strong-14);
+  color: var(--dsw-alias-label-primary);
+}
+
+.railPreviewBody {
+  margin-top: 6px;
   font: var(--dsw-font-xs-13);
   color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
-/* Hover/focus reveals milestone titles only; a pinned rail reveals every
-   waypoint, including user first-lines that stay dots until then. */
-.rail:hover .railMilestone .railLabel,
-.rail:focus-within .railMilestone .railLabel,
-.rail[data-expanded] .railLabel {
-  max-width: 148px;
-  opacity: 1;
-}
-
-/* Narrow viewports have no leftover gutter. The index sits in the left
-   padding, titles grow into the transcript, and the pinned rail keeps
-   position:sticky so the overlay stays in the scrollport. Switching that
-   overlay to absolute would pin it to the transcript start and scroll away. */
-@media (max-width: 720px) {
+/* Narrow conversation column: no leftover gutter. Ticks sit in the left
+   padding and the preview overlays the transcript. Keep position:sticky so
+   the minimap stays in the scrollport — absolute would pin it to the
+   transcript start and scroll away. */
+@container (max-width: 840px) {
   .rail {
     margin-left: 8px;
     transform: none;
-    align-items: flex-start;
   }
 
-  .railMilestone,
-  .railUser {
-    flex-direction: row;
-    text-align: left;
+  .railPreview {
+    left: 20px;
+    max-width: min(240px, calc(100cqi - 32px));
+  }
+}
+
+@media (max-width: 480px) {
+  .rail {
+    height: calc(100dvh - var(--dsh-composer-height, 152px) - 72px);
   }
 
-  .rail:hover,
-  .rail:focus-within,
-  .rail[data-expanded] {
-    width: min(168px, calc(100vw - 16px));
-    max-width: calc(100vw - 16px);
-    padding: 8px;
-    border: 1px solid var(--dsw-alias-border-l2);
-    border-radius: 8px;
-    background: var(--dsw-alias-button-floating-fill);
-    box-shadow: var(--dsw-shadow-lv2);
-  }
-
-  .rail[data-expanded] .railMilestone,
-  .rail[data-expanded] .railUser {
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .rail[data-expanded] .railLabel {
-    max-width: calc(100% - 18px);
+  .railPreview {
+    max-width: min(220px, calc(100vw - 40px));
   }
 }

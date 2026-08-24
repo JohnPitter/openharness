@@ -179,11 +179,12 @@ go vet ./...  # lint
   do pai: a delegação falha e o composer bloqueia até haver trabalhador. Trocar
   o preset recompõe a sessão e compacta antes do próximo prompt comum.
 - **Marcos:** o modelo que fecha o trabalho grava `milestone_write` (título +
-  corpo). O transcript não é índice: o trilho à esquerda salta para o chip;
-  compactação preserva os títulos. No Workflow o trabalhador escreve; o
-  planejador não vê a tool. Em telas de até 720px, o trilho fixado permanece
-  sticky e cobre o texto a partir da margem esquerda; recolhido, mantém ocupação
-  zero.
+  corpo). O transcript não é índice: o trilho à esquerda é um minimapa de
+  ticks que salta para o chip; compactação preserva os títulos. Clique ou
+  hover abre o preview daquele marco; clicar fora (ou Escape) volta aos ticks,
+  sem botão X. No Workflow o trabalhador escreve; o planejador não vê a tool.
+  Em coluna estreita o preview cobre o texto a partir da margem esquerda;
+  recolhido, o trilho mantém ocupação zero.
 - **Custo por rota:** coding plans (Kimi, Claude Code, Codex, GLM, OpenCode)
   cobram por request; DeepSeek e plataformas pay-per-token cobram por token.
   Em rota de request o harness não dispara título-LLM nem compact-LLM por

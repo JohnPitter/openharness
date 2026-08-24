@@ -319,6 +319,23 @@
   gap: 16px;
 }
 
+@container (max-width: 560px) {
+  .row {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .tools,
+  .modes {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .select {
+    max-width: min(220px, 100%);
+  }
+}
+
 .modes {
   flex: 1 1 auto;
   gap: 12px;

@@ -8,7 +8,8 @@
 // column), that host is the scrollport and this view is flow content; when
 // mounted alone (unit tests), `.scroll` owns overflow. Bottom-follow and
 // prepend anchoring always target the resolved scrollport. The waypoint rail
-// is a full-flow overlay so it can stick in that scrollport.
+// is a full-flow overlay so its viewport-height tick minimap can stick in
+// that scrollport.
 //
 // Render economics: order changes only when rows enter, leave or move. Each
 // ChatNodeSeat subscribes to one Node key, so Assistant deltas and Tool

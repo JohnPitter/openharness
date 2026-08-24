@@ -10,7 +10,7 @@ The in-app mark was a currentColor open ring with two node dots, and `BrandWordm
 
 ## Decision
 
-**The product mark is a cream-headed mascot sitting in the blue open-ring harness with mint node clasps.** `FishLogo` paints that character in fixed brand inks (`#4F8CFF`, `#7DDB6A`, `#F4EFE6`) inside a 24×24 box. `BrandWordmark` is that same mascot; `includeMark={false}` is an empty 24 box so `sidebar.brand.name` can sit beside the slotted mark. `apps/web/public/favicon.svg` draws the same glyph on a charcoal rounded tile (`#2C2C34`) so the tab icon stays visible on light and dark browser chrome without a color-scheme invert.
+**The product mark is a cream-headed mascot sitting in the blue open-ring harness with mint node clasps.** `FishLogo` paints that character in fixed brand inks (`#4F8CFF`, `#7DDB6A`, `#F4EFE6`) inside a 24×24 box with no tile fill. `BrandWordmark` is that same mascot; `includeMark={false}` is an empty 24 box so `sidebar.brand.name` can sit beside the slotted mark. `apps/web/public/favicon.svg` and the desktop `logo.svg` draw the same glyph on a transparent canvas; tab contrast on light chrome comes from the blue ring and mint nodes, not a charcoal plate.
 
 ## Alternatives considered
 
@@ -22,4 +22,4 @@ The in-app mark was a currentColor open ring with two node dots, and `BrandWordm
 
 ## Consequences
 
-Sidebar, hero, and favicon share one mascot geometry. The desktop `logo.png` / `appicon.png` keep the shaded 3D tile of the same character. Light-theme contrast of the cream head relies on the blue ring and mint nodes rather than a currentColor fill.
+Sidebar, hero, favicon, and the desktop window mark share one mascot geometry on a transparent canvas. Light-theme contrast of the cream head relies on the blue ring and mint nodes rather than a currentColor fill or a charcoal tile.

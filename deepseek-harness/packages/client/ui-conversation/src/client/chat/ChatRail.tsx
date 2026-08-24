@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
@@ -16,6 +15,7 @@ interface Waypoint {
   readonly key: string
   readonly kind: 'milestone' | 'user'
   readonly title: string
+  readonly body: string
 }
 
 function firstLine(node: ChatNode<'user'>): string {
@@ -27,30 +27,42 @@ function firstLine(node: ChatNode<'user'>): string {
   return line.length > 80 ? `${line.slice(0, 79)}…` : line
 }
 
+function clipBody(text: string): string {
+  const line = text.trim()
+  return line.length > 280 ? `${line.slice(0, 279)}…` : line
+}
+
+function tickOffset(index: number, count: number): string {
+  if (count <= 1) return '0%'
+  return `${(index / (count - 1)) * 100}%`
+}
+
 /**
- * Sticky jump index: dots by default; milestone titles appear on hover,
- * keyboard focus, or click. A waypoint click pins every title open, including
- * user first-lines that stay dots until then. The pinned rail closes through
- * its close button, Escape, a pointer down outside it, or a click on its own
- * background (pointer events only reach the rail while pinned, so a collapsed
- * rail never blocks the transcript gutter). ChatView mounts this in a full-flow
- * overlay so it can stick in the conversation scrollport. On viewports 720px
- * or narrower the pinned rail overlays the transcript from the left padding
- * and stays sticky — it does not switch to absolute positioning.
+ * Viewport-height jump index: a virtual minimap of ticks, not a growing list.
+ * Titles live in a floating preview for the hovered or pinned waypoint; a
+ * click jumps and pins that preview, and Escape or a pointer down outside
+ * the rail returns to ticks. ChatView mounts this in a full-flow overlay so
+ * it can stick in the conversation scrollport. Narrow columns overlay the
+ * preview on the transcript from the left padding — the track stays sticky
+ * and never switches to absolute positioning.
  * @param props - ordered Chat keys, node map, locale, and jump handler.
  * @returns the rail, or null when the session has no waypoints.
  */
 export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [pinnedKey, setPinnedKey] = useState<string | null>(null)
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const navRef = useRef<HTMLElement | null>(null)
+  const previewDomId = `dsh-rail-preview-${useId().replace(/:/g, '')}`
+  const previewKey = pinnedKey ?? hoveredKey
+
   useEffect(() => {
-    if (!expanded) return
+    if (pinnedKey === null) return
     const onPointerDown = (event: PointerEvent): void => {
       if (event.target instanceof Node && navRef.current?.contains(event.target)) return
-      setExpanded(false)
+      setPinnedKey(null)
     }
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setExpanded(false)
+      if (event.key === 'Escape') setPinnedKey(null)
     }
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
@@ -58,66 +70,77 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [expanded])
+  }, [pinnedKey])
+
   const waypoints = useMemo(() => {
     const items: Waypoint[] = []
     for (const key of order) {
       const node = nodes.get(key)
       if (node === undefined) continue
       if (node.kind === 'milestone') {
-        items.push({ key, kind: 'milestone', title: (node as ChatNode<'milestone'>).data.title })
+        const data = (node as ChatNode<'milestone'>).data
+        items.push({ key, kind: 'milestone', title: data.title, body: clipBody(data.body) })
       } else if (node.kind === 'user') {
         const title = firstLine(node as ChatNode<'user'>)
-        if (title.length > 0) items.push({ key, kind: 'user', title })
+        if (title.length > 0) items.push({ key, kind: 'user', title, body: '' })
       }
     }
     return items
   }, [order, nodes])
 
   if (waypoints.length === 0) return null
+  const preview = previewKey === null
+    ? undefined
+    : waypoints.find(item => item.key === previewKey)
+  const previewIndex = preview === undefined
+    ? -1
+    : waypoints.findIndex(item => item.key === preview.key)
+
   return (
     <nav
       ref={navRef}
       className={css.rail}
-      data-expanded={expanded ? '' : undefined}
+      data-pinned={pinnedKey !== null ? '' : undefined}
       aria-label={t('rail.aria')}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) setExpanded(open => !open)
-      }}
+      onPointerLeave={() => { setHoveredKey(null) }}
     >
-      {expanded && (
-        <button
-          type="button"
-          className={css.railClose}
-          aria-label={t('rail.close')}
-          title={t('rail.close')}
-          onClick={() => { setExpanded(false) }}
+      <div className={css.railTrack} data-virtual-count={waypoints.length}>
+        {waypoints.map((item, index) => (
+          <button
+            key={item.key}
+            type="button"
+            className={css.railTick}
+            style={{ top: tickOffset(index, waypoints.length) }}
+            data-kind={item.kind}
+            data-active={previewKey === item.key ? '' : undefined}
+            aria-label={item.kind === 'milestone'
+              ? t('rail.milestone', { title: item.title })
+              : t('rail.user', { title: item.title })}
+            aria-expanded={pinnedKey === item.key ? true : undefined}
+            aria-controls={previewKey === item.key ? previewDomId : undefined}
+            onPointerEnter={event => {
+              if (event.pointerType === 'mouse') setHoveredKey(item.key)
+            }}
+            onClick={() => {
+              setPinnedKey(item.key)
+              onJump(item.key)
+            }}
+          />
+        ))}
+      </div>
+      {preview !== undefined && (
+        <div
+          id={previewDomId}
+          className={css.railPreview}
+          style={{ top: tickOffset(Math.max(0, previewIndex), waypoints.length) }}
+          data-kind={preview.kind}
         >
-          <IconCloseOutline16 size={12} />
-        </button>
-      )}
-      {waypoints.map(item => (
-        <button
-          key={item.key}
-          type="button"
-          className={item.kind === 'milestone' ? css.railMilestone : css.railUser}
-          aria-label={item.kind === 'milestone'
-            ? t('rail.milestone', { title: item.title })
-            : t('rail.user', { title: item.title })}
-          title={item.kind === 'milestone'
-            ? t('rail.milestone', { title: item.title })
-            : t('rail.user', { title: item.title })}
-          onClick={() => {
-            setExpanded(true)
-            onJump(item.key)
-          }}
-        >
-          <span className={css.railDot} data-kind={item.kind} aria-hidden />
-          {(item.kind === 'milestone' || expanded) && (
-            <span className={css.railLabel}>{item.title}</span>
+          <div className={css.railPreviewTitle}>{preview.title}</div>
+          {preview.body !== '' && (
+            <div className={css.railPreviewBody}>{preview.body}</div>
           )}
-        </button>
-      ))}
+        </div>
+      )}
     </nav>
   )
 }

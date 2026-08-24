@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// ChatRail waypoints: dots by default; a click pins titles open. User marks
-// stay dots until pinned, when their first line joins the milestone titles.
+// ChatRail waypoints: ticks in a viewport-height minimap. A click jumps and
+// pins a floating preview; titles stay out of the track until then.
 
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -27,11 +27,11 @@ function userNode(key: string, content: readonly unknown[]): ChatNode {
   } as ChatNode
 }
 
-function milestoneNode(key: string, title: string): ChatNode {
+function milestoneNode(key: string, title: string, body = 'the fact'): ChatNode {
   return {
     key, kind: 'milestone', id: key, target: 'chat', anchorSeq: 2,
     location: { kind: 'session' }, visibility: 'visible',
-    data: { seq: 2, time: 2, title, body: 'the fact', origin: 'session' },
+    data: { seq: 2, time: 2, title, body, origin: 'session' },
   }
 }
 
@@ -41,7 +41,7 @@ describe('ChatRail', () => {
     expect(view.queryByRole('navigation')).toBeNull()
   })
 
-  it('jumps recorded milestones and weaker user marks; user first-lines appear only once pinned', () => {
+  it('keeps titles out of the minimap until a waypoint is pinned', () => {
     const onJump = vi.fn<(key: string) => void>()
     const long = `${'a'.repeat(80)}z`
     const nodes = store([
@@ -61,14 +61,17 @@ describe('ChatRail', () => {
       />,
     )
     const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
-    expect(nav.getAttribute('data-expanded')).toBeNull()
+    expect(nav.getAttribute('data-pinned')).toBeNull()
     expect(view.queryByText('do the thing')).toBeNull()
-    expect(view.getByText('Found the leak')).toBeTruthy()
+    expect(view.queryByText('Found the leak')).toBeNull()
+    expect(nav.querySelector('[data-virtual-count]')?.getAttribute('data-virtual-count')).toBe('3')
     fireEvent.click(view.getByRole('button', { name: '消息：do the thing' }))
     expect(view.getByText('do the thing')).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: `消息：${'a'.repeat(79)}…` }))
     fireEvent.click(view.getByRole('button', { name: '里程碑：Found the leak' }))
-    expect(nav.getAttribute('data-expanded')).toBe('')
+    expect(nav.getAttribute('data-pinned')).toBe('')
+    expect(view.getByText('Found the leak')).toBeTruthy()
+    expect(view.getByText('the fact')).toBeTruthy()
     expect(onJump.mock.calls.map(call => call[0])).toEqual(['u1', 'u-long', 'm1'])
   })
 
@@ -83,35 +86,49 @@ describe('ChatRail', () => {
     )
     fireEvent.click(view.getByRole('button', { name: '里程碑：Found the leak' }))
     const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
-    expect(nav.getAttribute('data-expanded')).toBe('')
+    expect(nav.getAttribute('data-pinned')).toBe('')
     return { view, nav }
   }
 
-  it('closes the pinned rail through its close button', () => {
-    const { view, nav } = pinnedRail()
-    fireEvent.click(view.getByRole('button', { name: zh['rail.close'] }))
-    expect(nav.getAttribute('data-expanded')).toBeNull()
-    expect(view.queryByRole('button', { name: zh['rail.close'] })).toBeNull()
+  it('does not render a close control on the pinned preview', () => {
+    const { view } = pinnedRail()
+    expect(view.container.querySelector('button[class*="railClose"]')).toBeNull()
+    expect(view.getAllByRole('button')).toHaveLength(2)
   })
 
-  it('closes the pinned rail on Escape and on a pointer down outside it', () => {
+  it('closes the pinned preview on Escape and on a pointer down outside it', () => {
     const first = pinnedRail()
     fireEvent.keyDown(document, { key: 'Escape' })
-    expect(first.nav.getAttribute('data-expanded')).toBeNull()
+    expect(first.nav.getAttribute('data-pinned')).toBeNull()
+    expect(first.view.queryByText('Found the leak')).toBeNull()
     first.view.unmount()
 
     const again = pinnedRail()
     fireEvent.pointerDown(document.body)
-    expect(again.nav.getAttribute('data-expanded')).toBeNull()
+    expect(again.nav.getAttribute('data-pinned')).toBeNull()
   })
 
-  it('keeps the pinned rail open on a pointer down inside it and toggles on background click', () => {
+  it('keeps the pinned preview open on a pointer down inside it', () => {
     const { view, nav } = pinnedRail()
     fireEvent.pointerDown(view.getByRole('button', { name: '里程碑：Found the leak' }))
-    expect(nav.getAttribute('data-expanded')).toBe('')
-    fireEvent.click(nav)
-    expect(nav.getAttribute('data-expanded')).toBeNull()
-    fireEvent.click(nav)
-    expect(nav.getAttribute('data-expanded')).toBe('')
+    expect(nav.getAttribute('data-pinned')).toBe('')
+    expect(view.getByText('Found the leak')).toBeTruthy()
+  })
+
+  it('packs many waypoints into one viewport-height track without listing titles', () => {
+    const entries = Array.from({ length: 40 }, (_, index) => milestoneNode(`m${index}`, `Mile ${index}`))
+    const view = render(
+      <ChatRail
+        order={entries.map(entry => entry.key)}
+        nodes={store(entries)}
+        t={t}
+        onJump={() => {}}
+      />,
+    )
+    const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
+    expect(nav.querySelector('[data-virtual-count]')?.getAttribute('data-virtual-count')).toBe('40')
+    expect(view.getAllByRole('button')).toHaveLength(40)
+    expect(view.queryByText('Mile 0')).toBeNull()
+    expect(view.queryByText('Mile 39')).toBeNull()
   })
 })
