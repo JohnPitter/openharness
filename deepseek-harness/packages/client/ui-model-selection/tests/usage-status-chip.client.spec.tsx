@@ -6,6 +6,7 @@ import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { AccountUsageView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
+import type { WorkerModelState } from '../src/client/worker-store.ts'
 import type { UsageStatusChipProps } from '../src/client/UsageStatusChip.tsx'
 import { UsageStatusChip } from '../src/client/UsageStatusChip.tsx'
 import { en } from '../src/client/locales.ts'
@@ -73,11 +74,18 @@ function mount(options: {
   list?: SessionListState
   directory?: ModelDirectoryState
   quota?: AccountUsageView
+  quotaByProvider?: Record<string, AccountUsageView>
+  worker?: WorkerModelState
+  loadAccountUsage?: (provider: string) => Promise<AccountUsageView>
 } = {}) {
   const ensureDirectory = vi.fn()
   const openModels = vi.fn()
   const openUsages = vi.fn()
-  const loadAccountUsage = vi.fn(() => Promise.resolve(options.quota ?? { supported: false }))
+  const loadAccountUsage = options.loadAccountUsage === undefined
+    ? vi.fn((provider: string) => Promise.resolve(
+      options.quotaByProvider?.[provider] ?? options.quota ?? { supported: false },
+    ))
+    : vi.fn(options.loadAccountUsage)
   const list = options.list ?? listState()
   const dir = options.directory ?? directory()
   const unused = (() => { throw new Error('unused') }) as never
@@ -88,6 +96,12 @@ function mount(options: {
     directory: {
       getSnapshot: () => dir,
       subscribe: () => () => {},
+    },
+    ...options.worker === undefined ? {} : {
+      workerDirectory: {
+        getSnapshot: () => options.worker!,
+        subscribe: () => () => {},
+      },
     },
     ensureDirectory,
     openModels,
@@ -255,5 +269,123 @@ describe('UsageStatusChip', () => {
       expect(screen.queryByText(en['usage.quotaLoading'])).toBeNull()
     })
     expect(screen.queryByText(en['usage.quota'])).toBeNull()
+  })
+
+  it('adds the Workflow worker route and its own account quota below the planner quota', async () => {
+    const { loadAccountUsage } = mount({
+      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } }),
+      directory: directory({
+        groups: [
+          {
+            id: 'kimi-for-coding',
+            name: 'Kimi for Code',
+            models: [{ id: 'k3-256k', name: 'K3-256k', contextWindow: 262_144 }],
+          },
+          {
+            id: 'claude-code',
+            name: 'Claude Code',
+            models: [{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 5', contextWindow: 1_000_000 }],
+          },
+        ],
+      }),
+      worker: { current: { provider: 'claude-code', model: 'claude-sonnet-4-5' }, status: 'ready', error: null },
+      quotaByProvider: {
+        'kimi-for-coding': {
+          supported: true,
+          plan: 'Moderato',
+          windows: [{ id: 'weekly', used: 214, limit: 2048, percent: 10 }],
+        },
+        'claude-code': {
+          supported: true,
+          plan: 'Pro',
+          windows: [{ id: 'weekly', used: 5, limit: 40, percent: 12 }],
+        },
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    expect(screen.getByText(en['role.worker'])).toBeTruthy()
+    expect(screen.getByText('Claude Sonnet 5')).toBeTruthy()
+    await waitFor(() => {
+      expect(loadAccountUsage).toHaveBeenCalledWith('claude-code')
+    })
+    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding')
+    await waitFor(() => {
+      expect(screen.getByText('Moderato')).toBeTruthy()
+      expect(screen.getByText('Pro')).toBeTruthy()
+    })
+    expect(screen.getByText('214 / 2048')).toBeTruthy()
+    expect(screen.getByText('5 / 40')).toBeTruthy()
+  })
+
+  it('reuses the planner account quota for the worker when both share a provider', async () => {
+    const { loadAccountUsage } = mount({
+      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } }),
+      worker: { current: { provider: 'kimi-for-coding', model: 'k3-256k' }, status: 'ready', error: null },
+      quota: {
+        supported: true,
+        plan: 'Moderato',
+        windows: [{ id: 'weekly', used: 214, limit: 2048, percent: 10 }],
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    await waitFor(() => {
+      expect(screen.getAllByText('Moderato')).toHaveLength(2)
+    })
+    expect(loadAccountUsage).toHaveBeenCalledTimes(1)
+  })
+
+  it('omits the worker section outside Workflow mode even with a worker chip selected', () => {
+    mount({
+      worker: { current: { provider: 'claude-code', model: 'claude-sonnet-4-5' }, status: 'ready', error: null },
+    })
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    expect(screen.queryByText(en['role.worker'])).toBeNull()
+  })
+
+  it('surfaces a rejected worker account-quota load as an error row', async () => {
+    const ensureDirectory = vi.fn()
+    const openModels = vi.fn()
+    const openUsages = vi.fn()
+    const loadAccountUsage = vi.fn((provider: string) => provider === 'claude-code'
+      ? Promise.reject(new Error('rate limited'))
+      : Promise.resolve({ supported: false } satisfies AccountUsageView))
+    const list = listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } })
+    const dir = directory()
+    const worker: WorkerModelState = {
+      current: { provider: 'claude-code', model: 'claude-sonnet-4-5' }, status: 'ready', error: null,
+    }
+    const props: UsageStatusChipProps = {
+      wide: true,
+      useSessions: select => select(list),
+      useWorkspaces: () => { throw new Error('unused') },
+      directory: { getSnapshot: () => dir, subscribe: () => () => {} },
+      workerDirectory: { getSnapshot: () => worker, subscribe: () => () => {} },
+      ensureDirectory,
+      openModels,
+      openUsages,
+      loadAccountUsage,
+      t: interpolate as UsageStatusChipProps['t'],
+    }
+    render(<UsageStatusChip {...props} />)
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    await waitFor(() => {
+      expect(screen.getByText('rate limited')).toBeTruthy()
+    })
+  })
+
+  it('stringifies a non-Error worker account-quota rejection', async () => {
+    const loadAccountUsage = vi.fn((provider: string) => provider === 'claude-code'
+      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error rejection is the case under test
+      ? Promise.reject('quota endpoint gone')
+      : Promise.resolve({ supported: false } satisfies AccountUsageView))
+    mount({
+      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } }),
+      worker: { current: { provider: 'claude-code', model: 'claude-sonnet-4-5' }, status: 'ready', error: null },
+      loadAccountUsage,
+    })
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    await waitFor(() => {
+      expect(screen.getByText('quota endpoint gone')).toBeTruthy()
+    })
   })
 })

@@ -60,9 +60,10 @@ export function ModelSelect(props: SeatProps) {
   const preset = props.useSessions?.(s => (
     props.sessionId === undefined ? undefined : s.byId[props.sessionId]?.agentPreset
   ))
+  const workerDirectory = props.worker?.directory
   const workerState = useSyncExternalStore(
-    props.worker === undefined ? () => () => {} : fn => props.worker!.directory.subscribe(fn),
-    () => props.worker?.directory.getSnapshot() ?? IDLE_WORKER,
+    workerDirectory === undefined ? () => () => {} : fn => workerDirectory.subscribe(fn),
+    () => workerDirectory?.getSnapshot() ?? IDLE_WORKER,
   )
   useEffect(() => {
     if (preset === 'workflow') props.worker?.load()

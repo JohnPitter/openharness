@@ -12,11 +12,11 @@ transcript（文本记录）是按时间排列的日志，不是索引。长会�
 
 关闭工作的模型通过 `@deepseek-ai/dsh-tool-milestone` 的 `milestone_write({ title, body, anchorSeq? })` 写入事实。每次调用追加一条 `milestone/write` 事件（带品牌的 `MilestoneId`，只追加）。委派 child 的活动父会话收到带 `origin: 'worker'` 和 `childSessionId` 的镜像；缺少父会话不会让 child 写入失败。
 
-Workflow 通过 `WORKFLOW_ORCHESTRATOR_WORK_TOOLS` 对编排者隐藏 `milestone_write`，并要求工人在关闭工作的同一工具步骤里写入。Standard 和 Code 会话使用该会话模型。[编排者工具 note](../../architecture/2026-08-22-workflow-orchestrator-thinks-workers-execute.zh.md) 仍拥有隐藏工作工具的决策；本 note 拥有为何由工人写索引。
+Workflow 通过 `WORKFLOW_ORCHESTRATOR_WORK_TOOLS` 对编排者隐藏 `milestone_write`，并要求工人在关闭工作的同一工具步骤里写入。Standard 和 Code 会话使用该会话模型。[编排者工具 note](../../architecture/2026-08-22-workflow-orchestrator-thinks-workers-execute.md) 仍拥有隐藏工作工具的决策；本 note 拥有为何由工人写索引。
 
 模型可见的索引是只含标题的运行时上下文快照 `milestone:index`（`ctx.systemPrompt.context`，order 125）。折叠标题变化时该通道才改写。compaction-basic 把这些标题追加到 Critical Context 下，使检查点保留索引。
 
-会话 UI 把 `milestone/write` 折成 `milestone` Chat Node（折叠 chip，可展开正文），左侧轨列出里程碑标题和用户消息航点，并通过 `[data-chat-anchor-key]` 跳转。该轨放在铺满流程的 overlay 里并对齐会话滚动口；默认只显示圆点，悬停、键盘焦点或点击后才露出标题。
+会话 UI 把 `milestone/write` 折成 `milestone` Chat Node（折叠 chip，可展开正文），左侧轨列出里程碑标题和用户消息航点，并通过 `[data-chat-anchor-key]` 跳转。该轨放在铺满流程的 overlay 里并对齐会话滚动口；默认只显示圆点，悬停、键盘焦点或点击后才露出标题。点击航点会把标题固定展开；固定后可通过关闭按钮、Escape、在外部按下指针，或点击路轨自身背景收起（只有固定展开的路轨才接收背景指针事件，折叠的路轨不会遮挡正文侧沟）。
 
 ## 曾考虑的替代方案
 

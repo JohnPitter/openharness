@@ -452,6 +452,8 @@ describe('ChatView', () => {
 
   it('jumps a rail waypoint to its transcript row', () => {
     const scrollIntoView = vi.fn()
+    // jsdom lacks scrollIntoView, so the original is captured and restored by assignment, not spied.
+    // oxlint-disable-next-line typescript/unbound-method
     const original = HTMLElement.prototype.scrollIntoView
     HTMLElement.prototype.scrollIntoView = scrollIntoView
     const h = makeHarness({ nodes: [user(1, 'do the thing')] })

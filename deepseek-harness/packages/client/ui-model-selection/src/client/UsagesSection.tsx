@@ -138,7 +138,7 @@ export function UsagesSection(props: UsagesSectionProps): ReactNode {
         <p className={css.hint}>{t('usages.empty')}</p>
       ) : (
         <ul className={css.cards}>
-          {rows.map((row) => (
+          {rows.map(row => (
             <li key={row.provider} className={css.card}>
               <div className={css.cardHead}>
                 <span className={css.providerName}>{row.displayName}</span>

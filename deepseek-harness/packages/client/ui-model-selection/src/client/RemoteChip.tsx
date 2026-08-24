@@ -65,8 +65,8 @@ export function RemoteChip(props: RemoteChipProps): ReactNode {
 
   useEffect(() => {
     const onMessage = (event: MessageEvent): void => {
-      if (event.data?.type !== 'openharness:remote-ready') return
-      const payload = event.data as { url?: string; qrDataUrl?: string; error?: string }
+      const payload = event.data as { type?: unknown; url?: string; qrDataUrl?: string; error?: string } | undefined
+      if (payload?.type !== 'openharness:remote-ready') return
       setRemote({
         ...payload.url !== undefined ? { url: payload.url } : {},
         ...payload.qrDataUrl !== undefined ? { qrDataUrl: payload.qrDataUrl } : {},

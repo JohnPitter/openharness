@@ -234,6 +234,7 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: (): UsageStatusChipInjected => ({
         directory,
+        ...worker === undefined ? {} : { workerDirectory: worker.store },
         ensureDirectory: (sessionId) => {
           if (sessions.subagentAddress(sessionId) !== undefined) return
           models.directoryFor(sessionId).load().catch(() => { /* surfaced on the store */ })

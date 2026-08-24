@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
@@ -20,9 +21,7 @@ interface Waypoint {
 function firstLine(node: ChatNode<'user'>): string {
   const texts: string[] = []
   for (const block of node.data.content) {
-    if (typeof block === 'object' && block !== null && 'type' in block && block.type === 'text' && 'text' in block) {
-      texts.push(String(block.text))
-    }
+    if (block.type === 'text') texts.push(block.text)
   }
   const line = texts.join('\n').trim().split('\n')[0] ?? ''
   return line.length > 80 ? `${line.slice(0, 79)}…` : line
@@ -30,12 +29,33 @@ function firstLine(node: ChatNode<'user'>): string {
 
 /**
  * Sticky jump index: dots by default; titles appear on hover, keyboard focus, or click.
- * ChatView mounts this in a full-flow overlay so it can stick in the conversation scrollport.
+ * A waypoint click pins the titles open; the pinned rail closes through its close
+ * button, Escape, a pointer down outside it, or a click on its own background
+ * (pointer events only reach the rail while pinned, so a collapsed rail never
+ * blocks the transcript gutter). ChatView mounts this in a full-flow overlay so
+ * it can stick in the conversation scrollport.
  * @param props - ordered Chat keys, node map, locale, and jump handler.
  * @returns the rail, or null when the session has no waypoints.
  */
 export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
   const [expanded, setExpanded] = useState(false)
+  const navRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!expanded) return
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.target instanceof Node && navRef.current?.contains(event.target)) return
+      setExpanded(false)
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setExpanded(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [expanded])
   const waypoints = useMemo(() => {
     const items: Waypoint[] = []
     for (const key of order) {
@@ -54,13 +74,25 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
   if (waypoints.length === 0) return null
   return (
     <nav
+      ref={navRef}
       className={css.rail}
       data-expanded={expanded ? '' : undefined}
       aria-label={t('rail.aria')}
-      onClick={event => {
+      onClick={(event) => {
         if (event.target === event.currentTarget) setExpanded(open => !open)
       }}
     >
+      {expanded && (
+        <button
+          type="button"
+          className={css.railClose}
+          aria-label={t('rail.close')}
+          title={t('rail.close')}
+          onClick={() => { setExpanded(false) }}
+        >
+          <IconCloseOutline16 size={12} />
+        </button>
+      )}
       {waypoints.map(item => (
         <button
           key={item.key}

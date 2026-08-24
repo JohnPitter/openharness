@@ -231,6 +231,31 @@
   pointer-events: none;
 }
 
+/* Only the pinned rail receives background clicks (its own toggle target); a
+   collapsed rail must stay transparent so the gutter under it stays usable. */
+.rail[data-expanded] {
+  pointer-events: auto;
+}
+
+.railClose {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.railClose:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
 .railMilestone,
 .railUser {
   pointer-events: auto;

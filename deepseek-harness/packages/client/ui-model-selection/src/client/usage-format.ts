@@ -50,16 +50,26 @@ export interface UsageRouteLabel {
   model: string
 }
 
+/**
+ * Provider/model labels for a definite provider/model pair, resolved
+ * against a directory's loaded catalog (falling back to raw ids for a
+ * selection the catalog hasn't loaded, e.g. a Workflow worker chip).
+ */
+export function routeLabelFor(
+  directory: ModelDirectoryState,
+  selection: { provider: string; model: string },
+): UsageRouteLabel {
+  const group = directory.groups.find(entry => entry.id === selection.provider)
+  const model = group?.models.find(entry => entry.id === selection.model)
+  return {
+    provider: group?.name ?? selection.provider,
+    model: model?.name ?? selection.model,
+  }
+}
+
 /** Provider/model labels from the advisory directory, falling back to ids. */
 export function routeLabelOf(directory: ModelDirectoryState): UsageRouteLabel | undefined {
-  const current = directory.current
-  if (current === null) return undefined
-  const group = directory.groups.find(entry => entry.id === current.provider)
-  const model = group?.models.find(entry => entry.id === current.model)
-  return {
-    provider: group?.name ?? current.provider,
-    model: model?.name ?? current.model,
-  }
+  return directory.current === null ? undefined : routeLabelFor(directory, directory.current)
 }
 
 /** Advertised context capacity of the staged model, when the catalog disclosed it. */

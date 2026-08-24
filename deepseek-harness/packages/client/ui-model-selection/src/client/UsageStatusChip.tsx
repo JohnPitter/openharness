@@ -15,17 +15,22 @@ import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type { ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 import type { AccountUsageView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { UsageStatusChipInjected } from './usage-slots.ts'
+import type { WorkerModelState } from './worker-store.ts'
 import {
   billedInputTokens,
   cacheHitPercent,
   contextOccupancy,
   currentModelContextWindow,
   formatTokens,
+  routeLabelFor,
   routeLabelOf,
   sessionTokens,
 } from './usage-format.ts'
 import { MeterBar, QuotaBody } from './usage-quota.tsx'
 import css from './UsageStatusChip.module.css'
+
+/** Idle snapshot used before the worker store's first load and outside Workflow mode. */
+const IDLE_WORKER: WorkerModelState = { current: null, status: 'idle', error: null }
 
 export type UsageStatusChipProps =
   PropsRuntime<'sidebar.footer.action'>
@@ -104,7 +109,9 @@ function QuotaSection({
  * @returns the footer action.
  */
 export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
-  const { wide, useSessions, directory, ensureDirectory, openModels, openUsages, loadAccountUsage, t } = props
+  const {
+    wide, useSessions, directory, workerDirectory, ensureDirectory, openModels, openUsages, loadAccountUsage, t,
+  } = props
   const sessionId = useSessions(state => state.current)
   const usage = useSessions((state): TokenUsageProjection | undefined => {
     const id = state.current
@@ -114,16 +121,27 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
     const id = state.current
     return id === undefined ? undefined : state.byId[id]?.projectionValues?.contextPressure
   })
+  const preset = useSessions((state): string | undefined => {
+    const id = state.current
+    return id === undefined ? undefined : state.byId[id]?.agentPreset
+  })
   const directorySnap = useSyncExternalStore(
     listener => directory.subscribe(listener),
     () => directory.getSnapshot(),
   )
+  const workerState = useSyncExternalStore(
+    workerDirectory === undefined ? () => () => {} : listener => workerDirectory.subscribe(listener),
+    () => workerDirectory?.getSnapshot() ?? IDLE_WORKER,
+  )
   const [open, setOpen] = useState(false)
   const [quota, setQuota] = useState<AccountUsageView | 'loading' | null>(null)
+  const [workerQuota, setWorkerQuota] = useState<AccountUsageView | 'loading' | null>(null)
   const [panelPos, setPanelPos] = useState<CSSProperties | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLElement | null>(null)
   const providerId = directorySnap.current?.provider
+  const workerSelection = preset === 'workflow' ? workerState.current : null
+  const workerProviderId = workerSelection?.provider
 
   useEffect(() => {
     if (sessionId !== undefined) ensureDirectory(sessionId)
@@ -150,6 +168,33 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
     return () => { cancelled = true }
   }, [loadAccountUsage, open, providerId])
 
+  useEffect(() => {
+    if (!open || workerProviderId === undefined) {
+      setWorkerQuota(null)
+      return
+    }
+    // Same provider as the staged route: the account quota is identical, so
+    // reuse the already-loading/loaded value instead of a second request.
+    if (workerProviderId === providerId) {
+      setWorkerQuota(quota)
+      return
+    }
+    let cancelled = false
+    setWorkerQuota('loading')
+    loadAccountUsage(workerProviderId).then(
+      (view) => { if (!cancelled) setWorkerQuota(view) },
+      (error: unknown) => {
+        if (!cancelled) {
+          setWorkerQuota({
+            supported: true,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      },
+    )
+    return () => { cancelled = true }
+  }, [loadAccountUsage, open, providerId, quota, workerProviderId])
+
   useLayoutEffect(() => {
     if (!open) {
       setPanelPos(null)
@@ -175,7 +220,7 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
       window.removeEventListener('scroll', place, true)
       window.removeEventListener('resize', place)
     }
-  }, [open, wide, quota])
+  }, [open, wide, quota, workerQuota])
 
   useEffect(() => {
     if (!open) return
@@ -278,6 +323,17 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
             )}
           </dl>
           {quota !== null && <QuotaSection quota={quota} t={t} />}
+          {workerSelection !== null && (
+            <>
+              <dl className={css.rows}>
+                <div className={css.row}>
+                  <dt>{t('role.worker')}</dt>
+                  <dd>{routeLabelFor(directorySnap, workerSelection).model}</dd>
+                </div>
+              </dl>
+              {workerQuota !== null && <QuotaSection quota={workerQuota} t={t} />}
+            </>
+          )}
           <button type="button" className={css.manage} onClick={openAllQuotas}>
             {t('usages.viewAll')}
           </button>

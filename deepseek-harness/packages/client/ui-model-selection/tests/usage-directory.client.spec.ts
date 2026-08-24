@@ -19,7 +19,7 @@ describe('currentDirectorySource', () => {
     const b = createSnapshotStore<ModelDirectoryState>(empty())
     a.update((s) => { s.current = { provider: 'deepseek-official', model: 'deepseek-v4-flash' } })
     b.update((s) => { s.current = { provider: 'kimi-for-coding', model: 'k3-256k' } })
-    const list = createSnapshotStore({ current: sid('a') as SessionId | undefined })
+    const list = createSnapshotStore<{ current: SessionId | undefined }>({ current: sid('a') })
     const models = {
       directoryFor: (id: SessionId) => {
         if (id === sid('a')) return { store: a }

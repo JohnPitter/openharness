@@ -111,7 +111,7 @@ export class ModelDirectoryResolver extends Service {
           conversation.blocks.set(sessionId, { reason: this.blockReason() })
           return
         }
-        const preset = sessions.list?.getSnapshot().byId[sessionId]?.agentPreset
+        const preset = sessions.list.getSnapshot().byId[sessionId]?.agentPreset
         if (preset === 'workflow'
           && snap.currentMetering === 'requests'
           && this.workerSelected() === null) {
@@ -124,7 +124,7 @@ export class ModelDirectoryResolver extends Service {
       actx.effect(() => {
         const stops = [directory.store.subscribe(publish)]
         if (this.subscribeWorker !== undefined) stops.push(this.subscribeWorker(publish))
-        if (sessions.list !== undefined) stops.push(sessions.list.subscribe(publish))
+        stops.push(sessions.list.subscribe(publish))
         return () => {
           for (const stop of stops) stop()
           conversation.blocks.set(sessionId, undefined)

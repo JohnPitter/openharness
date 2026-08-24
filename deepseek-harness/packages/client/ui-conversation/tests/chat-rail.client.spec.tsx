@@ -32,7 +32,7 @@ function milestoneNode(key: string, title: string): ChatNode {
     key, kind: 'milestone', id: key, target: 'chat', anchorSeq: 2,
     location: { kind: 'session' }, visibility: 'visible',
     data: { seq: 2, time: 2, title, body: 'the fact', origin: 'session' },
-  } as ChatNode
+  }
 }
 
 describe('ChatRail', () => {
@@ -42,7 +42,7 @@ describe('ChatRail', () => {
   })
 
   it('jumps recorded milestones and weaker user marks without duplicating user text', () => {
-    const onJump = vi.fn()
+    const onJump = vi.fn<(key: string) => void>()
     const long = `${'a'.repeat(80)}z`
     const nodes = store([
       userNode('u1', [{ type: 'text', text: 'do the thing' }]),
@@ -69,5 +69,48 @@ describe('ChatRail', () => {
     fireEvent.click(view.getByRole('button', { name: '里程碑：Found the leak' }))
     expect(nav.getAttribute('data-expanded')).toBe('')
     expect(onJump.mock.calls.map(call => call[0])).toEqual(['u1', 'u-long', 'm1'])
+  })
+
+  function pinnedRail() {
+    const view = render(
+      <ChatRail
+        order={['u1', 'm1']}
+        nodes={store([userNode('u1', [{ type: 'text', text: 'do the thing' }]), milestoneNode('m1', 'Found the leak')])}
+        t={t}
+        onJump={() => {}}
+      />,
+    )
+    fireEvent.click(view.getByRole('button', { name: '里程碑：Found the leak' }))
+    const nav = view.getByRole('navigation', { name: zh['rail.aria'] })
+    expect(nav.getAttribute('data-expanded')).toBe('')
+    return { view, nav }
+  }
+
+  it('closes the pinned rail through its close button', () => {
+    const { view, nav } = pinnedRail()
+    fireEvent.click(view.getByRole('button', { name: zh['rail.close'] }))
+    expect(nav.getAttribute('data-expanded')).toBeNull()
+    expect(view.queryByRole('button', { name: zh['rail.close'] })).toBeNull()
+  })
+
+  it('closes the pinned rail on Escape and on a pointer down outside it', () => {
+    const first = pinnedRail()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(first.nav.getAttribute('data-expanded')).toBeNull()
+    first.view.unmount()
+
+    const again = pinnedRail()
+    fireEvent.pointerDown(document.body)
+    expect(again.nav.getAttribute('data-expanded')).toBeNull()
+  })
+
+  it('keeps the pinned rail open on a pointer down inside it and toggles on background click', () => {
+    const { view, nav } = pinnedRail()
+    fireEvent.pointerDown(view.getByRole('button', { name: '里程碑：Found the leak' }))
+    expect(nav.getAttribute('data-expanded')).toBe('')
+    fireEvent.click(nav)
+    expect(nav.getAttribute('data-expanded')).toBeNull()
+    fireEvent.click(nav)
+    expect(nav.getAttribute('data-expanded')).toBe('')
   })
 })
