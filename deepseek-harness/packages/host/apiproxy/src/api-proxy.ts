@@ -1061,6 +1061,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    * client's `busy` flag is not enforcement: the wire is reachable directly.
    */
   const presetSwitches = new Map<SessionId, Promise<unknown>>()
+  /** Sessions whose committed preset switch still owes a compaction before the next prompt. */
+  const needsCompact = new Set<SessionId>()
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
@@ -1075,6 +1077,43 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const result = (imageAdmissionChains.get(agent) ?? Promise.resolve()).then(operation)
     imageAdmissionChains.set(agent, result.then(() => undefined, () => undefined))
     return result
+  }
+
+  /**
+   * Run one compaction after a committed preset switch, then admit the prompt.
+   *
+   * The claim is taken (set.delete) BEFORE the compaction awaits, so two
+   * prompts queued on the same switch chain compact exactly once. A thrown
+   * or aborted compaction restores the claim so the next prompt retries, and
+   * the original error surfaces to the caller before its message is admitted.
+   * A composition without a commands service (e.g. the minimal preset) is a
+   * no-op by design: checking the new composition's compaction capability at
+   * this layer is impractical, so the flag is always set on switch and
+   * "nothing to compact" outcomes settle as successful no-ops.
+   */
+  async function compactAfterPresetSwitch(agent: Agent, signal: AbortSignal): Promise<void> {
+    const sessionId = agent.session.id
+    const queued = presetSwitches.get(sessionId)
+    if (queued === undefined && !needsCompact.has(sessionId)) return
+    const turn = (queued ?? Promise.resolve()).then(async () => {
+      if (!needsCompact.delete(sessionId)) return
+      const commands = ctx.get('commands')
+      if (commands === undefined) return
+      try {
+        await commands.execute(agent, '/compact', [], signal)
+      } catch (error: unknown) {
+        // Restore inside the chain: a queued successor prompt must observe
+        // the claim before its own chained step runs.
+        needsCompact.add(sessionId)
+        throw error
+      }
+    })
+    presetSwitches.set(sessionId, turn.catch(() => undefined))
+    try {
+      await turn
+    } finally {
+      if (presetSwitches.get(sessionId) === turn) presetSwitches.delete(sessionId)
+    }
   }
 
   /**
@@ -2423,6 +2462,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const resolved = await turnAgentFor<{ accepted: true }>(request, sessionId)
         if ('refused' in resolved) return resolved.refused
         const agent = resolved.agent
+        // The sessions.prompt contract carries no cancellation signal (unlike
+        // subagent.prompt), so the post-switch compaction runs on a local
+        // controller: it is short-lived and must settle before this message
+        // is admitted, whether the client is still connected or not.
+        await compactAfterPresetSwitch(agent, new AbortController().signal)
         // Request identity and optional browser zone ride the exact durable user message.
         const source: MessageSource = {
           kind: 'user',
@@ -3065,6 +3109,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             // Recorded only after the swap committed: the log states what the
             // agent runs, and a rejected mount leaves the previous composition.
             agent.session.append('agent-preset/selected', { agentPreset: preset.id })
+            needsCompact.add(sessionId)
             return ok(request, { agentPreset: preset.id })
           } catch (error: unknown) {
             const refused = presetFailure(request, error)

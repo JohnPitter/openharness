@@ -38,6 +38,29 @@
   line-height: 18px;
 }
 
+/* Editing indicator sits inline with the notice chrome: the cancel control
+   floats right so the message reads as one band, not two rows. */
+.notice[data-editing-indicator] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.editingCancel {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.editingCancel:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
 .card {
   box-sizing: border-box;
   position: relative; /* overlay anchor positioning context */

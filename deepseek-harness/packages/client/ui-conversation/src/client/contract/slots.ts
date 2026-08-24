@@ -6,7 +6,7 @@ import type {
   SlotHookFactory, SnapshotSelectorHook,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  CommandNode, CompactionSummaryNode, ConversationSnapshot, ConversationTurnDataMap,
+  CommandNode, CompactionSummaryNode, ConversationLocation, ConversationSnapshot, ConversationTurnDataMap,
   ObservableSnapshot, PendingInteraction, PendingWait, SessionId, ToolCallBlock,
   TurnLocation, WorkspaceId,
 } from '@deepseek-ai/dsh-client-runtime/client'
@@ -422,6 +422,12 @@ export interface ChatNodeOwnerProps {
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
   /**
+   * Edit one sent user message by forking before its turn and sending the
+   * revised text in the child. Undefined while the session is running or the
+   * message's previous-turn boundary is unavailable (the first message today).
+   */
+  editMessage?: ((text: string, location: ConversationLocation) => void) | undefined
+  /**
    * Queue a continue prompt after a terminal turn failure or max-tokens cut.
    * Undefined when the renderer should not offer the action.
    */
@@ -581,6 +587,8 @@ export interface ComposerBarInjected {
    * Resolves admission: false = rejected/unmatched/transport failure.
    */
   command: ((line: string) => Promise<boolean>) | undefined
+  /** Leave sent-message editing, restoring the pre-edit draft; absent with the session. */
+  cancelEdit?: (() => void) | undefined
   /**
    * Registrant hooks compartment: the renderer binds these to
    * useNotices/useLexicon (static absent sources without a session — hook
@@ -780,6 +788,12 @@ export interface ChatViewInjected {
   }
   /** Fork through the completed turn ending at the eligible message `seq`, then open the child. */
   forkAt: (seq: number) => void
+  /**
+   * Enter composer editing for one sent user message: prefill its text and
+   * remember the fork cut (the previous completed turn's end seq) for send.
+   * @param request - message text and the engine-owned Location the cut derives from.
+   */
+  editMessage: (request: { text: string; location: ConversationLocation }) => void
   /** Queue a continue prompt so a failed or truncated turn can resume. */
   continueTurn: () => Promise<void>
   /**

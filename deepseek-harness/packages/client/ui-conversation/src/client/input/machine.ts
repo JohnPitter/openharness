@@ -158,6 +158,7 @@ export class InputMachine {
         : {}),
       occurrences: this.occurrences,
       ...(this.paste !== undefined ? { paste: this.paste } : {}),
+      editing: null,
       queue: EMPTY_QUEUE,
     }
   }

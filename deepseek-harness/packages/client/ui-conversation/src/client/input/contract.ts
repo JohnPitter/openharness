@@ -29,6 +29,14 @@ export interface InputTarget {
   insertReference(ref: ReferenceInsert, span: TokenSpan): boolean
 }
 
+/** One active sent-message edit (fork cut anchor + the pre-edit draft it replaced). */
+export interface EditingMessage {
+  /** Fork anchor: the previous completed turn's `turn/end` seq (entry refuses turns without one). */
+  readonly atSeq: number
+  /** Draft text held aside while editing; restored on cancel. */
+  readonly previousDraft: string
+}
+
 /** Per-session input facade owned by the conversation wiring layer. */
 export interface SessionInput extends InputTarget {
   /** Single write path for draft text (all mutation rides machine events). */
@@ -223,6 +231,8 @@ export interface InputState {
   readonly occurrences: readonly Occurrence[]
   /** Live paste-match attempt (absent when no paste is matchable). */
   readonly paste?: PasteAttemptState
+  /** Active sent-message edit, or null (composer indicator + send routing read here). */
+  readonly editing: EditingMessage | null
   /** Read-only transient inbox projection (`session/queue`, including pending steering). */
   readonly queue: readonly QueuedMessage[]
 }

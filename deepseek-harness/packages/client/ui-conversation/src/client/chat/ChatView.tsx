@@ -15,7 +15,7 @@
 // lifecycle updates replace only their own row without remounting it.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConversationLocation, ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
@@ -159,7 +159,7 @@ function TurnStatus({ startTime, t }: {
  */
 export function ChatView({
   useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  continueTurn, fileMentions, t,
+  editMessage, continueTurn, fileMentions, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -217,6 +217,14 @@ export function ChatView({
     [loadImage, renderSlot],
   )
   const runningTurnStart = useMemo(() => runningTurnStartTime(timeline), [timeline])
+
+  // Running sessions lock message editing the same way branch eligibility
+  // keys off the completed-turn tail: a fork cut mid-turn is unavailable.
+  const userEdit = useMemo(() => running
+    ? undefined
+    : (text: string, location: ConversationLocation) => {
+      editMessage({ text, location })
+    }, [running, editMessage])
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const columnRef = useRef<HTMLDivElement | null>(null)
@@ -456,6 +464,8 @@ export function ChatView({
               openFile={requestOpenFile}
               inspectCall={inspectCall}
               forkAt={forkAt}
+              editMessage={userEdit}
+              editFirstTurn={timeline.turnOrder[0]}
               continueTurn={continueTurn}
               renderMessageImages={renderMessageImages}
               fileMentions={fileMentions}

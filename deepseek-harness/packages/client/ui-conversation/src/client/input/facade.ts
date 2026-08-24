@@ -6,14 +6,16 @@
  * sink). Package-private; the hub alone constructs it and wires the scoped
  * event listeners onto it.
  */
-import type { ClientContext, ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  ClientContext, ConversationLocation, ObservableSnapshot, SnapshotStore,
+} from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   ArbitrateKey, ArbitrateOutcome, CommandClaim, ConsumeTokenRequest, PickOutcome,
   ReferenceInsert, InputTriggerController, SubmitImageAttachment, SubmitOutcome, TokenSpan,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {
-  DraftAttachmentId, EditRange, EditSelection, InputActions, InputEffect, InputNotice, InputState,
+  DraftAttachmentId, EditingMessage, EditRange, EditSelection, InputActions, InputEffect, InputNotice, InputState,
   PasteComponent, QueuedMessage, SessionInput, SubmitAttempt,
 } from './contract.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
@@ -51,6 +53,14 @@ export interface SessionInputDeps {
     mode: InputSubmitMode,
     signal: AbortSignal,
   ): Promise<SubmitOutcome>
+  /**
+   * The edit-message sink (fork → child prompt → switch — the hub owns it).
+   * Rejects on failure; the shell keeps the editing state and draft intact.
+   * Absent = sent-message editing is not wired for this session.
+   */
+  editSink?(text: string, mode: InputSubmitMode, editing: EditingMessage): Promise<void>
+  /** The fork boundary for one turn: the previous completed turn's end seq (undefined outside the window). */
+  editBoundary?(turn: number): number | undefined
   /** Command-plane image plumbing (the hub owns the conversation face and the copy). */
   commandImages: {
     /** Resolve ordered draft ids to wire payloads without sending them; rejects when an id no longer resolves. */
@@ -99,6 +109,7 @@ export class SessionInputShell implements SessionInput {
   private readonly core = new InputMachine({ now: () => Date.now() })
   private noticeSeq = 0
   private lastMirroredDraft = ''
+  private editing: EditingMessage | null = null
   private imageIds: readonly DraftAttachmentId[] = []
   /** One image-only send at a time: Enter during the Host round-trip is a no-op. */
   private imageSendInFlight = false
@@ -172,6 +183,38 @@ export class SessionInputShell implements SessionInput {
   /** Undo the latest transaction (InputBar intercepts the platform chord). */
   undo(): void {
     this.run(this.core.dispatch({ type: 'undo' }))
+  }
+
+  // ---- sent-message editing (wiring-layer extras) ----
+
+  /** Leave editing, restoring the stashed draft. */
+  cancelEdit(): void {
+    if (this.editing === null) return
+    const previousDraft = this.editing.previousDraft
+    this.editing = null
+    if (this.snapshot.draft !== previousDraft) this.setDraft(previousDraft)
+    this.publish()
+  }
+
+  /**
+   * Enter editing on one sent user message. The fork anchor is the previous
+   * completed turn's `turn/end` seq from the message's engine-owned Location;
+   * the window's first turn has none (an empty prefix cannot fork), so the
+   * gesture refuses there — the bubble hides the action through the same rule.
+   * @param request - joined message text and its Location.
+   * @returns whether editing entered; a busy submission phase or a boundary-less turn refuses.
+   */
+  editMessage(request: { text: string; location: ConversationLocation }): boolean {
+    if (this.deps.editSink === undefined || this.deps.editBoundary === undefined) return false
+    if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
+    const location = request.location
+    if (location.kind !== 'turn' && location.kind !== 'step') return false
+    const boundary = this.deps.editBoundary(location.turn.turn)
+    if (boundary === undefined) return false
+    this.editing = { previousDraft: this.snapshot.draft, atSeq: boundary }
+    if (this.snapshot.draft !== request.text) this.setDraft(request.text)
+    this.publish()
+    return true
   }
 
   /** Redo the latest undone transaction. */
@@ -447,6 +490,29 @@ export class SessionInputShell implements SessionInput {
   }
 
   /**
+   * One resolved-draft send: the edit sink while editing (rejection feeds the
+   * machine's failure path as an error outcome), the default sink otherwise.
+   */
+  private sendDraft(
+    draft: string,
+    imageIds: readonly DraftAttachmentId[],
+    mode: InputSubmitMode,
+    signal: AbortSignal,
+  ): Promise<SubmitOutcome> {
+    if (this.editing !== null && this.deps.editSink !== undefined) {
+      return this.deps.editSink(draft, mode, this.editing).then(
+        () => {
+          this.editing = null
+          this.publish()
+          return { kind: 'success' }
+        },
+        () => ({ kind: 'error' }),
+      )
+    }
+    return this.deps.defaultSink(draft, imageIds, mode, signal)
+  }
+
+  /**
    * Prompt serialization before the sink: expand each
    * inline reference range to its owner's model form via the session controller's
    * codec routing. Owner missing / serialize failure / disposal blocks the
@@ -457,7 +523,7 @@ export class SessionInputShell implements SessionInput {
     const imageIds = [...this.imageIds]
     const occurrences = this.core.state.occurrences
     if (occurrences.length === 0) {
-      this.settleSubmit(attempt, this.deps.defaultSink(draft.trim(), imageIds, mode, attempt.signal), imageIds)
+      this.settleSubmit(attempt, this.sendDraft(draft.trim(), imageIds, mode, attempt.signal), imageIds)
       return
     }
     const inputTriggers = this.deps.inputTriggers?.()
@@ -481,7 +547,7 @@ export class SessionInputShell implements SessionInput {
           cursor = part.offset + part.length
         }
         out += draft.slice(cursor)
-        this.settleSubmit(attempt, this.deps.defaultSink(out.trim(), imageIds, mode, attempt.signal), imageIds)
+        this.settleSubmit(attempt, this.sendDraft(out.trim(), imageIds, mode, attempt.signal), imageIds)
       },
       (error: unknown) => {
         controller.abort()
@@ -590,7 +656,7 @@ export class SessionInputShell implements SessionInput {
 
   private compose(): InputState {
     const core = this.core.state
-    return { ...core, imageIds: this.imageIds, queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE }
+    return { ...core, imageIds: this.imageIds, editing: this.editing, queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE }
   }
 
   private publish(): void {

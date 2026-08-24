@@ -78,7 +78,7 @@ export type InputBarProps = ComposerBarProps
 
 export function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
-  resolveSubmitMode, toggleCommandMenu, stop, command, t,
+  resolveSubmitMode, toggleCommandMenu, stop, command, cancelEdit, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
@@ -385,6 +385,14 @@ export function InputBar({
       return
     }
     if (e.key === 'Escape') {
+      // Sent-message editing takes Escape before the overlay/claim layers:
+      // the edit was a user gesture, not a pipeline state, so it cancels
+      // unconditionally and restores the pre-edit draft.
+      if (input.editing !== null) {
+        cancelEdit?.()
+        e.preventDefault()
+        return
+      }
       // Escape layering: an open overlay closes; claimed without an overlay
       // does NOT release (backspacing the token is the only exit gesture).
       keyboard.dismissPopup()
@@ -697,6 +705,19 @@ export function InputBar({
       {notice?.level === 'info' && (
         <div className={css.notice} role="status">
           {notice.text}
+        </div>
+      )}
+      {input?.editing !== null && input?.editing !== undefined && (
+        <div className={css.notice} role="status" data-editing-indicator>
+          {t('message.editing')}
+          <button
+            type="button"
+            className={css.editingCancel}
+            aria-label={t('message.cancelEdit')}
+            onClick={() => { cancelEdit?.() }}
+          >
+            {t('message.cancelEdit')}
+          </button>
         </div>
       )}
       {/* Trigger clicks land on the card, not the textarea: the toolbar row's

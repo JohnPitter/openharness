@@ -291,6 +291,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     inspectCall,
     chatScroll,
     forkAt,
+    editMessage: () => {},
     continueTurn,
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,

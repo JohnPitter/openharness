@@ -379,6 +379,7 @@ export function apply(ctx: Context): void {
               span: { ...selection, draftRev: snapshot.draftRev },
             })
           },
+        cancelEdit: () => { shell.cancelEdit() },
         stop: () => {
           scopedConversation(sessions, sessionId).cancel().catch(() => {
             // Stop failure surfaces via snapshot.promptError; nothing to restore.
@@ -457,6 +458,9 @@ export function apply(ctx: Context): void {
             .catch(() => {
               // Fork or child-rename failure keeps the source view untouched.
             })
+        },
+        editMessage: (request) => {
+          inputHub.shell(sessionId).editMessage(request)
         },
         continueTurn: () => scoped.send(t('message.continuePrompt')),
       }

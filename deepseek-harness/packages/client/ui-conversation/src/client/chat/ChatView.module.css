@@ -314,3 +314,33 @@
   max-width: 148px;
   opacity: 1;
 }
+
+/* On narrow screens the pinned index overlays the transcript instead of
+   taking space beside it. The collapsed rail keeps its transparent gutter. */
+@media (max-width: 720px) {
+  .rail[data-expanded] {
+    position: absolute;
+    top: 16px;
+    left: 8px;
+    width: min(168px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
+    margin-left: 0;
+    padding: 8px;
+    transform: none;
+    align-items: flex-end;
+    border: 1px solid var(--dsw-alias-border-l2);
+    border-radius: 8px;
+    background: var(--dsw-alias-button-floating-fill);
+    box-shadow: var(--dsw-shadow-lv2);
+  }
+
+  .rail[data-expanded] .railMilestone,
+  .rail[data-expanded] .railUser {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .rail[data-expanded] .railLabel {
+    max-width: calc(100% - 18px);
+  }
+}

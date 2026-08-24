@@ -26,7 +26,7 @@ internal/
 frontend/dist/          shell estático (sem build step): titlebar própria
                         (logo, --wails-draggable, min/max/close via runtime
                         Wails) + iframe full-bleed para a URL do harness
-build/appicon.png       mascote (cabeça no anel azul + nós verdes); windows/icon.ico idem
+build/appicon.png       mascote transparente (cabeça no anel azul + nós verdes); windows/icon.ico idem
 ```
 
 ## Pipeline do runtime embutido
@@ -74,8 +74,8 @@ pnpm --filter @deepseek-ai/dsh-web-frontend run build
 
 Arquivos da marca:
 
-- `apps/web/index.html` (title), `apps/web/public/favicon.svg` (mascote em
-  tile carvão), `apps/web/public/manifest.webmanifest`
+- `apps/web/index.html` (title), `apps/web/public/favicon.svg` (mascote
+  transparente), `apps/web/public/manifest.webmanifest`
 - `packages/client/ui-primitives/src/BrandWordmark.tsx` e `FishLogo.tsx`
   (mascote; `includeMark=false` deixa o box vazio para o nome slotted)
 - `packages/client/ui-brand-official/src/client/` (`OfficialBrandMark` /
@@ -175,11 +175,13 @@ go vet ./...  # lint
   no chip da direita. Em criação/edição de código, o planejador põe no prompt
   do trabalhador trechos dos padrões (AGENTS.md etc.), não o arquivo inteiro.
   Planejador cobrado por request sem trabalhador no chip **não herda** a rota
-  do pai: a delegação falha e o composer bloqueia até haver trabalhador.
+  do pai: a delegação falha e o composer bloqueia até haver trabalhador. Trocar
+  o preset recompõe a sessão e compacta antes do próximo prompt comum.
 - **Marcos:** o modelo que fecha o trabalho grava `milestone_write` (título +
   corpo). O transcript não é índice: o trilho à esquerda salta para o chip;
   compactação preserva os títulos. No Workflow o trabalhador escreve; o
-  planejador não vê a tool.
+  planejador não vê a tool. Em telas de até 720px, o trilho fixado vira overlay
+  absoluto; recolhido, mantém ocupação zero.
 - **Custo por rota:** coding plans (Kimi, Claude Code, Codex, GLM, OpenCode)
   cobram por request; DeepSeek e plataformas pay-per-token cobram por token.
   Em rota de request o harness não dispara título-LLM nem compact-LLM por
