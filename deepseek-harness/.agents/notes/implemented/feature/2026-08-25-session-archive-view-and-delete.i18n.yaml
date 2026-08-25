@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-25-session-archive-view-and-delete.md
+2026-08-25-session-archive-view-and-delete.md: 10e5df3fd73d4472d8f4786e73d4126d35cce27a
+2026-08-25-session-archive-view-and-delete.zh.md: 6e335563c2b999c7b864faa9ea244f30fbd188d1

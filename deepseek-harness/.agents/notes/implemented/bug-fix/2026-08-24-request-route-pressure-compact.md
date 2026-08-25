@@ -12,7 +12,7 @@ General Settings expose `compaction-basic.auto` and `thresholdPercent` (default 
 
 Pressure compact LLM runs on every metering unit. The live overlay remains Settings → General: `auto` and `thresholdPercent`. A request-metered route still skips the automatic title provider; that skip stays on the [route-metering note](../feature/2026-08-23-route-metering.md).
 
-Overflow, pressure, and `compactNow` cap the priced span so the summarizer request fits the routed window. Pressure uses the envelope-aware cap when it is positive; a zero envelope-aware budget leaves pressure uncapped so a small advertised capacity can still reduce below threshold. `compactNow` prunes oversized tool results first. Without a recorded window, overflow and `/compact` still attempt one maximal balanced reduction.
+Overflow, pressure, and `compactNow` cap the priced span so the summarizer request fits the routed window. Pressure uses the envelope-aware cap when it is positive; a zero envelope-aware budget leaves pressure uncapped so a small advertised capacity can still reduce below threshold. A positive result is then bounded by `SUMMARIZER_SPAN_CEILING` ([span ceiling](../feature/2026-08-25-compaction-span-ceiling-and-progress.md)). `compactNow` prunes oversized tool results first. Without a recorded window, overflow and `/compact` still attempt one maximal balanced reduction.
 
 ## Alternatives considered
 

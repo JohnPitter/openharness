@@ -255,6 +255,44 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
+   * Remove one session from the archive set. An id that is not archived
+   * resolves without writing.
+   * @param sessionId - The session to restore to grouping surfaces.
+   */
+  unarchiveSession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      const state = this.requireState()
+      if (!state.archivedSessionIds.includes(sessionId)) return
+      await this.setState({
+        ...state,
+        archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
+      })
+    })
+  }
+
+  /**
+   * Drop one session from archive membership, every workspace account, and
+   * the header index. Persistence deletion is the caller's job; this only
+   * forgets registry bookkeeping after the log is gone.
+   * @param sessionId - The session identity that persistence no longer holds.
+   */
+  forgetSession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      const state = this.requireState()
+      const archivedSessionIds = state.archivedSessionIds.filter(id => id !== sessionId)
+      if (archivedSessionIds.length !== state.archivedSessionIds.length) {
+        await this.setState({ ...state, archivedSessionIds })
+      }
+      for (const workspace of this.list()) {
+        await workspace.detachSession(sessionId)
+      }
+      this.headers.delete(sessionId)
+      this.sessionPaths.delete(sessionId)
+      this.invalidSessionPaths.delete(sessionId)
+    })
+  }
+
+  /**
    * Whether a session is live, header-indexed, or present in a fresh
    * persistence listing. Only a definite miss returns false — a failing
    * `sessionPersistence.list()` propagates so storage faults never

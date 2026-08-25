@@ -4,7 +4,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-compaction/types'
 import { chatNode } from './common.ts'
-import { compactSource, compactSummary, updateCompactionState } from './command.ts'
+import { compactSource, compactSummary, runningCompaction, updateCompactionState } from './command.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
   interface ChatNodeDataMap {
@@ -14,16 +14,22 @@ declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
 }
 
 interface CompactionState {
+  readonly start?: ConversationMatch
   readonly summary?: ConversationMatch
   readonly checkpoint?: ConversationMatch
+  readonly ended?: boolean
 }
 
 function fallbackState(context: ConversationNodeContext<CompactionState>): CompactionState {
+  const start = context.matches.find(match => match.event.type === 'compaction/start')
   const summary = context.matches.find(match => match.event.type === 'compaction/summary')
   const checkpoint = context.matches.find(match => compactSource(match.event) !== undefined)
+  const ended = context.matches.some(match => match.event.type === 'compaction/end')
   return {
+    ...start === undefined ? {} : { start },
     ...summary === undefined ? {} : { summary },
     ...checkpoint === undefined ? {} : { checkpoint },
+    ...ended ? { ended: true } : {},
   }
 }
 
@@ -46,13 +52,23 @@ export const compactionDefinition: ConversationNodeDefinition<CompactionState> =
     }
     return null
   },
-  start: () => ({}),
+  start: (_context, match) => updateCompactionState({}, match),
   update: (context, match) => updateCompactionState(context.state, match),
   buildViewNode: (context) => {
     const state = context.state ?? fallbackState(context)
-    if (state.checkpoint === undefined) return null
-    const marker = compactSummary(state.summary, state.checkpoint)
-    return chatNode(context, 'compaction', marker.seq, marker)
+    if (state.checkpoint !== undefined) {
+      const marker = compactSummary(state.summary, state.checkpoint)
+      return chatNode(context, 'compaction', marker.seq, marker)
+    }
+    if (state.start === undefined) return null
+    const marker = runningCompaction(state.start)
+    return chatNode(
+      context,
+      'compaction',
+      marker.seq,
+      marker,
+      { visibility: state.ended === true ? 'hidden' : 'visible' },
+    )
   },
 }
 

@@ -2606,6 +2606,39 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         return ok(request, { accepted: true as const })
       },
+      delete: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        const { sessionId } = request.payload
+        const target = sessions.find(session => session.sessionId === sessionId)
+        if (target?.origin === 'subagent') {
+          return err(request, {
+            code: 'agent-busy',
+            message: `session "${sessionId}" is owned by subagent routing`,
+            details: { reason: 'use subagent delivery for this child session' },
+          })
+        }
+        const removed = new Set<SessionId>([sessionId])
+        for (const session of sessions) {
+          if (session.origin === 'subagent' && session.parentSessionId === sessionId) removed.add(session.sessionId)
+        }
+        for (let index = sessions.length - 1; index >= 0; index--) {
+          const session = sessions[index]
+          if (session !== undefined && removed.has(session.sessionId)) sessions.splice(index, 1)
+        }
+        for (let index = archivedSessionIds.length - 1; index >= 0; index--) {
+          const id = archivedSessionIds[index]
+          if (id !== undefined && removed.has(id)) archivedSessionIds.splice(index, 1)
+        }
+        for (const workspace of workspaces) {
+          workspace.sessionIds = workspace.sessionIds.filter(id => !removed.has(id))
+        }
+        for (const id of removed) {
+          logs.delete(id)
+          emitHost({ type: 'host/session-deleted', sessionId: id })
+        }
+        return ok(request, { deleted: true as const, sessionIds: [...removed] })
+      },
     },
     subagents: {
       list: request => ok(request, { entries: [], parentAvailable: true }),
@@ -2790,6 +2823,15 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const { sessionId } = request.payload
         if (!archivedSessionIds.includes(sessionId)) {
           archivedSessionIds.push(sessionId)
+          emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
+        }
+        return ok(request, { archivedSessionIds: [...archivedSessionIds] })
+      },
+      unarchiveSession: (request) => {
+        const { sessionId } = request.payload
+        const index = archivedSessionIds.indexOf(sessionId)
+        if (index !== -1) {
+          archivedSessionIds.splice(index, 1)
           emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
         }
         return ok(request, { archivedSessionIds: [...archivedSessionIds] })
@@ -3195,6 +3237,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.attachment': return this.api.sessions.attachment(request)
       case 'session.updateQueue': return this.api.sessions.updateQueue(request)
       case 'session.cancel': return this.api.sessions.cancel(request)
+      case 'session.delete': return this.api.sessions.delete(request)
       case 'subagent.list': return this.api.subagents.list(request)
       case 'subagent.history': return this.api.subagents.history(request)
       case 'subagent.prompt': return this.api.subagents.prompt(request, signal)
@@ -3211,6 +3254,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'workspace.insertBefore': return this.api.workspace.insertBefore(request)
       case 'workspace.insertSessionBefore': return this.api.workspace.insertSessionBefore(request)
       case 'workspace.archiveSession': return this.api.workspace.archiveSession(request)
+      case 'workspace.unarchiveSession': return this.api.workspace.unarchiveSession(request)
       case 'skill.list': return this.api.skills.list(request)
       case 'agentPreset.list': return this.api.agentPresets.list(request)
       case 'agentPreset.select': return this.api.agentPresets.select(request)

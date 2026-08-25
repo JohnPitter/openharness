@@ -10,7 +10,7 @@ import { dirname } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection, ModelSelectionRef, AgentHandle, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -1105,6 +1105,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   }
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
+  /** Create/resume handles this Host owns, keyed so `session.delete` can dispose them. */
+  const sessionHandles = new Map<SessionId, AgentHandle>()
+  const rememberHandle = (handle: AgentHandle): void => {
+    sessionHandles.set(handle.agent.id, handle)
+  }
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
   let workspaceCreationChain = Promise.resolve()
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
@@ -1320,6 +1325,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     agentOptions,
     setup: async ({ meta, events }) =>
       (await composeAgent(resolveSessionPreset({ header: meta, events }))).setup,
+    onHandle: rememberHandle,
   })
 
   /** Send one transient frame to every connected mux consumer. */
@@ -1707,11 +1713,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // session's history was produced under that composition, and
           // rebuilding it differently would replay tool calls the model can no
           // longer make.
-          return (await ctx.agents.resume({
+          const handle = await ctx.agents.resume({
             resumeSessionId: sessionId,
             agentOptions: agentOptions(),
             setup: (await composeAgent(storedPreset)).setup,
-          })).agent
+          })
+          rememberHandle(handle)
+          return handle.agent
         }
 
         try {
@@ -1720,7 +1728,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
         }
         const composition = await composeAgent(presetId)
-        return (await ctx.agents.create({
+        const handle = await ctx.agents.create({
           sessionId,
           agentOptions: agentOptions(),
           meta: {
@@ -1728,7 +1736,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset },
           },
           setup: composition.setup,
-        })).agent
+        })
+        rememberHandle(handle)
+        return handle.agent
       })().catch((error: unknown) => {
         // Another Host entry path may have published the same identity while
         // this operation crossed an asynchronous persistence/filesystem step.
@@ -1757,6 +1767,76 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       throw new SessionCwdConflict(sessionId, cwd, agent.session.header.cwd)
     }
     return agent
+  }
+
+  /**
+   * Collect origin-subagent descendants of one ordinary session, children
+   * first, then drop each identity: dispose a handle this Host owns, delete
+   * the persisted log, and forget workspace accounting plus archive membership.
+   * Ordinary forks are not collected. A live identity without a stored handle
+   * fails after dispose of the ones we do own, so a leaked Session cannot
+   * survive a reported success.
+   */
+  async function deleteSessionTree(root: SessionId): Promise<SessionId[]> {
+    const headers = new Map<SessionId, SessionHeader>()
+    for (const session of ctx.sessions.list()) headers.set(session.id, session.header)
+    const persistence = ctx.get('sessionPersistence')
+    if (persistence !== undefined) {
+      for (const meta of await persistence.list()) {
+        if (!headers.has(meta.id)) headers.set(meta.id, meta)
+      }
+    }
+    const rootHeader = headers.get(root)
+    if (rootHeader === undefined) {
+      throw new SessionNotFound(`session "${root}" not found`)
+    }
+    if (hasSubagentOwner({ header: rootHeader }, ctx.agents.get(root))) {
+      throw new SubagentSessionOwnership(root)
+    }
+    const childrenOf = new Map<SessionId, SessionId[]>()
+    for (const [id, header] of headers) {
+      if (header.origin === 'subagent' && header.parentSession !== undefined) {
+        const siblings = childrenOf.get(header.parentSession) ?? []
+        siblings.push(id)
+        childrenOf.set(header.parentSession, siblings)
+      }
+    }
+    const descendants: SessionId[] = []
+    const walk = (id: SessionId): void => {
+      for (const child of childrenOf.get(id) ?? []) {
+        walk(child)
+        descendants.push(child)
+      }
+    }
+    walk(root)
+
+    const disposeOwned = async (id: SessionId): Promise<void> => {
+      const inflight = sessionCreations.get(id)
+      if (inflight !== undefined) {
+        try {
+          await inflight
+        } catch {
+          // Creation failed; there is no live handle to dispose.
+        }
+      }
+      const handle = sessionHandles.get(id)
+      if (handle === undefined) return
+      sessionHandles.delete(id)
+      await handle.dispose()
+    }
+
+    await disposeOwned(root)
+    for (const child of descendants) await disposeOwned(child)
+
+    const ordered = [...descendants, root]
+    for (const id of ordered) {
+      if (ctx.sessions.get(id) !== undefined || ctx.agents.get(id) !== undefined) {
+        throw new Error(`cannot delete session "${id}" while a live Session still owns it`)
+      }
+      if (persistence !== undefined) await persistence.delete(id)
+      await ctx.workspaceRegistry.forgetSession(id)
+    }
+    return ordered
   }
 
   /** Resolve or create one path while holding the Host's workspace-create chain. */
@@ -2450,7 +2530,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // plane, composing nothing would leave the child with no tools at all.
         const forkComposition = await composeAgent(resolveSessionPreset(source))
         try {
-          await ctx.agents.create({
+          const handle = await ctx.agents.create({
             sessionId: childId,
             seed: events.slice(0, cut),
             meta: {
@@ -2464,6 +2544,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             agentOptions: agentOptions(),
             setup: forkComposition.setup,
           })
+          rememberHandle(handle)
         } catch (error: unknown) {
           return err(request, {
             code: 'internal',
@@ -2735,6 +2816,26 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
         agent.cancel({ kind: 'user' }, { keepInbox: true })
         return Promise.resolve(ok(request, { accepted: true as const }))
+      },
+
+      async delete(request) {
+        const { sessionId } = request.payload
+        try {
+          const sessionIds = await deleteSessionTree(sessionId)
+          return ok(request, { deleted: true as const, sessionIds })
+        } catch (error: unknown) {
+          if (error instanceof SubagentSessionOwnership) {
+            return err(request, subagentOwnershipError(error.sessionId))
+          }
+          if (error instanceof SessionNotFound) {
+            return err(request, {
+              code: 'session-not-found',
+              message: error.message,
+              details: { sessionId },
+            })
+          }
+          throw error
+        }
       },
     },
 
@@ -3022,6 +3123,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { sessionId },
           })
         }
+        return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async unarchiveSession(request) {
+        const { sessionId } = request.payload
+        await ctx.workspaceRegistry.unarchiveSession(sessionId)
         return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
       },
     },
@@ -3692,6 +3799,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }),
           ctx.on('session/disposed', (session: Session) => {
             queue.push(frame({ type: 'host/session-removed', sessionId: session.id }))
+          }),
+          ctx.on('session-persistence/deleted', (sessionId: SessionId) => {
+            queue.push(frame({ type: 'host/session-deleted', sessionId }))
           }),
           ctx.on('agent/status', ({ agent, status }: { agent: Agent; status: AgentStatus }) => {
             queue.push(frame({ type: 'host/session-status', sessionId: agent.id, running: status === 'running' }))

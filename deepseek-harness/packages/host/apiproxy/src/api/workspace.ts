@@ -99,11 +99,19 @@ export interface WorkspaceApi {
   /**
    * Adds one session to the registry-global archive set: the session
    * disappears from every grouping surface but keeps its session log and its
-   * workspace accounting slot (a future unarchive restores its position).
+   * workspace accounting slot so unarchive restores its position.
    * Idempotent for an already archived id. A session neither live nor in
    * session persistence fails with `session-not-found`. Returns the full
    * updated set (same snapshot the changed frame carries).
    */
   archiveSession(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Removes one session from the registry-global archive set: the session
+   * returns to grouping surfaces in its retained workspace account slot.
+   * Idempotent for an id that is not archived. Returns the full updated set.
+   */
+  unarchiveSession(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
 }

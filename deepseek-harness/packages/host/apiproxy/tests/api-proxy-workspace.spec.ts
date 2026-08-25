@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentFactory } from '@deepseek-ai/dsh-agent'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import type { Session } from '@deepseek-ai/dsh-session'
+import type { Session, SessionHeader } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
@@ -75,21 +75,34 @@ async function harness(
   const storageDomain = new DomainFacility(ctx, { backend: 'memory', routes: {} })
   ctx.storage.mount('domain', storageDomain)
   ctx.provide('storageDomain', storageDomain)
-  ctx.provide('sessionPersistence', { list: () => Promise.resolve([]) } as never)
+  const persisted: SessionHeader[] = []
+  const deleted: SessionId[] = []
+  ctx.provide('sessionPersistence', {
+    list: () => Promise.resolve([...persisted]),
+    delete: async (id: SessionId) => {
+      const index = persisted.findIndex(header => header.id === id)
+      if (index !== -1) persisted.splice(index, 1)
+      deleted.push(id)
+      ctx.emit('session-persistence/deleted', id)
+    },
+  } as never)
   await ctx.plugin(WorkspaceRegistry)
 
   const factory: AgentFactory = {
     async createAgent(_ownerCtx, options) {
-      const session = ctx.sessions.create(
+      const session = ctx.sessions.prepare(
         options.sessionId,
         options.meta === undefined ? {} : { meta: options.meta },
       )
+      const detach = ctx.sessions.enter(session)
+      ctx.sessions.announce(session)
       const agent = stubAgent(session)
       const unregister = ctx.agents.register(agent)
       return {
         agent,
         dispose: () => {
           unregister()
+          detach()
           return Promise.resolve()
         },
       }
@@ -108,7 +121,7 @@ async function harness(
     ...extras.openPath === undefined ? {} : { openPath: extras.openPath },
     ...extras.canOpenPath === undefined ? {} : { canOpenPath: extras.canOpenPath },
   })
-  return { api, ctx, storageDomain, root }
+  return { api, ctx, storageDomain, root, persisted, deleted }
 }
 
 /** Stage one directory under the harness root for path adoption. */
@@ -567,5 +580,87 @@ describe('Host Workspace increments', () => {
       error: { code: 'session-not-found', details: { sessionId: 'session-ghost' } },
     })
     abort.abort()
+  })
+
+  it('unarchives a session and streams the emptied set', async () => {
+    const { api, root } = await harness()
+    const workspace = expectOk(await api.workspace.create(request({ path: stageDir(root, 'unarchive-home') }))).workspace
+    const sessionId = SessionId('session-to-unarchive')
+    expectOk(await api.sessions.create(request({ workspaceId: workspace.workspaceId, sessionId })))
+    expectOk(await api.workspace.archiveSession(request({ sessionId })))
+
+    const abort = new AbortController()
+    const stream: AsyncIterator<RpcRequest<HostFrame>> =
+      api.events.host(request({}), abort.signal)[Symbol.asyncIterator]()
+    const changed = nextHostFrame(stream)
+    expect(expectOk(await api.workspace.unarchiveSession(request({ sessionId }))).archivedSessionIds)
+      .toEqual([])
+    expect(await changed).toMatchObject({
+      payload: { type: 'host/archived-sessions-changed', archivedSessionIds: [] },
+    })
+    expect(expectOk(await api.workspace.list(request({}))).archivedSessionIds).toEqual([])
+    abort.abort()
+  })
+
+  it('deletes a live session, its cold subagent descendant, and forgets registry bookkeeping', async () => {
+    const { api, ctx, root, persisted, deleted } = await harness()
+    const workspace = expectOk(await api.workspace.create(request({ path: stageDir(root, 'delete-home') }))).workspace
+    const sessionId = SessionId('session-to-delete')
+    const childId = SessionId('session-to-delete-child')
+    expectOk(await api.sessions.create(request({ workspaceId: workspace.workspaceId, sessionId })))
+    persisted.push({
+      version: 0,
+      id: childId,
+      createdAt: 1,
+      cwd: workspace.path,
+      parentSession: sessionId,
+      origin: 'subagent',
+    })
+
+    const abort = new AbortController()
+    const stream: AsyncIterator<RpcRequest<HostFrame>> =
+      api.events.host(request({}), abort.signal)[Symbol.asyncIterator]()
+    const pending = nextHostFrame(stream)
+    const receipt = expectOk(await api.sessions.delete(request({ sessionId })))
+    expect(receipt.deleted).toBe(true)
+    expect(receipt.sessionIds).toEqual([childId, sessionId])
+    expect(deleted).toEqual([childId, sessionId])
+    expect(ctx.sessions.get(sessionId)).toBeUndefined()
+    expect(expectOk(await api.sessions.list(request({}))).items.map(item => item.sessionId))
+      .not.toContain(sessionId)
+    expect(expectOk(await api.workspace.list(request({}))).items[0]?.sessionIds).toEqual([])
+
+    const frames: HostFrame[] = [(await pending).payload]
+    while (!frames.some(frame => frame.type === 'host/session-deleted' && frame.sessionId === sessionId)) {
+      const next = await stream.next()
+      if (next.done === true) throw new Error('Host stream ended before session-deleted')
+      frames.push(next.value.payload)
+    }
+    expect(frames.filter(frame => frame.type === 'host/session-deleted').map(frame => {
+      if (frame.type !== 'host/session-deleted') throw new Error('unreachable')
+      return frame.sessionId
+    })).toEqual(expect.arrayContaining([childId, sessionId]))
+    abort.abort()
+  })
+
+  it('rejects deleting a named subagent and an unknown session', async () => {
+    const { api, ctx, root } = await harness()
+    const workspace = expectOk(await api.workspace.create(request({ path: stageDir(root, 'delete-reject') }))).workspace
+    const parentId = SessionId('session-parent-kept')
+    const childId = SessionId('session-named-subagent')
+    expectOk(await api.sessions.create(request({ workspaceId: workspace.workspaceId, sessionId: parentId })))
+    ctx.sessions.create(childId, {
+      meta: { cwd: workspace.path, parentSession: parentId, origin: 'subagent' },
+    })
+    const owned = await api.sessions.delete(request({ sessionId: childId }))
+    expect(owned.result).toMatchObject({
+      ok: false,
+      error: { code: 'agent-busy', details: { reason: 'use subagent delivery for this child session' } },
+    })
+    const missing = await api.sessions.delete(request({ sessionId: SessionId('session-ghost') }))
+    expect(missing.result).toMatchObject({
+      ok: false,
+      error: { code: 'session-not-found', details: { sessionId: 'session-ghost' } },
+    })
   })
 })

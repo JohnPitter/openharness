@@ -1,7 +1,7 @@
 /** Host BFF policy for resolving Remote Agent and Session identities. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, AgentOptions, AgentSetup } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentSetup } from '@deepseek-ai/dsh-agent'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { TypertLookupFailure } from '@deepseek-ai/dsh-typert-protocol'
@@ -36,6 +36,13 @@ export interface ApiRemoteAgentOptions {
   readonly setup?: (
     session: { meta: SessionHeader; events: readonly SessionEvent[] },
   ) => AgentSetup | Promise<AgentSetup>
+  /**
+   * Receive the owned handle of a cold resume this resolver just published.
+   * The Host keeps the handle so `session.delete` can dispose an identity it
+   * resumed; live Agents found already registered are not reported.
+   * @param handle - the resume handle this resolver now owns.
+   */
+  readonly onHandle?: (handle: AgentHandle) => void
 }
 
 /** Cold identity absent from the durable session store. */
@@ -164,6 +171,7 @@ export function createApiRemoteAgentResolver(
             ...options.agentOptions === undefined ? {} : { agentOptions: options.agentOptions() },
             ...setup === undefined ? {} : { setup },
           })
+          options.onHandle?.(handle)
           return handle.agent
         } finally {
           resumes.delete(sessionId)

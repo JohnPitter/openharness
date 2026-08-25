@@ -16,10 +16,10 @@ export interface WorkspaceListState {
   items: readonly WorkspaceView[]
   /**
    * Registry-global archive set in Host order: grouping surfaces hide these
-   * sessions everywhere (workspace groups and the ungrouped bucket) while
-   * their session logs and workspace accounting slots remain. A plain array
-   * (store-engine vocabulary; immer drafts reject Sets) — membership lookups
-   * build their own transient Set.
+   * sessions from live groups while the trailing Archived section lists them.
+   * Session logs and workspace accounting slots remain until `session.delete`.
+   * A plain array (store-engine vocabulary; immer drafts reject Sets) —
+   * membership lookups build their own transient Set.
    */
   archivedSessionIds: readonly SessionId[]
   state: 'idle' | 'loading' | 'error'
@@ -288,8 +288,19 @@ export class WorkspaceRuntime implements IWorkspaces {
    * @param sessionId - session to archive.
    */
   async archiveSession(sessionId: SessionId): Promise<void> {
+    const current = this.sessions.list.getSnapshot().current
     const result = await this.manager.archiveSession(sessionId)
     if (!result.ok) throw new Error(`session archive failed: ${result.error.code}: ${result.error.message}`)
+    if (current === sessionId) this.sessions.clear()
+  }
+
+  /**
+   * Restore a session from the registry-global archive set.
+   * @param sessionId - session to unarchive.
+   */
+  async unarchiveSession(sessionId: SessionId): Promise<void> {
+    const result = await this.manager.unarchiveSession(sessionId)
+    if (!result.ok) throw new Error(`session unarchive failed: ${result.error.code}: ${result.error.message}`)
   }
 
   /**
@@ -322,6 +333,17 @@ export class WorkspaceRuntime implements IWorkspaces {
    * @param envelope - validated Host stream envelope.
    */
   handleHostEnvelope(envelope: Parameters<WorkspaceManager['handleHostEnvelope']>[0]): void {
+    if (envelope.payload.type === 'host/archived-sessions-changed') {
+      const previous = this.manager.getSnapshot().archivedSessionIds
+      const current = this.sessions.list.getSnapshot().current
+      this.manager.handleHostEnvelope(envelope)
+      if (current !== undefined
+        && !previous.includes(current)
+        && envelope.payload.archivedSessionIds.includes(current)) {
+        this.sessions.clear()
+      }
+      return
+    }
     this.manager.handleHostEnvelope(envelope)
   }
 
@@ -334,14 +356,6 @@ export class WorkspaceRuntime implements IWorkspaces {
     const workspace = this.manager.getSnapshot()
     const sessions = this.sessions.list.getSnapshot()
     const baselinesReady = workspace.phase === 'ready' && sessions.phase === 'ready'
-    // An archived current selection clears into the New Session view state —
-    // a hidden row must not stay open behind the list. Sweeping here covers
-    // every install path with one rule: the local unary echo, another tab's
-    // changed frame, and a reconnect baseline restoring a persisted
-    // selection that was archived while this client was away.
-    if (sessions.current !== undefined && workspace.archivedSessionIds.includes(sessions.current)) {
-      this.sessions.clear()
-    }
     this.list.set({
       items: workspace.items,
       archivedSessionIds: workspace.archivedSessionIds,

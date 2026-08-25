@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-24-request-route-pressure-compact.md
-2026-08-24-request-route-pressure-compact.md: c6a2f1c2fa135bc8d8a41bd31ee074bb54d4526d
-2026-08-24-request-route-pressure-compact.zh.md: 4f92d4656c5d3e28b46ba9fd35aca3b50b532539
+2026-08-24-request-route-pressure-compact.md: ef133009d1173cfbfc9b51fa15c2d912fb80448b
+2026-08-24-request-route-pressure-compact.zh.md: 3624f8612f33632f47d109c1cb5ccb4a10642372

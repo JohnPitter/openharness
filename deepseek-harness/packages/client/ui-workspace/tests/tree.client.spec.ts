@@ -4,7 +4,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel, relativeTime,
-  UNGROUPED_KEY, UNGROUPED_LABEL,
+  ARCHIVED_KEY, UNGROUPED_KEY, UNGROUPED_LABEL,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -188,10 +188,26 @@ describe('deriveGroups', () => {
       sessions, [workspace('first', ['kept', 'gone'])], archived('gone', 'loose-gone'), view(['first', UNGROUPED_KEY]),
     )
     // The archived member drops from its group AND the archived stray never
-    // surfaces an Ungrouped bucket; counts follow the visible rows.
-    expect(groups.map(group => group.key)).toEqual(['first'])
+    // surfaces an Ungrouped bucket; they appear in the trailing Archived section.
+    expect(groups.map(group => group.key)).toEqual(['first', ARCHIVED_KEY])
     expect(groups[0]!.sessions.map(node => node.id)).toEqual([kept.id])
     expect(groups[0]!.sessionCount).toBe(1)
+    expect(groups[1]!.archived).toBe(true)
+    expect(groups[1]!.sessionCount).toBe(2)
+    expect(groups[1]!.sessions).toEqual([])
+  })
+
+  it('lists archived members in recency order once the Archived group is expanded', () => {
+    const kept = summary('kept', 1, '/projects/first')
+    const gone = summary('gone', 2, '/projects/first')
+    const looseGone = summary('loose-gone', 3, '/other')
+    const groups = deriveGroups(
+      list(kept, gone, looseGone),
+      [workspace('first', ['kept', 'gone'])],
+      archived('gone', 'loose-gone'),
+      view(['first', ARCHIVED_KEY]),
+    )
+    expect(groups[1]!.sessions.map(node => node.id)).toEqual([looseGone.id, gone.id])
   })
 
   it('marks selected Workspace and Ungrouped sessions without relying on an Intent', () => {

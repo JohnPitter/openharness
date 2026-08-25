@@ -8,6 +8,7 @@ import {
   DEFAULT_COMPACTION_AUTO,
   DEFAULT_COMPACTION_THRESHOLD_PERCENT,
   SUMMARIZER_ENVELOPE_RESERVE,
+  SUMMARIZER_SPAN_CEILING,
 } from '@deepseek-ai/dsh-compaction-basic'
 import {
   asCompactionUserSettings,
@@ -730,20 +731,23 @@ describe('pressure measurement and retention', () => {
     expect(measure).toHaveBeenCalledTimes(1)
   })
 
-  it('bounds retries when a shrinking checkpoint remains above threshold', async () => {
+  it('keeps the last replacement when a shrinking checkpoint remains above threshold', async () => {
+    const ctx = createContext()
     const compact = service({
       auto: false,
       compactionRetries: 0,
       thresholdRatio: 0.3,
       retainTokens: 180,
-    })
+    }, ctx)
     compact.summary = Array.from({ length: 7 }, (_, index) => ({
       type: 'text',
       text: `summary ${index}`,
     }))
+    const session = conversation(4)
 
-    await expect(compactIfNeeded(compact, conversation(4)))
-      .rejects.toThrow(/still above threshold after 1 compaction attempts/)
+    const result = await compactIfNeeded(compact, session)
+    expect(result).not.toBeNull()
+    expect(ctx.tokenMeter.measure(session).totalTokens).toBeGreaterThanOrEqual(300)
   })
 
   it('rounds a retention cut head-ward to preserve tool-call/result pairing', async () => {
@@ -810,17 +814,24 @@ describe('pressure measurement and retention', () => {
     expect(selectCompactableRange(session, priced, 1)).toBeNull()
   })
 
-  it('reserves output and envelope headroom inside half the context window', async () => {
+  it('reserves output and envelope headroom inside half the context window, then caps at the latency ceiling', async () => {
     const maxTokens = 8_192
-    const spanBudget = summarizerSpanBudget(272_144, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
-    expect(spanBudget).toBe(Math.max(
+    const envelopeAware = Math.max(
       0,
       Math.floor(272_144 / 2) - maxTokens - SUMMARIZER_ENVELOPE_RESERVE,
-    ))
-    expect(spanBudget + maxTokens + SUMMARIZER_ENVELOPE_RESERVE).toBe(Math.floor(272_144 / 2))
+    )
+    expect(envelopeAware).toBeGreaterThan(SUMMARIZER_SPAN_CEILING)
+    expect(summarizerSpanBudget(272_144, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)).toBe(SUMMARIZER_SPAN_CEILING)
+    expect(summarizerSpanBudget(1_000_000, maxTokens)).toBe(SUMMARIZER_SPAN_CEILING)
+    const belowCeiling = Math.max(
+      0,
+      Math.floor(128_000 / 2) - maxTokens - SUMMARIZER_ENVELOPE_RESERVE,
+    )
+    expect(belowCeiling).toBeLessThan(SUMMARIZER_SPAN_CEILING)
+    expect(summarizerSpanBudget(128_000, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)).toBe(belowCeiling)
     expect(summarizerSpanBudget(128, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)).toBe(0)
     expect(pressureSummarizerSpanBudget(128, maxTokens)).toBeUndefined()
-    expect(pressureSummarizerSpanBudget(272_144, maxTokens)).toBe(spanBudget)
+    expect(pressureSummarizerSpanBudget(272_144, maxTokens)).toBe(SUMMARIZER_SPAN_CEILING)
     const ctx = createContext()
     const session = conversation(2)
     expect(selectCompactableRange(session, ctx.tokenMeter.measure(session), 0, 0)).toBeNull()

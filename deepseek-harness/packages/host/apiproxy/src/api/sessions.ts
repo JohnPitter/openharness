@@ -391,4 +391,14 @@ export interface SessionsApi {
    */
   cancel(request: RpcRequest<{ sessionId: SessionId }>): Promise<RpcResponse<{ accepted: true }>>
 
+  /**
+   * Permanently deletes one ordinary session and its origin-subagent
+   * descendants: live agents dispose, the persisted logs drop, and workspace
+   * accounting plus archive membership forget the identities. Session-backed
+   * subagents named directly reject with `agent-busy`. An unknown id fails
+   * with `session-not-found`.
+   */
+  delete(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ deleted: true; sessionIds: SessionId[] }>>
+
 }

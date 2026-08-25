@@ -5,6 +5,7 @@
 
 import type { ChatViewSlotProps, CommandRowOwnerProps } from '../contract/slots.ts'
 import { CompactionItem } from './CompactionItem.tsx'
+import { CompactionProgressBar } from './CompactionProgress.tsx'
 import { GenericCommandCard } from './GenericCommandCard.tsx'
 
 interface CompactionCommandCardProps extends CommandRowOwnerProps {
@@ -13,7 +14,7 @@ interface CompactionCommandCardProps extends CommandRowOwnerProps {
 
 /** Render one manual compaction lifecycle without duplicating its checkpoint marker. */
 export function CompactionCommandCard({ node, compaction, t }: CompactionCommandCardProps) {
-  if (compaction !== undefined) {
+  if (compaction !== undefined && compaction.running !== true) {
     return (
       <CompactionItem
         node={compaction}
@@ -24,5 +25,10 @@ export function CompactionCommandCard({ node, compaction, t }: CompactionCommand
     )
   }
   if (node.outcome !== null) return <GenericCommandCard node={node} t={t} />
-  return <GenericCommandCard node={node} t={t} runningSummary={t('message.compaction.running')} />
+  return (
+    <div>
+      <GenericCommandCard node={node} t={t} runningSummary={t('message.compaction.running')} />
+      <CompactionProgressBar startedAt={node.time} t={t} />
+    </div>
+  )
 }

@@ -585,8 +585,12 @@ describe('workspaces action face', () => {
     // state's archive set (features render against the same snapshot).
     await ws.archiveSession('s1' as SessionId)
     expect(ws.list.getSnapshot().archivedSessionIds).toEqual(['s1'])
+    await ws.unarchiveSession('s1' as SessionId)
+    expect(ws.list.getSnapshot().archivedSessionIds).toEqual([])
     expect(ws.calls.map(c => c.method)).toEqual(
-      ['create', 'create', 'pickDirectory', 'rename', 'delete', 'openPath', 'insertBefore', 'insertSessionBefore', 'archiveSession'])
+      ['create', 'create', 'pickDirectory', 'rename', 'delete', 'openPath', 'insertBefore', 'insertSessionBefore', 'archiveSession', 'unarchiveSession'])
+    await ws.archiveSession('s1' as SessionId)
+    expect(ws.list.getSnapshot().archivedSessionIds).toEqual(['s1'])
 
     ws.stub('create', () => Promise.resolve({ workspaceId: 'ws-x', title: 'X', path: '/x', sessionIds: [] } as never))
     ws.stub('pickDirectory', () => Promise.resolve('/picked'))

@@ -35,6 +35,7 @@ export {
   COMPACTION_TIMEOUT_CODE,
   SUMMARIZER_CONTEXT_WINDOW_FALLBACK,
   SUMMARIZER_ENVELOPE_RESERVE,
+  SUMMARIZER_SPAN_CEILING,
 } from './region.ts'
 import { summarizeWithLlm } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
@@ -285,10 +286,13 @@ export class BasicCompactionEngine extends CompactionEngine {
    * fits. A zero safe span budget produces no range and therefore no auxiliary
    * LLM request. Pressure uses the same envelope-aware cap when it is positive
    * and leaves the span uncapped when that budget is zero, so a small advertised
-   * capacity can still reduce below threshold. A positive cap is forwarded so
-   * overflow retries can shrink the span. A registered `compaction-basic`
-   * settings section overlays `thresholdRatio` for pressure; it does not change
-   * overflow.
+   * capacity can still reduce below threshold. A positive cap is also bounded by
+   * `SUMMARIZER_SPAN_CEILING` so a 1M window does not send a half-window request.
+   * A positive cap is forwarded so overflow retries can shrink the span. When
+   * retries land replacements that remain above threshold, this method returns
+   * the latest result instead of throwing so a later step can continue. A
+   * registered `compaction-basic` settings section overlays `thresholdRatio` for
+   * pressure; it does not change overflow.
    * @param agent - agent whose latest durable routed request is measured.
    * @param trigger - normal step-boundary pressure or context-overflow recovery.
    * @param signal - live turn cancellation signal forwarded to summarization.
@@ -382,10 +386,9 @@ export class BasicCompactionEngine extends CompactionEngine {
       if (measurement.totalTokens < spec.thresholdTokens) return result
     }
 
-    throw new Error(
-      `compaction still above threshold after ${spec.compactionRetries + 1} compaction attempts `
-      + `(${measurement.totalTokens} estimated tokens >= threshold ${spec.thresholdTokens})`,
-    )
+    // A ceiling-capped span can land a useful checkpoint without clearing the
+    // threshold in this step; the next pre-step continues from the replacement.
+    return result
   }
 
   /**

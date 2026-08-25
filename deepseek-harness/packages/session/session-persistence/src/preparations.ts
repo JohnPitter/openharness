@@ -44,6 +44,16 @@ export class SessionPreparations<Source extends PreparedSource, CommitState> {
   }
 
   /**
+   * Drop one unpublished identity. In-flight loads that complete after this
+   * call do not reinstall the forgotten entry.
+   * @param id - session identity to forget.
+   */
+  forget(id: SessionId): void {
+    const entry = this.entries.get(id)
+    if (entry !== undefined) this.remove(entry)
+  }
+
+  /**
    * Observe one prepared source, sharing an in-flight read for the same id.
    * @param id - session identity.
    * @param load - cold loader used when no entry exists.

@@ -428,5 +428,23 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         await dispose()
       }
     })
+
+    it('delete removes a materialized session and is idempotent for an unknown id', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const m = meta('to-delete', '/work')
+        await persistence.create(m)
+        await persistence.append(m.id, oneTurnLog())
+        expect((await persistence.list()).some(header => header.id === m.id)).toBe(true)
+        await persistence.delete(m.id)
+        expect((await persistence.list()).some(header => header.id === m.id)).toBe(false)
+        await persistence.delete(m.id)
+        await persistence.create(m)
+        await persistence.append(m.id, oneTurnLog())
+        expect((await persistence.load(m.id)).events).toEqual(oneTurnLog())
+      } finally {
+        await dispose()
+      }
+    })
   })
 }

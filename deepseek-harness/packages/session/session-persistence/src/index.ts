@@ -61,6 +61,16 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     sessionPersistence: SessionPersistence
   }
+  interface Events {
+    /**
+     * A persisted session identity was durably removed. Live disposal still
+     * emits `session/disposed`; this fires for cold deletes and after a
+     * disposed identity's artifact is dropped.
+     * @param sessionId - the deleted session identity.
+     * @mode emit
+     */
+    'session-persistence/deleted'(sessionId: SessionId): void
+  }
 }
 
 /**
@@ -226,6 +236,14 @@ export abstract class SessionPersistence extends Service {
    * @returns one header per materialized session.
    */
   abstract list(signal?: AbortSignal): Promise<SessionHeader[]>
+
+  /**
+   * Durably delete one session's metadata and events. A live Session must
+   * dispose first. Unknown ids resolve without writing.
+   * @param id - the persisted session to delete.
+   * @param signal - optional cancellation for backend delete work.
+   */
+  abstract delete(id: SessionId, signal?: AbortSignal): Promise<void>
 
   /**
    * List materialized sessions with cheap per-log change tokens.

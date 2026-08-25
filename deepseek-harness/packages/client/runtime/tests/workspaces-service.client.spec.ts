@@ -519,6 +519,22 @@ describe('WorkspaceRuntime', () => {
     await workspaces.refresh()
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual([])
   })
+
+  it('unarchives a session and projects the emptied set from the unary echo', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onList = () => Promise.resolve(ok({
+      items: [{ sessionId: sid('s-idle'), updatedAt: 1, running: false, blank: false }],
+    }) as never)
+    await sessions.refresh()
+    await workspaces.archiveSession(sid('s-idle'))
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-idle'])
+    await workspaces.unarchiveSession(sid('s-idle'))
+    expect(api.callsOf('workspace.unarchiveSession')).toEqual([{ sessionId: 's-idle' }])
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual([])
+  })
 })
 
 describe('startInitialSelection', () => {

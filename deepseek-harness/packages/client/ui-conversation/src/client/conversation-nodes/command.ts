@@ -23,15 +23,15 @@ type CommandId = CommandNode['commandId']
 
 const COMPACT_PLUGIN: CompactionCheckpointSource['plugin'] = 'compact'
 
-interface CommandState {
-  readonly command: CommandNode
+interface CompactionEvidence {
+  readonly start?: ConversationMatch
   readonly summary?: ConversationMatch
   readonly checkpoint?: ConversationMatch
+  readonly ended?: boolean
 }
 
-interface CompactionEvidence {
-  readonly summary?: ConversationMatch
-  readonly checkpoint?: ConversationMatch
+interface CommandState extends CompactionEvidence {
+  readonly command: CommandNode
 }
 
 function commandFromRun(match: ConversationMatch): CommandNode {
@@ -132,6 +132,24 @@ function compactSummary(match: ConversationMatch | undefined, checkpoint: Conver
   }
 }
 
+/**
+ * Live automatic-compaction marker from an unmatched `compaction/start`.
+ * @param match - opening lifecycle Match.
+ * @returns running compaction Node data.
+ */
+function runningCompaction(match: ConversationMatch): CompactionSummaryNode {
+  return {
+    kind: 'compaction',
+    seq: match.event.seq,
+    time: match.event.time,
+    summary: null,
+    summaryEventSeq: null,
+    shadowedItemCount: null,
+    shadowedTokenCount: null,
+    running: true,
+  }
+}
+
 function fallbackState(context: ConversationNodeContext<CommandState>): CommandState | undefined {
   const done = context.matches.find(match => match.event.type === 'command/done')
   const checkpoint = context.matches.find(match => compactSource(match.event) !== undefined)
@@ -167,8 +185,10 @@ export function updateCompactionState<State extends CompactionEvidence>(
   state: State,
   match: ConversationMatch,
 ): State {
+  if (match.event.type === 'compaction/start') return { ...state, start: match }
   if (match.event.type === 'compaction/summary') return { ...state, summary: match }
   if (compactSource(match.event) !== undefined) return { ...state, checkpoint: match }
+  if (match.event.type === 'compaction/end') return { ...state, ended: true }
   return state
 }
 
@@ -235,4 +255,4 @@ export function registerCommandConversationNode(ctx: Context): void {
 }
 
 /** Shared structural checkpoint recognizer for automatic compaction. */
-export { compactSource, compactSummary }
+export { compactSource, compactSummary, runningCompaction }

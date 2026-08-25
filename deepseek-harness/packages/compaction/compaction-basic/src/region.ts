@@ -33,6 +33,12 @@ interface RegionDependencies {
 export const SUMMARIZER_CONTEXT_WINDOW_FALLBACK = 128_000
 /** Explicit reserve for the summarizer system and instruction envelope. */
 export const SUMMARIZER_ENVELOPE_RESERVE = 16_384
+/**
+ * Absolute priced-span ceiling for one summarizer request. Envelope-aware
+ * half-window math on a 1M route would otherwise send ~475k tokens and miss
+ * the five-minute transaction deadline.
+ */
+export const SUMMARIZER_SPAN_CEILING = 65_536
 /** Stable failure code for a compaction transaction that exceeds its overall deadline. */
 export const COMPACTION_TIMEOUT_CODE = 'COMPACTION_TIMEOUT'
 /** Five minutes covers the existing adapter idle watchdog without allowing keepalives to extend a transaction forever. */
@@ -111,13 +117,16 @@ interface TransactionFailure {
 /**
  * Maximum priced span for a summarizer request. The half-window bound tolerates
  * a recorded/model context mismatch; output and envelope reserves keep a
- * 262K-recorded conversation inside a 128K summarizer route.
+ * 262K-recorded conversation inside a 128K summarizer route. A positive
+ * envelope-aware result is then capped at `SUMMARIZER_SPAN_CEILING` so a 1M
+ * window does not send a half-million-token request.
  * @param contextWindow - positive adapter-owned model capacity.
  * @param maxTokens - configured summarizer output limit.
  * @param envelopeReserve - explicit budget for system/instruction overhead.
  * @returns a non-negative integer safe for selection. When the budget is zero,
  * selection must produce no range, so callers make no summarizer request. The
- * half-window arithmetic invariant applies only when this value is greater than zero.
+ * half-window arithmetic invariant applies only when this value is greater than zero
+ * and below the ceiling.
  */
 export function summarizerSpanBudget(
   contextWindow: number,
@@ -126,7 +135,8 @@ export function summarizerSpanBudget(
 ): number {
   const halfWindow = Math.floor(contextWindow / 2)
   if (!Number.isFinite(halfWindow) || !Number.isFinite(maxTokens) || !Number.isFinite(envelopeReserve)) return 0
-  return Math.max(0, halfWindow - Math.max(0, maxTokens) - Math.max(0, envelopeReserve))
+  const envelopeAware = Math.max(0, halfWindow - Math.max(0, maxTokens) - Math.max(0, envelopeReserve))
+  return envelopeAware === 0 ? 0 : Math.min(SUMMARIZER_SPAN_CEILING, envelopeAware)
 }
 
 /**

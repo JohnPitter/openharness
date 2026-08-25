@@ -603,6 +603,25 @@ export class SessionManager {
   }
 
   /**
+   * Permanently delete one ordinary session and its origin-subagent
+   * descendants. The unary echo drops every returned identity immediately;
+   * `host/session-deleted` frames from other tabs take the same path.
+   * @param sessionId - ordinary session to delete.
+   * @returns the wire result.
+   */
+  async delete(sessionId: SessionId): Promise<RpcResult<{ deleted: true; sessionIds: SessionId[] }>> {
+    try {
+      const { result } = await this.api.sessions.delete({ sessionId })
+      if (result.ok) {
+        for (const id of result.value.sessionIds) this.dropDeletedSession(id)
+      }
+      return result
+    } catch (error) {
+      return transportError(error)
+    }
+  }
+
+  /**
    * Insert-or-enrich a locally synthesized summary: a new id prepends; an
    * existing entry only gains fields it lacks (the session-added frame and the
    * create() echo race — whichever lands second must fill the placeholder's
@@ -610,6 +629,36 @@ export class SessionManager {
    */
   private mergeSummary(summary: SessionSummary): void {
     this.recordMutation({ kind: 'upsert', summary })
+  }
+
+  /**
+   * Drop one identity from the list, conversation, catalog, and buffers.
+   * Durable deletion always removes, including origin-subagent descendants
+   * that `host/session-removed` would keep as idle activations.
+   * @param sessionId - deleted session identity.
+   */
+  private dropDeletedSession(sessionId: SessionId): void {
+    this.recordMutation({ kind: 'remove', sessionId })
+    this.updateCatalogActivity(sessionId, false)
+    this.sessions.get(sessionId)?.handleRemoved()
+    this.pendingBuffers.delete(sessionId)
+    this.pendingInteractions.delete(sessionId)
+    this.jobsBySession.delete(sessionId)
+    this.projectionStores.delete(sessionId)
+    const inflightCatalog = this.catalogInflight.get(sessionId)
+    if (inflightCatalog !== undefined) {
+      inflightCatalog.parentAvailableOverride = false
+      this.catalogStale.add(sessionId)
+    }
+    const ownedCatalog = this.catalogs.get(sessionId)
+    if (ownedCatalog !== undefined && ownedCatalog.parentAvailable) {
+      this.catalogs.set(sessionId, { ...ownedCatalog, parentAvailable: false })
+    }
+    for (const [childId, address] of this.addresses) {
+      if (address.parentSessionId !== sessionId) continue
+      this.sessions.get(childId)?.handleSubagentParentAvailable(false)
+    }
+    this.addresses.delete(sessionId)
   }
 
   /**
@@ -858,6 +907,10 @@ export class SessionManager {
           if (address.parentSessionId !== frame.sessionId) continue
           this.sessions.get(childId)?.handleSubagentParentAvailable(false)
         }
+        return
+      }
+      case 'host/session-deleted': {
+        this.dropDeletedSession(frame.sessionId)
         return
       }
       case 'host/session-status': {

@@ -15,6 +15,7 @@ import {
   MarkdownText,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
+import { CompactionProgressBar } from './CompactionProgress.tsx'
 import css from './MessageItem.module.css'
 
 interface CompactionItemProps {
@@ -39,6 +40,21 @@ export const CompactionItem = memo(function CompactionItem({
   t,
 }: CompactionItemProps) {
   const [expanded, setExpanded] = useState(false)
+  if (node.running === true) {
+    return (
+      <div className={css.compactionRow}>
+        <div className={css.compactionRunning}>
+          <span className={css.compactionLeading} aria-hidden>
+            <span className={css.compactionContextIcon} data-compaction-icon="context">
+              <IconApiOutline14 />
+            </span>
+          </span>
+          <span className={css.compactionTitle}>{title ?? t('message.compaction')}</span>
+        </div>
+        <CompactionProgressBar startedAt={node.time} t={t} />
+      </div>
+    )
+  }
   const expandable = node.summary !== null
   const open = expandable && expanded
   const summary = node.shadowedItemCount !== null && node.shadowedTokenCount !== null

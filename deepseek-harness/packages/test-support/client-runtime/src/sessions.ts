@@ -193,7 +193,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'search' | 'fork'
+      | 'clear' | 'search' | 'fork' | 'delete'
     args: unknown[]
   }[] = []
 
@@ -495,6 +495,24 @@ export class TestSessions implements ISessions {
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)
+  }
+
+  /**
+   * Recorded delete stub: the default drops the id from the fixture list.
+   * @param sessionId - session to delete.
+   */
+  delete(sessionId: SessionId): Promise<void> {
+    this.calls.push({ method: 'delete', args: [sessionId] })
+    this.list.update((draft) => {
+      draft.ids = draft.ids.filter(id => id !== sessionId)
+      const { [sessionId]: _removed, ...byId } = draft.byId
+      draft.byId = byId
+      if (draft.current === sessionId) {
+        draft.current = undefined
+        draft.currentAddress = undefined
+      }
+    })
+    return Promise.resolve()
   }
 
   /**

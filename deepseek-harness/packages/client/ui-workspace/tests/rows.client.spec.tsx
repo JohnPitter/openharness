@@ -409,6 +409,7 @@ describe('workspace browser rows', () => {
     expect(onOpen).not.toHaveBeenCalled()
     // Archive is not destructive (log and accounting slot remain): no danger styling.
     expect(screen.getByRole('menuitem', { name: '归档会话' }).className).not.toMatch(/danger/)
+    expect(screen.getByRole('menuitem', { name: '删除会话' }).className).toMatch(/danger/)
     // Rename dispatches with the current display title (dialog prefill).
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
     expect(screen.queryByRole('menu')).toBeNull()
@@ -427,6 +428,28 @@ describe('workspace browser rows', () => {
     fireEvent.click(screen.getByRole('button', { name: '会话“One”的操作' }))
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('archived row menu dispatches unarchive and delete without opening the session', () => {
+    const onOpen = vi.fn()
+    const onUnarchive = vi.fn()
+    const onDelete = vi.fn()
+    const node: SessionNode = {
+      id: sid('s1'), title: 'One', blank: false, running: false,
+      runningSubagentCount: 0, completed: false, updatedAt: 0,
+    }
+    render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen}
+      onRename={vi.fn()} onFork={vi.fn()} onArchive={vi.fn()}
+      onUnarchive={onUnarchive} onDelete={onDelete} archived t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: '会话“One”的操作' }))
+    expect(screen.queryByRole('menuitem', { name: '归档会话' })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: '取消归档' }))
+    expect(onUnarchive).toHaveBeenCalledWith(node.id)
+    expect(onOpen).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '会话“One”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除会话' }))
+    expect(onDelete).toHaveBeenCalledWith(node.id, 'One')
+    expect(onOpen).not.toHaveBeenCalled()
   })
 
 

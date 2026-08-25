@@ -44,6 +44,13 @@
   padding: 2px 0;
 }
 
+.compactionRunning {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  min-width: 0;
+}
+
 .compactionButton {
   display: flex;
   align-items: center;

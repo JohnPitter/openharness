@@ -12,7 +12,7 @@ Status: implemented
 
 压力压缩 LLM 在每一种计费单位上都会跑。实时覆盖仍是设置 → 通用：`auto` 与 `thresholdPercent`。按请求计费的路由仍跳过自动标题提供方；该跳过留在[路由计费 note](../feature/2026-08-23-route-metering.zh.md)。
 
-Overflow、pressure 和 `compactNow` 会限制已计价区间，使摘要请求装进已路由窗口。压力在 envelope 感知上限为正时使用该上限；该预算为零时不设上限，以便较小的已公布容量仍能压到阈值以下。`compactNow` 会先剪枝超大工具结果。没有记录窗口时，溢出和 `/compact` 仍尝试一次最大的平衡缩减。
+Overflow、pressure 和 `compactNow` 会限制已计价区间，使摘要请求装进已路由窗口。压力在 envelope 感知上限为正时使用该上限；该预算为零时不设上限，以便较小的已公布容量仍能压到阈值以下。正结果再受 `SUMMARIZER_SPAN_CEILING` 约束（[区间上限](../feature/2026-08-25-compaction-span-ceiling-and-progress.zh.md)）。`compactNow` 会先剪枝超大工具结果。没有记录窗口时，溢出和 `/compact` 仍尝试一次最大的平衡缩减。
 
 ## 备选方案
 

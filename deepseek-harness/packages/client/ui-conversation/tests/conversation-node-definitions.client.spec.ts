@@ -758,6 +758,25 @@ describe('built-in conversation node Definitions', () => {
     expect(snapshot(compactions).nodes.values().filter(candidate => candidate.kind === 'compaction')).toHaveLength(1)
   })
 
+  it('renders a running automatic compaction from an unmatched start', () => {
+    const value = assembler([
+      at(20, 'compaction/start', { compactionId: 'automatic-live', turn: 1 }),
+    ])
+    expect(node(snapshot(value), 'compaction')?.data).toMatchObject({
+      seq: 20,
+      running: true,
+      summary: null,
+    })
+
+    value.append(at(21, 'compaction/end', {
+      compactionId: 'automatic-live',
+      turn: 1,
+      error: 'summarization truncated at the token cap (incomplete checkpoint)',
+    }))
+    value.flush()
+    expect(node(snapshot(value), 'compaction')?.visibility).toBe('hidden')
+  })
+
   it('reconciles orphan commands only at a durable boundary and preserves a later done', () => {
     const value = assembler([
       at(1, 'command/run', { commandId: 'orphan', name: 'compact', source: { kind: 'user' } }),

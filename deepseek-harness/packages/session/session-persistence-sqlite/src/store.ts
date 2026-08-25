@@ -245,6 +245,17 @@ export class SqliteStore implements PersistenceBackend<number> {
     return rows.map(rowToMeta)
   }
 
+  async deleteStored(id: SessionId, signal?: AbortSignal): Promise<void> {
+    await this.observe(signal)
+    this.db.exec(sql('begin-immediate'))
+    try {
+      this.db.prepare(sql('delete-session')).run(id)
+      this.db.exec(sql('commit'))
+    } catch (error: unknown) {
+      this.rollback(error, 'delete')
+    }
+  }
+
   /**
    * Return every materialized header with its source-qualified revision.
    * @param signal - optional cancellation before or after the metadata query.

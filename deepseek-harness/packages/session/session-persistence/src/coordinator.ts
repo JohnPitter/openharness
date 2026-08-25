@@ -199,6 +199,14 @@ export interface PersistenceBackend<TornMarker = unknown> {
   list(signal?: AbortSignal): Promise<SessionHeader[]>
 
   /**
+   * Durably remove one materialized session. Absent ids resolve without
+   * writing. Events, metadata, and any per-session artifact go together.
+   * @param id - persisted session identity to drop.
+   * @param signal - optional cancellation for backend delete work.
+   */
+  deleteStored(id: SessionId, signal?: AbortSignal): Promise<void>
+
+  /**
    * Optional side-effect-free artifact locator, used to point refusal
    * diagnostics ({@link SessionFormatUnsupportedError}) at the raw log.
    * Backends without one artifact per session omit it or return `undefined`.
@@ -655,6 +663,37 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     }
     // Pure lazy: record intent only. No artifact until the first append.
     this.states.set(meta.id, { meta, cursor: 0, materialized: false })
+  }
+
+  /**
+   * Drop one session from coordinator state and durable storage. A live
+   * owner must dispose first; an in-flight retirement drains before the
+   * artifact is removed. Absent identities resolve without writing.
+   * @param id - session identity to delete.
+   * @param signal - optional cancellation while waiting on retirement or storage.
+   */
+  async delete(id: SessionId, signal?: AbortSignal): Promise<void> {
+    if (this.retirements.has(id)) await this.waitForRetirement(id, signal)
+    signal?.throwIfAborted()
+    return this.serialize(id, () => this.deleteCore(id, signal), signal)
+  }
+
+  private async deleteCore(id: SessionId, signal?: AbortSignal): Promise<void> {
+    for (const session of this.live.keys()) {
+      if (session.id === id) {
+        throw new Error(`cannot delete session "${id}" while a live Session still owns it`)
+      }
+    }
+    this.preparations.forget(id)
+    this.states.delete(id)
+    await this.backend.deleteStored(id, signal)
+    const args: unknown[] = ['session-persistence/deleted', id]
+    for (const callback of this.ctx.events.dispatch('emit', args)) {
+      const returned: unknown = callback(...args)
+      void Promise.resolve(returned).catch((error: unknown) => {
+        this.ctx.logger.warn(`${this.backend.name}: session-persistence/deleted listener rejected: ${String(error)}`)
+      })
+    }
   }
 
   // `async` so synchronous materialization failures below reject (not throw) per

@@ -229,6 +229,11 @@ export interface CompactionSummaryNode {
   shadowedItemCount: number | null
   /** Estimated token price of the replaced items, or null when the summary event is unavailable or malformed. */
   shadowedTokenCount: number | null
+  /**
+   * Live lock with no checkpoint yet. Absent on landed markers. `seq`/`time`
+   * then come from `compaction/start`.
+   */
+  running?: true
 }
 
 /**
