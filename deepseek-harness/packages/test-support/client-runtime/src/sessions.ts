@@ -90,6 +90,14 @@ export class FixtureSession implements SessionFace {
   }
 
   /**
+   * Fail-loud stub; supply `revise` on the fixture's session face to exercise it.
+   * @returns never — always throws.
+   */
+  revise(): never {
+    throw new Error(`test session "${this.sessionId}": revise is not stubbed — supply it on the fixture's session face`)
+  }
+
+  /**
    * Fail-loud stub; supply `readAttachment` on the fixture's session face to exercise it.
    * @param _attachmentId - opaque durable attachment id.
    * @returns never — always throws.

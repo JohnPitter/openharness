@@ -53,6 +53,13 @@ interface SessionEventMap {
    * project their `content` verbatim; `source` tells them apart.
    */
   'user/message': UserMessage
+  /**
+   * Durable same-session revision: cuts the anchored user-message tail through
+   * `throughSeq` and supplies the replacement user message. Replay folds the
+   * cut before deriving history; the event is itself the model-visible surface
+   * node for the replacement.
+   */
+  'session/revision': SessionRevisionCut
   /** Raw stream chunk — token-level replay fidelity. */
   'assistant/chunk': { turn: number; step: number; chunk: StreamChunk }
   /**
@@ -129,6 +136,10 @@ interface SessionEventMap {
 ```
 
 `UserMessage` is the identified, frozen user-role value shared by ordinary prompts, injected context, steering, and live inbox events. Event wrappers add only event-local position or outcome facts; the loop adds only driver-owned routing state while an item remains pending.
+
+`session/revision` is an append-only cut event for editing the latest completed user message in the same Session. Its inclusive interval begins at `anchorSeq` and ends at the log tail captured by `throughSeq`, removing the anchor's completed turn and every generated assistant, tool, milestone, todo, and command event in that interval from active logical history. The replacement is folded as one user surface node. Repeated revisions anchor on the prior revision event; explicit forks retain their existing seed boundary and semantics.
+
+The Host admits a revision under the shared per-session turn admission and dispatches its replacement once. The client derives a deterministic SHA-256 `operationId` from the Session, anchor, message identity, and normalized text. A duplicate operation id returns the committed cut without dispatching again. If the process fails after the cut is durable and before dispatch, the replacement remains without a response; the user can regenerate it, avoiding duplicate model or tool work.
 
 ### `TodoItem` — one todo-list entry
 
@@ -254,7 +265,7 @@ For `assistant/message`, a present `sourceEventSeqs: []` is a complete known-emp
 
 ## Surface types
 
-The three message-producing types (`SurfaceEventType` — `user/message`, `assistant/message`, `tool/result`) carry surface metadata declaring how they join the ordered derived surface. See the [session surface Agent Note](../../.agents/notes/implemented/architecture/2026-06-18-session-surface.md).
+The four message-producing types (`SurfaceEventType` — `user/message`, `session/revision`, `assistant/message`, `tool/result`) carry surface metadata declaring how they join the ordered derived surface. See the [session surface Agent Note](../../.agents/notes/implemented/architecture/2026-06-18-session-surface.md).
 
 ### `SurfaceEventType` — the message-producing subset of event types
 
@@ -266,6 +277,7 @@ The three message-producing types (`SurfaceEventType` — `user/message`, `assis
  */
 type SurfaceEventType =
   | 'user/message'
+  | 'session/revision'
   | 'assistant/message'
   | 'tool/result'
 ```
@@ -289,6 +301,7 @@ type SurfaceEventType =
 type SurfaceOp =
   | 'append'
   | { op: 'replace'; start: number; end: number }
+  | { op: 'cut'; anchorSeq: number; throughSeq: number; revision: number }
 ```
 
 `'append'` is the normal tail-append path. `replace` shadows surface entries from `start` through `end` inclusive (both must be valid surface seqs; `start === end` replaces a single entry) and inserts the new event in their place.
@@ -719,6 +732,18 @@ announce(session: Session): void
 async flush(session: Session): Promise<boolean>
 
 /**
+ * Append one durable revision event and await its durability barrier.
+ * @param session - live session to revise.
+ * @param anchorSeq - latest user-message surface sequence being revised.
+ * @param anchorMessageId - identity of the anchor message.
+ * @param replacement - replacement user message.
+ * @param operationId - idempotency key for this revision request.
+ * @param signal - optional cancellation signal checked before and after append.
+ * @returns revision identity and whether an existing operation was reused.
+ */
+async replaceLatestUserMessage( session: Session, anchorSeq: number, anchorMessageId: MessageId, replacement: UserMessage, operationId: string, signal?: AbortSignal, ): Promise<{ revision: number; eventSeq: number; operationId: string; existing: boolean }>
+
+/**
  * Look up a live session.
  * @param id - the session id to look up.
  * @returns the session, or undefined when no live session has that id.
@@ -748,7 +773,7 @@ list(): Session[]
 fork(source: SessionForkSource, boundary?: number, childSessionId?: SessionId): Session
 ```
 
-Types: [CreateSessionOptions](persistence.md) · [PrepareSessionOptions](persistence.md) · [SessionId](core.md)
+Types: [CreateSessionOptions](persistence.md) · [MessageId](llm-streaming.md) · [PrepareSessionOptions](persistence.md) · [SessionId](core.md)
 
 Source: [`packages/core/session/src/index.ts`](../../packages/core/session/src/index.ts)
 

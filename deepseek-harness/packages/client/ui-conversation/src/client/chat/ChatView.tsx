@@ -169,6 +169,17 @@ export function ChatView({
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
   const running = useSession(s => s.running)
+  const latestUserSeq = useMemo(() => {
+    for (let i = order.length - 1; i >= 0; i -= 1) {
+      const key = order[i]
+      if (key === undefined) continue
+      const node = nodeStore.get(key)
+      if (node?.kind === 'user'
+        && (node.location.kind === 'turn' || node.location.kind === 'step')
+        && node.location.turn.status === 'closed') return node.anchorSeq
+    }
+    return undefined
+  }, [nodeStore, order])
   const openState = useSession(s => s.openState)
   const openError = useSession(s => s.openError)
   const hasMore = useSession(s => s.hasMore)
@@ -223,8 +234,8 @@ export function ChatView({
   // keys off the completed-turn tail: a fork cut mid-turn is unavailable.
   const userEdit = useMemo(() => running
     ? undefined
-    : (text: string, location: ConversationLocation) => {
-      editMessage({ text, location })
+    : (text: string, location: ConversationLocation, messageId?: string, anchorSeq?: number) => {
+      editMessage({ text, location, ...(messageId === undefined ? {} : { messageId }), ...(anchorSeq === undefined ? {} : { anchorSeq }) })
     }, [running, editMessage])
 
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -466,7 +477,7 @@ export function ChatView({
               inspectCall={inspectCall}
               forkAt={forkAt}
               editMessage={userEdit}
-              editFirstTurn={timeline.turnOrder[0]}
+              editLatestUserSeq={latestUserSeq}
               continueTurn={continueTurn}
               renderMessageImages={renderMessageImages}
               fileMentions={fileMentions}

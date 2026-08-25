@@ -197,21 +197,23 @@ export class SessionInputShell implements SessionInput {
   }
 
   /**
-   * Enter editing on one sent user message. The fork anchor is the previous
-   * completed turn's `turn/end` seq from the message's engine-owned Location;
-   * the window's first turn has none (an empty prefix cannot fork), so the
-   * gesture refuses there — the bubble hides the action through the same rule.
+   * Enter editing on the latest completed user message. The message event seq
+   * and id are the same-session revision anchor; no prior turn is required.
    * @param request - joined message text and its Location.
-   * @returns whether editing entered; a busy submission phase or a boundary-less turn refuses.
+   * @returns whether editing entered; a busy submission phase or missing anchor refuses.
    */
-  editMessage(request: { text: string; location: ConversationLocation }): boolean {
-    if (this.deps.editSink === undefined || this.deps.editBoundary === undefined) return false
+  editMessage(request: { text: string; location: ConversationLocation; messageId?: string; anchorSeq?: number }): boolean {
+    if (this.deps.editSink === undefined) return false
     if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
     const location = request.location
     if (location.kind !== 'turn' && location.kind !== 'step') return false
-    const boundary = this.deps.editBoundary(location.turn.turn)
-    if (boundary === undefined) return false
-    this.editing = { previousDraft: this.snapshot.draft, atSeq: boundary }
+    const anchorSeq = request.anchorSeq ?? this.deps.editBoundary?.(location.turn.turn)
+    if (anchorSeq === undefined) return false
+    this.editing = {
+      previousDraft: this.snapshot.draft,
+      atSeq: anchorSeq,
+      ...request.messageId === undefined ? {} : { messageId: request.messageId },
+    }
     if (this.snapshot.draft !== request.text) this.setDraft(request.text)
     this.publish()
     return true

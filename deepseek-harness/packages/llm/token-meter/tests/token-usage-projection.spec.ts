@@ -375,7 +375,7 @@ describe('contextPressure session projection', () => {
     const checkpoint = JSON.parse(JSON.stringify(
       ctx.sessionProjections.checkpoint(session),
     )) as ReturnType<typeof ctx.sessionProjections.checkpoint>
-    expect(checkpoint.contextPressure?.ver).toBe(4)
+    expect(checkpoint.contextPressure?.ver).toBe(5)
 
     await meterFiber.dispose()
     expect(ctx.sessionProjections.snapshot(session).values).not.toHaveProperty('contextPressure')
@@ -422,7 +422,7 @@ describe('contextPressure session projection', () => {
     expect(compacted.projectedTokens).toBeLessThan(beforeCompaction!)
   })
 
-  it('folds a replacement without a claim at zero', async () => {
+  it('folds an unmetered replacement from retained active nodes', async () => {
     const { ctx, session } = await harness()
     const question = appendUser(session, 'a question from an unmetered log')
     startStep(session, 1, 1)
@@ -438,7 +438,7 @@ describe('contextPressure session projection', () => {
       sourceEventSeqs: [question],
     })
 
-    expect(pressure(ctx, session)).toEqual(before)
+    expect(pressure(ctx, session).projectedTokens).not.toBe(before.projectedTokens)
   })
 
   it('clamps a projection that heuristic error drove below zero', async () => {

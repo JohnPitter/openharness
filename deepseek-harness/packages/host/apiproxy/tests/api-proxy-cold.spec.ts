@@ -798,4 +798,86 @@ describe('sessions.prompt synchronous rejection', () => {
       })
     }
   })
+
+  it('releases revision admission when cold agent setup fails before ownership transfer', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(UserQuestionService)
+    const sessionId = sid('revision-setup-failure')
+    const original = createUserMessage({ content: [{ type: 'text', text: 'before' }], source: { kind: 'user' } })
+    const events = [
+      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+      { type: 'user/message', seq: 1, time: 2, data: original, surfaceOp: 'append' },
+      { type: 'turn/end', seq: 2, time: 3, data: { turn: 1, reason: { kind: 'completed' } } },
+    ] as SessionEvent[]
+    const meta = header('revision-setup-failure', 1, { agentPreset: 'standard' })
+    ctx.provide('sessionPersistence', {
+      list: () => Promise.resolve([meta]),
+      inspect: () => Promise.resolve({ meta, events }),
+      locate: () => undefined,
+    } as never)
+    let mountCalls = 0
+    ctx.provide('agentPresets', {
+      defaultId: 'standard',
+      resolve: () => Promise.resolve({ id: 'standard', trust: 'system', path: '/standard' }),
+      mount: () => {
+        mountCalls++
+        return mountCalls === 1
+          ? Promise.reject(new Error('setup seam failed'))
+          : Promise.resolve({ id: 'standard', trust: 'system', path: '/standard' })
+      },
+    } as never)
+    const committed = vi.fn()
+    const cancel = vi.fn()
+    const modelRequests: string[] = []
+    let resumeCalls = 0
+    const resume = vi.spyOn(ctx.agents, 'resume').mockImplementation(async () => {
+      resumeCalls++
+      if (resumeCalls === 1) throw new Error('setup seam failed')
+      const session = ctx.sessions.create(sessionId, { seed: [...events], meta })
+      const agent = {
+        id: sessionId,
+        session,
+        status: 'idle',
+        cancel,
+        followupCommitted: (message: unknown) => { committed(message) },
+      } as unknown as Agent
+      ctx.agents.register(agent)
+      return { agent, dispose: () => Promise.resolve() }
+    })
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+    const payload = {
+      sessionId,
+      operationId: 'revision-op-1',
+      anchorSeq: 1,
+      anchorMessageId: original.id,
+      content: [{ type: 'text' as const, text: 'after' }],
+    }
+    const caller = new AbortController()
+
+    const first = await api.sessions.revise(request(payload), caller.signal)
+    expect(first.result).toEqual({
+      ok: false,
+      error: {
+        code: 'internal',
+        message: 'resume failed for session "revision-setup-failure": Error: setup seam failed',
+        details: {},
+      },
+    })
+    expect(resume).toHaveBeenCalledOnce()
+    expect(ctx.sessions.get(sessionId)).toBeUndefined()
+    expect(events.filter(event => event.type === 'session/revision')).toHaveLength(0)
+    expect(modelRequests).toHaveLength(0)
+
+    const second = await api.sessions.revise(request({ ...payload, operationId: 'revision-op-2' }), caller.signal)
+    expect(second.result.ok).toBe(true)
+    expect(resume).toHaveBeenCalledTimes(2)
+    expect(committed).toHaveBeenCalledOnce()
+    expect(ctx.sessions.get(sessionId)?.events.filter(event => event.type === 'session/revision')).toHaveLength(1)
+    expect(modelRequests).toHaveLength(0)
+    caller.abort()
+    expect(cancel).toHaveBeenCalledOnce()
+    await ctx.fiber.dispose()
+  })
 })

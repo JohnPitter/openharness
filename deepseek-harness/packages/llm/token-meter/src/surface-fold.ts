@@ -49,6 +49,13 @@ export function foldSurfaceTokens(
   if (op === 'append') {
     return { tokens, nodes: [...nodes, { seq: event.seq, tokens }], deltaTokens: tokens }
   }
+  if (op.op === 'cut') {
+    const shadowed = nodes.filter(node => node.seq >= op.anchorSeq && node.seq <= op.throughSeq)
+    const removed = shadowed.reduce((total, node) => total + node.tokens, 0)
+    const next = nodes.filter(node => node.seq < op.anchorSeq || node.seq > op.throughSeq)
+    next.push({ seq: event.seq, tokens })
+    return { tokens, nodes: next, deltaTokens: tokens - removed }
+  }
   const startIdx = nodes.findIndex(node => node.seq === op.start)
   const endIdx = nodes.findIndex(node => node.seq === op.end)
   if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {

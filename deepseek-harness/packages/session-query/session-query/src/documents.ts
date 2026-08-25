@@ -1,6 +1,6 @@
 /** Shared event metadata and semantic-document projection. */
 
-import { foldSurface } from '@deepseek-ai/dsh-session'
+import { foldSessionRevision, foldSurface } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEventRecord, SessionEventSearchDocument, SessionEventSurface } from './types.ts'
 import { SessionQueryError } from './config.ts'
@@ -36,9 +36,10 @@ export function buildSessionEventSearchDocuments(
   sessionId: SessionId,
   events: readonly SessionEvent[],
 ): SessionEventSearchDocument[] {
+  const logicalEvents = foldSessionRevision(events)
   const surfaceBySeq = classifySurface(events)
   const documents: SessionEventSearchDocument[] = []
-  for (const event of events) {
+  for (const event of logicalEvents) {
     const text = extractSessionEventText(event)
     if (text.length === 0) continue
     documents.push({

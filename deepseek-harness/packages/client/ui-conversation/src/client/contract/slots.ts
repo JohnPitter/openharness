@@ -422,11 +422,10 @@ export interface ChatNodeOwnerProps {
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
   /**
-   * Edit one sent user message by forking before its turn and sending the
-   * revised text in the child. Undefined while the session is running or the
-   * message's previous-turn boundary is unavailable (the first message today).
+   * Edit the latest completed user message in place. Undefined while the
+   * session is running or the message is not the completed transcript tail.
    */
-  editMessage?: ((text: string, location: ConversationLocation) => void) | undefined
+  editMessage?: ((text: string, location: ConversationLocation, messageId?: string, anchorSeq?: number) => void) | undefined
   /**
    * Queue a continue prompt after a terminal turn failure or max-tokens cut.
    * Undefined when the renderer should not offer the action.
@@ -793,7 +792,7 @@ export interface ChatViewInjected {
    * remember the fork cut (the previous completed turn's end seq) for send.
    * @param request - message text and the engine-owned Location the cut derives from.
    */
-  editMessage: (request: { text: string; location: ConversationLocation }) => void
+  editMessage: (request: { text: string; location: ConversationLocation; messageId?: string; anchorSeq?: number }) => void
   /** Queue a continue prompt so a failed or truncated turn can resume. */
   continueTurn: () => Promise<void>
   /**

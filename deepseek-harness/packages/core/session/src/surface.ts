@@ -14,6 +14,7 @@ import type { SessionEvent, SurfaceEvent, SurfaceEventType, SurfaceOp } from './
 /** Runtime counterpart of the message-producing event union. */
 const SURFACE_EVENT_TYPES = new Set<string>([
   'user/message',
+  'session/revision',
   'assistant/message',
   'tool/result',
 ])
@@ -21,7 +22,7 @@ const SURFACE_EVENT_TYPES = new Set<string>([
 /**
  * Whether an event type can join the model-visible surface.
  * @param type - event type to test.
- * @returns true for one of the three message-producing event types.
+ * @returns true for one of the message-producing event types.
  */
 export function isSurfaceEligibleType(type: string): boolean {
   return SURFACE_EVENT_TYPES.has(type)
@@ -96,6 +97,9 @@ export function deriveEventMessage(event: SessionEvent): Message | null {
     case 'user/message': {
       return event.data
     }
+    case 'session/revision': {
+      return event.data.replacement
+    }
     case 'assistant/message': {
       // Skip an empty-content assistant/message: it exists only to host a
       // max-tokens step's usage and must not inject a content-less assistant
@@ -126,6 +130,17 @@ export interface SurfaceFoldReplacement {
 }
 
 /** Complete result of replaying the surface operations in a session log. */
+/** Fold all committed same-session cuts into the active logical event stream. */
+export function foldSessionRevision(events: readonly SessionEvent[]): SessionEvent[] {
+  let visible = [...events]
+  for (const event of events) {
+    if (event.type !== 'session/revision') continue
+    const { anchorSeq, throughSeq } = event.data
+    visible = visible.filter(item => item.seq < anchorSeq || item.seq > throughSeq || item.seq === event.seq)
+  }
+  return visible
+}
+
 export interface SurfaceFoldResult {
   /** Current surface event sequences in model-visible order. */
   nodes: number[]
@@ -157,6 +172,7 @@ interface SurfaceReplacePlan extends SurfaceFoldReplacement {
 /** One validated surface transition that has not mutated fold state yet. */
 type SurfacePlan =
   | { kind: 'append'; seq: number }
+  | { kind: 'cut'; seq: number; anchorSeq: number; throughSeq: number; shadowedSeqs: number[] }
   | SurfaceReplacePlan
 
 /** Create an empty surface fold state. */
@@ -170,6 +186,15 @@ function isEventSeq(value: unknown): value is number {
 }
 
 /** Whether a runtime value is the exact positional-replacement shape. */
+function isCutOp(value: object): value is Extract<SurfaceOp, { op: 'cut' }> {
+  const op = value as Record<string, unknown>
+  return Object.keys(op).length === 4
+    && op['op'] === 'cut'
+    && isEventSeq(op['anchorSeq'])
+    && isEventSeq(op['throughSeq'])
+    && isEventSeq(op['revision'])
+}
+
 function isReplaceOp(value: object): value is Extract<SurfaceOp, { op: 'replace' }> {
   const op = value as Record<string, unknown>
   return Object.keys(op).length === 3
@@ -201,8 +226,12 @@ function surfaceOpOf(event: SessionEvent): SurfaceOp | undefined {
   if (op === null || typeof op !== 'object' || Array.isArray(op)) {
     throw new Error(`session event "${event.type}" carries an invalid surfaceOp`)
   }
-  if (!isReplaceOp(op)) {
+  if (isCutOp(op)) return op
+  if ((op as Record<string, unknown>)['op'] === 'replace' && !isReplaceOp(op)) {
     throw new Error(`session event "${event.type}" carries an invalid replace surfaceOp`)
+  }
+  if (!isReplaceOp(op)) {
+    throw new Error(`session event "${event.type}" carries an invalid surfaceOp`)
   }
   return op
 }
@@ -334,6 +363,27 @@ function planSurfaceEvent(
     assertProvenance(event, [])
     return { kind: 'append', seq: event.seq }
   }
+  if (surfaceOp.op === 'cut') {
+    const cut = surfaceOp
+    if (event.type !== 'session/revision' || cut.throughSeq >= event.seq || cut.anchorSeq > cut.throughSeq) {
+      throw new Error('session revision cut has an invalid interval')
+    }
+    const data = event.data
+    if (data.anchorSeq !== cut.anchorSeq || data.throughSeq !== cut.throughSeq || data.revision !== cut.revision) {
+      throw new Error('session revision surfaceOp does not match its payload')
+    }
+    const anchor = events.find(item => item.seq === cut.anchorSeq)
+    const anchorMessageId = anchor?.type === 'user/message' ? anchor.data.id
+      : anchor?.type === 'session/revision' ? anchor.data.replacement.id : undefined
+    if (anchorMessageId !== data.anchorMessageId) {
+      throw new Error('session revision anchor does not identify the requested user message')
+    }
+    const latestUser = events.slice(0, cut.throughSeq - baseSeq + 1).findLast(e =>
+      (e.type === 'user/message' && e.data.source.kind === 'user') || e.type === 'session/revision')
+    if (latestUser?.seq !== cut.anchorSeq) throw new Error('session revision anchor is not the latest user message')
+    const shadowedSeqs = state.nodes.filter(seq => seq >= cut.anchorSeq && seq <= cut.throughSeq)
+    return { kind: 'cut', seq: event.seq, anchorSeq: cut.anchorSeq, throughSeq: cut.throughSeq, shadowedSeqs }
+  }
   const range = replacementRange(state, surfaceOp)
   assertProvenance(event, range.shadowedSeqs)
   assertToolResultRewrite(event, range.shadowedSeqs, events, baseSeq)
@@ -368,6 +418,11 @@ function applySurfacePlan(
   } else if (plan?.kind === 'replace') {
     state.nodes.splice(plan.startIdx, plan.endIdx - plan.startIdx + 1, plan.seq)
     state.replaceGeneration += 1
+  } else if (plan?.kind === 'cut') {
+    state.nodes = state.nodes.filter(seq => seq < plan.anchorSeq || seq > plan.throughSeq)
+    state.nodes.push(plan.seq)
+    state.replaceGeneration += 1
+    return { seq: plan.seq, start: plan.anchorSeq, end: plan.throughSeq, shadowedSeqs: plan.shadowedSeqs }
   }
   if (plan?.kind !== 'replace') return
   return {

@@ -29,10 +29,12 @@ export interface InputTarget {
   insertReference(ref: ReferenceInsert, span: TokenSpan): boolean
 }
 
-/** One active sent-message edit (fork cut anchor + the pre-edit draft it replaced). */
+/** One active sent-message edit (revision anchor + the pre-edit draft it replaced). */
 export interface EditingMessage {
-  /** Fork anchor: the previous completed turn's `turn/end` seq (entry refuses turns without one). */
+  /** Revision anchor: the edited user message event seq. */
   readonly atSeq: number
+  /** Durable id of the edited user message. */
+  readonly messageId?: string
   /** Draft text held aside while editing; restored on cancel. */
   readonly previousDraft: string
 }

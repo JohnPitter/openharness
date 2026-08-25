@@ -138,6 +138,22 @@ export const sessionForkValueSchema = z.object({
   sessionId: sessionIdSchema,
 }) satisfies z.ZodType<Wire<ResponseValue<'session.fork'>>>
 
+/** session.revise request payload; the anchor identifies the latest completed user message. */
+export const sessionReviseRequestSchema = z.strictObject({
+  sessionId: sessionIdSchema,
+  operationId: z.string().min(1),
+  anchorSeq: z.number().int().nonnegative(),
+  anchorMessageId: messageIdSchema,
+  content: z.array(z.looseObject({ type: z.string() })).min(1).max(256),
+}) as unknown as z.ZodType<Wire<RequestPayload<'session.revise'>>>
+
+/** session.revise response value. */
+export const sessionReviseValueSchema = z.object({
+  revision: z.number().int().positive(),
+  eventSeq: z.number().int().nonnegative(),
+  operationId: z.string().min(1),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.revise'>>>
+
 /** session.history request payload (beforeSeq/maxMessages page backwards from the window tail). */
 export const sessionHistoryRequestSchema = z.object({
   sessionId: sessionIdSchema,

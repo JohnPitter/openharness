@@ -348,6 +348,16 @@ export interface SessionsApi {
   fork(request: RpcRequest<{ sessionId: SessionId; atSeq?: number }>):
   Promise<RpcResponse<{ sessionId: SessionId }>>
 
+  /** Replaces the latest completed user message in-place while preserving the session id. */
+  revise(request: RpcRequest<{
+    sessionId: SessionId
+    operationId: string
+    anchorSeq: number
+    anchorMessageId: MessageId
+    content: ContentBlock[]
+  }>, signal: AbortSignal):
+  Promise<RpcResponse<{ revision: number; eventSeq: number; operationId: string }>>
+
   /**
    * Sends text and temporary image bytes to an ordinary session Agent after durable host admission.
    * Browser callers attach their current IANA zone;

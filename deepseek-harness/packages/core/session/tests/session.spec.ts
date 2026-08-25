@@ -1120,6 +1120,58 @@ describe('SessionStore', () => {
     expect(ctx.sessions.list()).toEqual([session])
   })
 
+  it('replays a committed revision across store reloads without duplicating it', async () => {
+    const first = new Context()
+    await first.plugin(SessionStore)
+    const original = first.sessions.create(SessionId('reload-revision'))
+    original.append('turn/start', { turn: 1 })
+    const user = createUserMessage({ content: [{ type: 'text', text: 'old text' }], source: { kind: 'user' } })
+    original.append('user/message', user, { surfaceOp: 'append' })
+    original.append('step/start', { turn: 1, step: 1 })
+    original.append('assistant/message', { turn: 1, step: 1, message: createMessage({ role: 'assistant', content: [{ type: 'text', text: 'old answer' }], source: { kind: 'model', provider: 'mock', model: 'mock' } }) }, { surfaceOp: 'append' })
+    original.append('step/end', { turn: 1, step: 1 })
+    original.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const replacement = createUserMessage({ content: [{ type: 'text', text: 'new text' }], source: { kind: 'user' } })
+    const committed = await first.sessions.replaceLatestUserMessage(original, 1, user.id, replacement, 'op-reload')
+
+    const second = new Context()
+    await second.plugin(SessionStore)
+    const reloaded = second.sessions.create(SessionId('reload-revision'), { seed: structuredClone(original.events), meta: original.header })
+    const retried = await second.sessions.replaceLatestUserMessage(reloaded, 1, user.id, replacement, 'op-reload')
+    expect(retried).toMatchObject({ ...committed, existing: true })
+    expect(reloaded.events.filter(event => event.type === 'session/revision')).toHaveLength(1)
+    expect(reloaded.deriveMessages().map(message => message.content)).toEqual([[{ type: 'text', text: 'new text' }]])
+    await expect(second.sessions.replaceLatestUserMessage(reloaded, 1, user.id, createUserMessage({ content: [{ type: 'text', text: 'conflict' }], source: { kind: 'user' } }), 'op-reload')).rejects.toMatchObject({ code: 'REVISION_ANCHOR_STALE' })
+  })
+
+  it('waits for the replacement turn terminal closure before allowing the next revision', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.create(SessionId('revision-turn-closure'))
+    session.append('turn/start', { turn: 1 })
+    const original = createUserMessage({ content: [{ type: 'text', text: 'old' }], source: { kind: 'user' } })
+    session.append('user/message', original, { surfaceOp: 'append' })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const firstReplacement = createUserMessage({ content: [{ type: 'text', text: 'first replacement' }], source: { kind: 'user' } })
+    const first = await ctx.sessions.replaceLatestUserMessage(
+      session, 1, original.id, firstReplacement, 'revision-1',
+    )
+    session.append('turn/start', { turn: 2 })
+    await expect(ctx.sessions.replaceLatestUserMessage(
+      session, first.eventSeq, firstReplacement.id,
+      createUserMessage({ content: [{ type: 'text', text: 'second replacement' }], source: { kind: 'user' } }),
+      'revision-2',
+    )).rejects.toMatchObject({ code: 'REVISION_INCOMPLETE_TURN' })
+    session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+    const second = await ctx.sessions.replaceLatestUserMessage(
+      session, first.eventSeq, firstReplacement.id,
+      createUserMessage({ content: [{ type: 'text', text: 'second replacement' }], source: { kind: 'user' } }),
+      'revision-2',
+    )
+    expect(second.revision).toBe(first.revision + 1)
+    expect(session.deriveMessages().map(message => message.content)).toEqual([[{ type: 'text', text: 'second replacement' }]])
+  })
+
   it('rejects duplicate ids and supports seeding', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)

@@ -6,8 +6,8 @@ import css from './ChatView.module.css'
 
 interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly nodeKey: string
-  /** The first turn in the loaded window: its user message offers no edit (the fork cut would be an empty prefix). */
-  readonly editFirstTurn?: number | undefined
+  /** Only the latest completed user message may be revised. */
+  readonly editLatestUserSeq?: number | undefined
   readonly useSession: ChatViewSlotProps['useSession']
   readonly renderSlot: ChatViewSlotProps['renderSlot']
   readonly t: ChatViewSlotProps['t']
@@ -19,20 +19,20 @@ type RoutedChatNodeOwner = {
 
 /** Subscribe and dispatch one stable Context key without observing sibling Nodes. */
 export const ChatNodeSeat = memo(function ChatNodeSeat({
-  nodeKey, selectedCallId, cwd, openFile, inspectCall, forkAt, editMessage, editFirstTurn, continueTurn,
+  nodeKey, selectedCallId, cwd, openFile, inspectCall, forkAt, editMessage, editLatestUserSeq, continueTurn,
   renderMessageImages, fileMentions, useSession, renderSlot, t,
 }: ChatNodeSeatProps) {
   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
   const routedNode = node as ChatNode | undefined
   const owner = useMemo<ChatNodeOwnerProps | null>(() => {
     if (node === undefined) return null
-    // The edit affordance needs a previous completed turn to cut before:
-    // outside a resolved turn, or on the window's first turn (an empty fork
-    // prefix), the owner omits the callback and the bubble hides the action.
+    // Revision is available only for the latest user message in a closed turn.
     const location = node.location
     const editable = editMessage !== undefined
+      && node.kind === 'user'
+      && node.anchorSeq === editLatestUserSeq
       && (location.kind === 'turn' || location.kind === 'step')
-      && location.turn.turn !== editFirstTurn
+      && location.turn.status === 'closed'
     return {
       selectedCallId,
       cwd,
@@ -45,7 +45,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       fileMentions,
     }
   }, [
-    node, selectedCallId, cwd, openFile, inspectCall, forkAt, editMessage, editFirstTurn,
+    node, selectedCallId, cwd, openFile, inspectCall, forkAt, editMessage, editLatestUserSeq,
     continueTurn, renderMessageImages, fileMentions,
   ])
   if (routedNode === undefined || owner === null) return null

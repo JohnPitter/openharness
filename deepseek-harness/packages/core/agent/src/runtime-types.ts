@@ -123,6 +123,9 @@ export interface Agent {
    */
   followup(message: UserMessage): void
 
+  /** Queue a user message whose durable session event was already committed. */
+  followupCommitted?: (message: UserMessage) => void
+
   /**
    * Submit steering for the nearest step. An idle driver starts a turn;
    * a running driver consumes it at its next step boundary.

@@ -2,11 +2,14 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, CallId, createMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, Message, TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { TokenSurfaceNode } from '../src/types.ts'
 import SessionStore, { Session, SessionId, canonicalHeader } from '@deepseek-ai/dsh-session'
-import type { EpochHeader, SessionEvent } from '@deepseek-ai/dsh-session'
+import type { EpochHeader, SessionEvent, SurfaceEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import type { TokenMeasurement, TokenMeterConfig } from '@deepseek-ai/dsh-token-meter'
+import { foldSurfaceTokens } from '../src/surface-fold.ts'
+import { contextPressureProjectionDefinition } from '../src/usage-projection.ts'
 
 function header(model: string, extras: Omit<EpochHeader, 'config'> = {}): EpochHeader {
   return canonicalHeader({ config: { provider: 'mock', model }, ...extras })
@@ -695,5 +698,60 @@ describe('malformed replay and listener lifecycle', () => {
     activeMeter = ctx.tokenMeter
     expect(activeMeter.measure(session).logRevision).toBe(3)
     await secondFiber.dispose()
+  })
+
+  it('keeps active projection state bounded and exact across stress revisions', () => {
+    const message = (text: string) => createUserMessage({
+      content: [{ type: 'text', text }],
+      source: { kind: 'user' },
+    })
+    const append = (seq: number, text: string): SurfaceEvent => ({
+      type: 'user/message', seq, time: 0, data: message(text), surfaceOp: 'append',
+    })
+    const cut = (seq: number, anchorSeq: number, throughSeq: number, text: string): SurfaceEvent => ({
+      type: 'session/revision', seq, time: 0,
+      data: {
+        kind: 'cut', operationId: `cut-${seq}`, revision: seq - 2,
+        anchorSeq, throughSeq, anchorMessageId: message('anchor').id, replacement: message(text),
+      },
+      surfaceOp: { op: 'cut', anchorSeq, throughSeq, revision: seq - 2 },
+    })
+    const replace = (seq: number, start: number, end: number, text: string): SurfaceEvent => ({
+      type: 'user/message', seq, time: 0, data: message(text),
+      surfaceOp: { op: 'replace', start, end },
+    })
+
+    const events: SessionEvent[] = []
+    let state: { nodes: TokenSurfaceNode[]; total: number } = { nodes: [], total: 0 }
+    for (let seq = 1; seq <= 200; seq++) {
+      const event = append(seq, `append-${seq}`)
+      events.push(event)
+      const folded = foldSurfaceTokens(state.nodes, event)
+      state = { nodes: folded.nodes, total: state.total + folded.deltaTokens }
+    }
+    expect(state.nodes).toHaveLength(200)
+    for (let index = 0; index < 200; index++) {
+      const seq = 201 + index * 2
+      const replacement = cut(seq, 1, state.nodes.at(-1)!.seq, `cut-${index}`)
+      events.push(replacement)
+      const folded = foldSurfaceTokens(state.nodes, replacement)
+      state = { nodes: folded.nodes, total: state.total + folded.deltaTokens }
+      expect(state.nodes).toHaveLength(1)
+      expect(state.total).toBe(state.nodes[0]!.tokens)
+      const revised = replace(seq + 1, state.nodes[0]!.seq, state.nodes[0]!.seq, `replace-${index}`)
+      events.push(revised)
+      const replaced = foldSurfaceTokens(state.nodes, revised)
+      state = { nodes: replaced.nodes, total: state.total + replaced.deltaTokens }
+      expect(state.nodes).toHaveLength(1)
+      expect(state.total).toBe(state.nodes[0]!.tokens)
+    }
+
+    let projected: Parameters<typeof contextPressureProjectionDefinition.apply>[0] = contextPressureProjectionDefinition.init()
+    for (const event of events) projected = contextPressureProjectionDefinition.apply(projected, event)
+    const checkpoint = JSON.parse(JSON.stringify(projected)) as typeof projected
+    const restored = contextPressureProjectionDefinition.stateSchema.parse(checkpoint)
+    expect(restored.nodes).toHaveLength(1)
+    expect(restored.surfaceTokens).toBe(state.total)
+    expect(restored.nodes).toEqual(state.nodes)
   })
 })

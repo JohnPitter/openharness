@@ -102,6 +102,7 @@ const contextPressureStateSchema = z.object({
     end: z.number().int().nonnegative(),
     tokens: z.number().int().nonnegative(),
   }).optional(),
+  nodes: z.array(z.object({ seq: z.number().int().nonnegative(), tokens: z.number().int().nonnegative() }).strict()),
 }).strict()
 
 type ContextPressureState = z.infer<typeof contextPressureStateSchema>
@@ -173,11 +174,11 @@ export const tokenUsageProjectionDefinition = {
  */
 export const contextPressureProjectionDefinition = {
   key: 'contextPressure',
-  stateVersion: 4,
+  stateVersion: 5,
   stateSchema: contextPressureStateSchema,
-  init: () => ({ surfaceTokens: 0 }),
+  init: () => ({ surfaceTokens: 0, nodes: [] }),
   apply: (state, event) => {
-    const fold = foldSurfaceProjection(state.claim, event)
+    const fold = foldSurfaceProjection({ nodes: state.nodes, claim: state.claim }, event)
     let next = state
     if (event.type === 'request/context') {
       const contextWindow = event.data.contextWindow
@@ -197,8 +198,13 @@ export const contextPressureProjectionDefinition = {
         next = { ...next, pressureTokens, sampledSurfaceTokens: next.surfaceTokens }
       }
     }
-    if (fold.deltaTokens !== 0) {
-      next = { ...next, surfaceTokens: next.surfaceTokens + fold.deltaTokens }
+    const nodesChanged = fold.nodes.length !== state.nodes.length
+      || fold.nodes.some((node, index) => {
+        const previous = state.nodes[index]
+        return previous === undefined || node.seq !== previous.seq || node.tokens !== previous.tokens
+      })
+    if (fold.deltaTokens !== 0 || nodesChanged) {
+      next = { ...next, surfaceTokens: next.surfaceTokens + fold.deltaTokens, nodes: fold.nodes }
     }
     // A defined fold.claim is always freshly built, so presence decides claim
     // bookkeeping: no claim before or after this event leaves `next` as is.

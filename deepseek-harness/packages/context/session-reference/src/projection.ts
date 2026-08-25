@@ -51,6 +51,11 @@ function projectSessionConversation(snapshot: SessionSurfaceSnapshot): Projected
       }
       case 'tool/result':
         break
+      case 'session/revision': {
+        const text = textContent(event.data.replacement.content)
+        if (text !== '') conversation.push({ role: 'user', text, checkpoint: false, originalText: text, omittedBytes: 0 })
+        break
+      }
       /* v8 ignore next 2 -- SurfaceEventType is closed and every variant is handled above. */
       default:
         assertNever(event, 'session-reference surface event')

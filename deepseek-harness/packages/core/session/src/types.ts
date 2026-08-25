@@ -262,6 +262,8 @@ export interface SessionEventMap {
    * project their `content` verbatim; `source` tells them apart.
    */
   'user/message': UserMessage
+  /** Atomically discards a completed user-message suffix and supplies its replacement. */
+  'session/revision': SessionRevisionCut
   /** Raw stream chunk — token-level replay fidelity. */
   'assistant/chunk': { turn: number; step: number; chunk: StreamChunk }
   /**
@@ -339,6 +341,17 @@ export interface SessionEventMap {
 /** The appendable event-type keys of {@link SessionEventMap}, plugin-merged extensions included. */
 export type SessionEventType = keyof SessionEventMap
 
+/** The durable replacement and interval discarded by one same-session edit. */
+export interface SessionRevisionCut {
+  readonly revision: number
+  readonly kind: 'cut'
+  readonly operationId: string
+  readonly anchorSeq: number
+  readonly throughSeq: number
+  readonly anchorMessageId: import('@deepseek-ai/dsh-llm/brand').MessageId
+  readonly replacement: UserMessage
+}
+
 /**
  * The subset of {@link SessionEventType} values whose events produce LLM
  * messages and are eligible to appear on the ordered surface. Only these
@@ -346,6 +359,7 @@ export type SessionEventType = keyof SessionEventMap
  */
 export type SurfaceEventType =
   | 'user/message'
+  | 'session/revision'
   | 'assistant/message'
   | 'tool/result'
 
@@ -376,6 +390,7 @@ export type SurfaceEvent = SessionEvent<SurfaceEventType> & { surfaceOp: Surface
 export type SurfaceOp =
   | 'append'
   | { op: 'replace'; start: number; end: number }
+  | { op: 'cut'; anchorSeq: number; throughSeq: number; revision: number }
 
 /**
  * Surface placement and cited source-event seqs for {@link Session.append}. Required on

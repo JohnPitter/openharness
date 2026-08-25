@@ -17,7 +17,7 @@ import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, freezeMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
-import { isAppendSurfaceEvent, isJsonValue } from '@deepseek-ai/dsh-session'
+import { foldSessionRevision, isAppendSurfaceEvent, isJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, Session, SessionEvent, SessionEventMap, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionSearchCursor } from '@deepseek-ai/dsh-session-query'
@@ -84,7 +84,7 @@ import type { SettingsDescriptor, SettingsNamespace, SettingsPathOp } from '@dee
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 // Value edge: the rename impl narrows the title service's validation failure; the import also resolves `ctx.get('sessionTitle')`.
 import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
-import type { CallId } from '@deepseek-ai/dsh-llm/brand'
+import type { CallId, MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import type { ApprovalOutcome, ApprovalRequestId } from '@deepseek-ai/dsh-user-approval'
 // Side-effect type import: resolves the `approval/request` waterfall and
@@ -123,7 +123,7 @@ const COLD_SUMMARY_BATCH_SIZE = 16
 export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 
 /** Conversation message event types (the pagination counting unit). */
-const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
+const MESSAGE_TYPES = new Set(['user/message', 'assistant/message', 'session/revision'])
 
 /** Validate one prompt as a batch before publishing any durable image object. */
 async function durablePromptContent(ctx: Context, content: readonly PromptContentPart[]): Promise<ContentBlock[]> {
@@ -235,7 +235,8 @@ function paginate(
   let cut = 0
   for (let i = window.length - 1; i >= 0; i--) {
     const event = window[i] as SessionEvent
-    if (!MESSAGE_TYPES.has(event.type) || !isAppendSurfaceEvent(event)) continue
+    if (!MESSAGE_TYPES.has(event.type)
+      || (event.type !== 'session/revision' && !isAppendSurfaceEvent(event))) continue
     count++
     const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
     let groupStart = event.seq
@@ -268,7 +269,7 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
       if (timer !== undefined) clearTimeout(timer)
     }),
     new Promise<T>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(message)), ms)
+      timer = setTimeout(() => { reject(new Error(message)) }, ms)
     }),
   ])
 }
@@ -1083,6 +1084,25 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const presetSwitches = new Map<SessionId, Promise<unknown>>()
   /** Sessions whose committed preset switch still owes a compaction before the next prompt. */
   const needsCompact = new Set<SessionId>()
+  /** Shared synchronous admission claim for prompts and revisions. */
+  const sessionAdmissions = new Map<SessionId, { prompts: number; revision: boolean }>()
+
+  function claimSessionAdmission(sessionId: SessionId, kind: 'prompt' | 'revision'): boolean {
+    const current = sessionAdmissions.get(sessionId)
+    if (kind === 'revision' && current !== undefined) return false
+    if (kind === 'prompt' && current?.revision === true) return false
+    sessionAdmissions.set(sessionId, kind === 'revision'
+      ? { prompts: 0, revision: true }
+      : { prompts: (current?.prompts ?? 0) + 1, revision: false })
+    return true
+  }
+
+  function releaseSessionAdmission(sessionId: SessionId, kind: 'prompt' | 'revision'): void {
+    const current = sessionAdmissions.get(sessionId)
+    if (current === undefined) return
+    if (kind === 'revision' || current.prompts <= 1) sessionAdmissions.delete(sessionId)
+    else sessionAdmissions.set(sessionId, { prompts: current.prompts - 1, revision: false })
+  }
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
@@ -1597,10 +1617,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     includeProjections: boolean,
   ): { events: SessionEvent[]; projections?: SessionProjectionsBlock } {
     if (source.kind === 'detached') {
-      const projections = includeProjections ? detachedProjectionsFor(ctx, source.events) : undefined
-      return { events: source.events, ...projections === undefined ? {} : { projections } }
+      const events = foldSessionRevision(source.events)
+      const projections = includeProjections ? detachedProjectionsFor(ctx, events) : undefined
+      return { events, ...projections === undefined ? {} : { projections } }
     }
-    const events = [...source.session.events]
+    const events = foldSessionRevision(source.session.events)
     const projections = includeProjections ? projectionsFor(ctx, source.session) : undefined
     return { events, ...projections === undefined ? {} : { projections } }
   }
@@ -2467,6 +2488,60 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         return ok(request, { sessionId: childId })
       },
 
+      async revise(request, signal) {
+        const { sessionId, operationId, anchorSeq, anchorMessageId, content } = request.payload
+        if (!claimSessionAdmission(sessionId, 'revision')) return err(request, { code: 'session-active', message: 'session has active admission', details: { sessionId } })
+        try {
+          signal.throwIfAborted()
+          const found = await agentFor(sessionId)
+          if ('error' in found) return err(request, found.error)
+          const agent = found.agent
+          if (agent.status === 'running') return err(request, { code: 'session-active', message: 'session is active', details: { sessionId } })
+          const replacement = createUserMessage({ content, source: { kind: 'user', rpcId: request.rpcId } })
+          try {
+            const result = await (ctx.sessions as unknown as {
+              replaceLatestUserMessage(
+                session: Session,
+                anchorSeq: number,
+                anchorMessageId: MessageId,
+                replacement: UserMessage,
+                operationId: string,
+                signal?: AbortSignal,
+              ): Promise<{ revision: number; eventSeq: number; operationId: string; existing: boolean }>
+            }).replaceLatestUserMessage(agent.session, anchorSeq, anchorMessageId, replacement, operationId, signal)
+            // The committed operation owns at-most-once dispatch. A retry is
+            // reconciled from the durable event and must never start another
+            // turn, even when the first request had not reached turn/start.
+            if (!result.existing) {
+              const committedAgent = agent as Agent & { followupCommitted?: (message: UserMessage) => void }
+              if (committedAgent.followupCommitted === undefined) throw new Error('agent does not support committed revision dispatch')
+              const persisted = agent.session.events.find(event => event.seq === result.eventSeq)
+              const durableReplacement = persisted?.type === 'session/revision' ? persisted.data.replacement : replacement
+              if (signal.aborted) {
+                agent.cancel({ kind: 'user' }, { keepInbox: false })
+              } else {
+                const cancel = (): void => { agent.cancel({ kind: 'user' }, { keepInbox: false }) }
+                signal.addEventListener('abort', cancel, { once: true })
+                committedAgent.followupCommitted(durableReplacement)
+              }
+            }
+            return ok(request, result)
+          } catch (error: unknown) {
+            const revisionCode = typeof error === 'object' && error !== null && 'code' in error ? (error as { code?: unknown }).code : undefined
+            if (revisionCode === 'REVISION_UNCERTAIN' || revisionCode === 'REVISION_ANCHOR_NOT_LATEST' || revisionCode === 'REVISION_INCOMPLETE_TURN' || revisionCode === 'REVISION_ANCHOR_STALE') {
+              const code = revisionCode === 'REVISION_UNCERTAIN' ? 'revision-uncertain' : revisionCode === 'REVISION_INCOMPLETE_TURN' ? 'revision-incomplete-turn'
+                : revisionCode === 'REVISION_ANCHOR_NOT_LATEST' ? 'revision-anchor-not-latest' : 'revision-anchor-stale'
+              return err(request, { code, message: error instanceof Error ? error.message : String(error), details: { sessionId } })
+            }
+            return err(request, { code: 'internal', message: `revision failed: ${String(error)}`, details: { sessionId } })
+          }
+        } catch (_error: unknown) {
+          return err(request, { code: 'cancelled', message: 'revision was cancelled', details: { sessionId } })
+        } finally {
+          releaseSessionAdmission(sessionId, 'revision')
+        }
+      },
+
       async prompt(request) {
         const { sessionId, mode, content, clientTimeZone } = request.payload
         const canonicalTimeZone = clientTimeZone === undefined
@@ -2479,14 +2554,26 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { value: clientTimeZone },
           })
         }
-        const resolved = await turnAgentFor<{ accepted: true }>(request, sessionId)
-        if ('refused' in resolved) return resolved.refused
+        if (!claimSessionAdmission(sessionId, 'prompt')) return err(request, { code: 'session-active', message: 'session has active revision', details: { sessionId } })
+        let resolved: Awaited<ReturnType<typeof turnAgentFor<{ accepted: true }>>>
+        try {
+          resolved = await turnAgentFor<{ accepted: true }>(request, sessionId)
+        } catch (error: unknown) {
+          releaseSessionAdmission(sessionId, 'prompt')
+          throw error
+        }
+        if ('refused' in resolved) { releaseSessionAdmission(sessionId, 'prompt'); return resolved.refused }
         const agent = resolved.agent
         // The sessions.prompt contract carries no cancellation signal (unlike
         // subagent.prompt), so the post-switch compaction runs on a local
         // controller: it is short-lived and must settle before this message
         // is admitted, whether the client is still connected or not.
-        await compactAfterPresetSwitch(agent, new AbortController().signal)
+        try {
+          await compactAfterPresetSwitch(agent, new AbortController().signal)
+        } catch (error: unknown) {
+          releaseSessionAdmission(sessionId, 'prompt')
+          throw error
+        }
         // Request identity and optional browser zone ride the exact durable user message.
         const source: MessageSource = {
           kind: 'user',
@@ -2527,7 +2614,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }
           return ok(request, { accepted: true as const })
         }
-        return hasImage ? serializeImageAdmission(agent, admit) : admit()
+        try {
+          return hasImage ? await serializeImageAdmission(agent, admit) : await admit()
+        } finally {
+          releaseSessionAdmission(sessionId, 'prompt')
+        }
       },
 
       async attachment(request) {
@@ -2706,7 +2797,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             header = inspected.meta
             events = inspected.events
             projections = beforeSeq === undefined
-              ? subagentHistoryProjections(ctx, childSessionId, () => detachedProjectionsFor(ctx, inspected.events))
+              ? subagentHistoryProjections(ctx, childSessionId, () => detachedProjectionsFor(ctx, foldSessionRevision(inspected.events)))
               : undefined
           } catch (error: unknown) {
             if (signal?.aborted) {
@@ -2744,7 +2835,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { childSessionId },
           })
         }
-        const page = historyPage(ctx, events, beforeSeq, maxMessages)
+        const logicalEvents = foldSessionRevision(events)
+        const page = historyPage(ctx, logicalEvents, beforeSeq, maxMessages)
         return ok(request, { ...page, ...projections === undefined ? {} : { projections } })
       },
 

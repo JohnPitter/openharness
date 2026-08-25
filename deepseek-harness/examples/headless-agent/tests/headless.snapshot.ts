@@ -52,6 +52,7 @@ const teamConfigPath = fileURLToPath(new URL('../team.cordis.snapshot.yml', impo
 const startupFailureConfigPath = fileURLToPath(new URL('./fixtures/startup-activation-error/cordis.yml', import.meta.url))
 const startupFailureExpected = join(snapshotsDir, 'startup-activation-error', 'stderr.expected.txt')
 const binScript = fileURLToPath(new URL('./fixtures/headless-driver.ts', import.meta.url))
+const revisionBinScript = fileURLToPath(new URL('./fixtures/revision-snapshot.ts', import.meta.url))
 const dshBinScript = fileURLToPath(new URL('../../../apps/cli/src/bin.ts', import.meta.url))
 const tsconfigPath = fileURLToPath(new URL('../../../tsconfig.json', import.meta.url))
 const reasoningConfigPath = fileURLToPath(new URL('./fixtures/cli.cordis.yml', import.meta.url))
@@ -590,6 +591,53 @@ describe('headless stream-json snapshots', () => {
     } finally {
       await server.close()
     }
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+
+  it('revises the latest message in place through the assembled one-shot app', async () => {
+    const result = await runLoaderSmoke({
+      label: 'same-session latest-message revision snapshot',
+      tempDirPrefix: 'headless-snapshot-revision-',
+      binScript: revisionBinScript,
+      libBinScript: revisionBinScript,
+      configPath: advancedConfigPath,
+      binArgs: [advancedConfigPath],
+      tsconfigPath,
+      env: {
+        DSH_SNAPSHOT: 'replay',
+        DSH_SNAPSHOT_FILE: advancedSessionFixture,
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+      },
+    })
+    expect(result.stderr).toBe('')
+    expect(JSON.parse(result.stdout)).toMatchInlineSnapshot(`
+      {
+        "after": [
+          {
+            "text": "replacement prompt",
+            "type": "text",
+          },
+        ],
+        "before": [
+          {
+            "text": "old user prompt",
+            "type": "text",
+          },
+          {
+            "text": "old assistant tail",
+            "type": "text",
+          },
+          {
+            "arguments": "{}",
+            "id": "old-tool",
+            "name": "old_tool",
+            "type": "tool-call",
+          },
+        ],
+        "childSessionIds": [],
+        "forkCalls": 0,
+        "sessionId": "revision-snapshot-session",
+      }
+    `)
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
   it('replays the advanced toolchain through the one-shot app', async () => {

@@ -12,11 +12,12 @@ import { deepFreeze } from '@deepseek-ai/dsh-llm'
 import { scopeOf, scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type { Message } from '@deepseek-ai/dsh-llm'
+import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import { SESSION_FORMAT_VERSION, SessionId } from './types.ts'
 import type { TypertLookup } from '@deepseek-ai/dsh-typert-protocol'
 import type { CreateSessionOptions, EpochHeader, PrepareSessionOptions, RequestContext, SessionEvent, SessionEventMap, SessionEventType, SessionHeader, SurfaceIntent, SurfaceEventType } from './types.ts'
 import { snapshotJsonValue } from './json.ts'
-import { deriveEventMessage, SurfaceManager } from './surface.ts'
+import { deriveEventMessage, foldSessionRevision, SurfaceManager } from './surface.ts'
 import type { SessionSurface } from './surface.ts'
 import { foldRequestHeader } from './request-header.ts'
 
@@ -24,13 +25,14 @@ export * from './types.ts'
 export { SessionPreparation } from './preparation.ts'
 export type { SessionPreparationOptions } from './preparation.ts'
 export type { AssistantMessage, ToolResultMessage, UserMessage } from '@deepseek-ai/dsh-llm'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 export { isJsonValue, snapshotJsonValue } from './json.ts'
 export type { JsonValue } from './json.ts'
 export { interruptedTurnClosers, TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN } from './repair.ts'
 export { decodeStorageRecord, packChunkRuns } from './chunk-rows.ts'
 export type { ChunkRow, StorageRecord } from './chunk-rows.ts'
 export type { SessionSurface, SurfaceFoldReplacement, SurfaceFoldResult } from './surface.ts'
-export { deriveEventMessage, foldSurface, isAppendSurfaceEvent, isReplacementSurfaceEvent, isSurfaceEvent, isSurfaceEligibleType } from './surface.ts'
+export { deriveEventMessage, foldSessionRevision, foldSurface, isAppendSurfaceEvent, isReplacementSurfaceEvent, isSurfaceEvent, isSurfaceEligibleType } from './surface.ts'
 export { canonicalHeader, foldRequestHeader, headerEquals } from './request-header.ts'
 export { KNOWN_SESSION_EVENT_TYPES } from './known-event-types.ts'
 
@@ -669,11 +671,12 @@ export class Session {
    */
   requestHeader(): EpochHeader | undefined {
     if (this.headerFoldSeq < this.log.length) {
-      // Frozen on update: the fold is session state exposed by reference — a
-      // consumer mutating it in place (instead of building a replacement)
-      // would desync every later comparison against the log, so mutation
-      // throws instead.
-      this.headerFold = deepFreeze(foldRequestHeader(this.log.slice(this.headerFoldSeq), this.headerFold))
+      const delta = this.log.slice(this.headerFoldSeq)
+      if (delta.some(event => event.type === 'session/revision')) {
+        this.headerFold = deepFreeze(foldRequestHeader(foldSessionRevision(this.log), undefined))
+      } else {
+        this.headerFold = deepFreeze(foldRequestHeader(delta, this.headerFold))
+      }
       this.headerFoldSeq = this.log.length
     }
     return this.headerFold
@@ -690,8 +693,16 @@ export class Session {
    */
   requestContext(): RequestContext | undefined {
     if (this.contextFoldSeq < this.log.length) {
-      for (const event of this.log.slice(this.contextFoldSeq)) {
-        if (event.type === 'request/context') this.contextFold = deepFreeze({ ...event.data })
+      const delta = this.log.slice(this.contextFoldSeq)
+      if (delta.some(event => event.type === 'session/revision')) {
+        this.contextFold = undefined
+        for (const event of foldSessionRevision(this.log)) {
+          if (event.type === 'request/context') this.contextFold = deepFreeze({ ...event.data })
+        }
+      } else {
+        for (const event of delta) {
+          if (event.type === 'request/context') this.contextFold = deepFreeze({ ...event.data })
+        }
       }
       this.contextFoldSeq = this.log.length
     }
@@ -780,6 +791,17 @@ export class SessionForkError extends Error {
   constructor(message: string, public readonly code: SessionForkErrorCode) {
     super(message)
     this.name = 'SessionForkError'
+  }
+}
+
+/** Stable failures from same-session revision admission. */
+export class SessionRevisionError extends Error {
+  constructor(
+    message: string,
+    public readonly code: 'SESSION_NOT_LIVE' | 'REVISION_ANCHOR_STALE' | 'REVISION_ANCHOR_NOT_LATEST' | 'REVISION_INCOMPLETE_TURN' | 'REVISION_UNCERTAIN',
+  ) {
+    super(message)
+    this.name = 'SessionRevisionError'
   }
 }
 
@@ -1036,6 +1058,76 @@ export class SessionStore extends Service {
     const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
     if (failure !== undefined) throw failure.reason
     return callbacks.length > 0
+  }
+
+  /**
+   * Append one durable revision event and await its durability barrier.
+   * @param session - live session to revise.
+   * @param anchorSeq - latest user-message surface sequence being revised.
+   * @param anchorMessageId - identity of the anchor message.
+   * @param replacement - replacement user message.
+   * @param operationId - idempotency key for this revision request.
+   * @param signal - optional cancellation signal checked before and after append.
+   * @returns revision identity and whether an existing operation was reused.
+   */
+  async replaceLatestUserMessage(
+    session: Session,
+    anchorSeq: number,
+    anchorMessageId: MessageId,
+    replacement: UserMessage,
+    operationId: string,
+    signal?: AbortSignal,
+  ): Promise<{ revision: number; eventSeq: number; operationId: string; existing: boolean }> {
+    this.liveEntryFor(session)
+    signal?.throwIfAborted()
+    if (!Number.isSafeInteger(anchorSeq) || anchorSeq < 0) throw new SessionRevisionError('invalid revision anchor', 'REVISION_ANCHOR_STALE')
+    const events = session.events
+    const existing = events.findLast(event => event.type === 'session/revision' && event.data.operationId === operationId) as Extract<SessionEvent, { type: 'session/revision' }> | undefined
+    if (existing !== undefined) {
+      const cut = existing.data
+      if (cut.anchorSeq !== anchorSeq || cut.anchorMessageId !== anchorMessageId
+        || JSON.stringify(cut.replacement.content) !== JSON.stringify(replacement.content)) {
+        throw new SessionRevisionError('revision operation id has conflicting payload', 'REVISION_ANCHOR_STALE')
+      }
+      return { revision: cut.revision, eventSeq: existing.seq, operationId, existing: true }
+    }
+    const anchor = events.find(event => event.seq === anchorSeq)
+    const anchorMessageIdValue = anchor?.type === 'user/message' ? anchor.data.id
+      : anchor?.type === 'session/revision' ? anchor.data.replacement.id : undefined
+    if (anchorMessageIdValue !== anchorMessageId) throw new SessionRevisionError('revision anchor is stale', 'REVISION_ANCHOR_STALE')
+    const latest = events.findLast(event => (event.type === 'user/message' && event.data.source.kind === 'user') || event.type === 'session/revision')
+    if (latest?.seq !== anchorSeq) throw new SessionRevisionError('revision anchor is not latest', 'REVISION_ANCHOR_NOT_LATEST')
+    const turnStart = anchor?.type === 'session/revision'
+      // A revision owns the turn dispatched immediately after its durable cut.
+      // Requiring adjacency prevents a later, unrelated turn from closing a
+      // revision whose replacement was never dispatched.
+      ? events.find(event => event.seq === anchorSeq + 1 && event.type === 'turn/start')
+      : events.findLast(event => event.type === 'turn/start' && event.seq < anchorSeq)
+    const typedTurnStart = turnStart as Extract<SessionEvent, { type: 'turn/start' }> | undefined
+    const nextTurnStart = typedTurnStart === undefined ? undefined
+      : events.find(event => event.type === 'turn/start' && event.seq > typedTurnStart.seq)
+    const turnEnd = typedTurnStart === undefined ? undefined : events.find(event =>
+      event.type === 'turn/end'
+      && event.data.turn === typedTurnStart.data.turn
+      && event.seq > anchorSeq
+      && event.seq < (nextTurnStart?.seq ?? Number.POSITIVE_INFINITY),
+    )
+    if (typedTurnStart === undefined || turnEnd === undefined) {
+      throw new SessionRevisionError('revision anchor turn is incomplete', 'REVISION_INCOMPLETE_TURN')
+    }
+    const revision = events.reduce((max, event) => event.type === 'session/revision' ? Math.max(max, event.data.revision) : max, 0) + 1
+    const throughSeq = events.at(-1)?.seq ?? -1
+    signal?.throwIfAborted()
+    const event = session.append('session/revision', {
+      kind: 'cut', operationId, revision, anchorSeq, throughSeq, anchorMessageId, replacement,
+    }, { surfaceOp: { op: 'cut', anchorSeq, throughSeq, revision } })
+    try {
+      signal?.throwIfAborted()
+      await this.flush(session)
+    } catch (error: unknown) {
+      throw new SessionRevisionError(`revision ${revision} was appended but could not be flushed: ${String(error)}`, 'REVISION_UNCERTAIN')
+    }
+    return { revision, eventSeq: event.seq, operationId, existing: false }
   }
 
   /** Return the exact live entry; detached/prepared objects reject. */

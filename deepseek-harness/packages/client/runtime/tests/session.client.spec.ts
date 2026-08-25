@@ -170,6 +170,44 @@ function chatSeqs(snapshot: ConversationSnapshot): number[] {
   return chatEvents(snapshot).map(item => item.event.seq)
 }
 
+describe('revision operation identity', () => {
+  it('A/G: derives the same deterministic operation id after client reload', async () => {
+    const api = new FakeApiClient()
+    const first = makeSession(api).session
+    const second = makeSession(api).session
+    await first.revise(7, 'message-7' as never, `cafe${String.fromCharCode(0x301)}\r\nline`)
+    await second.revise(7, 'message-7' as never, `caf${String.fromCharCode(0xe9)}\nline`)
+    const firstPayload = api.calls.find(call => call.method === 'session.revise')?.payload as { operationId: string }
+    const secondPayload = api.calls.filter(call => call.method === 'session.revise')[1]?.payload as { operationId: string }
+    expect(firstPayload.operationId).toBe(secondPayload.operationId)
+    expect(firstPayload.operationId).toMatch(/^revision:[0-9a-f]{64}$/)
+  })
+
+  it('B: cold replacement removes the old tail once, then live append uses the same session', async () => {
+    const api = new FakeApiClient()
+    const { session } = makeSession(api)
+    const old = [...plainTurn(0, 1, 'old question', 'old answer'), ev.toolResult(6, 1, 'old-call', 'old tool')]
+    api.onHistory = () => histResponse(old)
+    await session.open()
+    const user = old.find(event => event.type === 'user/message')!
+    const replacement = { ...user, data: { ...user.data, content: [{ type: 'text', text: 'new question' }] } }
+    const revision = {
+      type: 'session/revision', seq: 7, time: 1_700_000_000_007, surfaceOp: { op: 'cut', anchorSeq: 1, throughSeq: 6, revision: 1 },
+      data: { kind: 'cut', operationId: 'revision:test', revision: 1, anchorSeq: 1, throughSeq: 6, anchorMessageId: user.data.id, replacement: replacement.data },
+    } as unknown as SessionEvent
+    session.handleMuxEnvelope('revision' as never, { type: 'session/event', sessionId: SID, event: revision })
+    session.handleMuxEnvelope('append' as never, { type: 'session/event', sessionId: SID, event: ev.user(8, 'live append') })
+    const texts = chatEvents(session.getSnapshot()).flatMap((item) => {
+      const event = item.event
+      const content = event.type === 'user/message' ? event.data.content
+        : event.type === 'assistant/message' || event.type === 'tool/result' ? event.data.message.content : []
+      return content.flatMap(block => block.type === 'text' ? [block.text] : [])
+    })
+    expect(texts).toEqual(['new question', 'live append'])
+    expect(session.getSnapshot().sessionId).toBe(SID)
+  })
+})
+
 function histResponse(events: SessionEvent[], hasMore = false) {
   // history returns HistoryEntry[] ({event, view?}); these tests are view-less.
   return Promise.resolve(ok({ events: entries(events) as never[], hasMore }))

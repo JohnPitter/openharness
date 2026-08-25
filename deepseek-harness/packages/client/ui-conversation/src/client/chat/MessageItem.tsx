@@ -333,7 +333,9 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           clock="start"
           className={css.actions}
           {...node.kind === 'user' && editMessage !== undefined
-            ? { onEdit: () => { editMessage(text, node.location) } }
+            ? { onEdit: () => {
+              editMessage(text, node.location, node.id, node.anchorSeq)
+            } }
             : {}}
           t={t}
         />

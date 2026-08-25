@@ -9,6 +9,7 @@
  * real host entity, so the sink is one unconditional prompt path.
  */
 import type { ClientContext, ISessions, SessionBinding, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { MessageId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InputTriggerController, SubmitImageAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { queueReadFaceOf } from '../queue/store.ts'
@@ -202,17 +203,17 @@ export class InputHub implements SessionInputResolver {
   }
 
   /**
-   * Edit sink: fork the session before the edited message's turn, prompt the
-   * revised text in the child, then switch to it. Failure keeps the source
-   * session selected and leaves the shell's editing state and draft intact —
+   * Edit sink: replace the latest completed user message in the current session.
+   * Failure leaves the same session selected and keeps the shell's editing state
+   * and draft intact —
    * the shell feeds the rejection into the machine's failure path, and the
    * localized notice lands here.
    * @param id - source session id.
    * @param text - revised message text.
    * @param mode - queue or steer delivery selected by composer policy.
-   * @param editing - active edit (fork anchor + stashed draft).
+   * @param editing - active edit (revision anchor + stashed draft).
    * @param shell - the resident shell (notice outlet).
-   * @returns completion; rejects on fork or prompt failure.
+   * @returns completion; rejects on revision failure.
    */
   private async editSink(
     id: SessionId,
@@ -221,13 +222,15 @@ export class InputHub implements SessionInputResolver {
     editing: EditingMessage,
     shell: SessionInputShell,
   ): Promise<void> {
+    void mode
     try {
-      const childId = await this.sessions().fork({ sessionId: id, atSeq: editing.atSeq, increaseTitle: false })
-      const child = this.sessions().binding(childId)?.session
-      if (child === undefined) throw new Error(`ui-conversation: fork child "${childId}" resolved no binding`)
-      const result = await child.prompt([{ type: 'text', text }], mode === 'steer' ? 'steer' : 'queue')
-      if (!result.ok) throw new Error(`ui-conversation: child prompt failed: ${result.error.code}`)
-      this.sessions().open(childId)
+      if (editing.messageId === undefined) throw new Error('ui-conversation: revision message id unavailable')
+      const result = await this.sessions().binding(id)?.session.revise(
+        editing.atSeq,
+        editing.messageId as MessageId,
+        text,
+      )
+      if (result === undefined || !result.ok) throw new Error(`ui-conversation: revision failed: ${result?.ok === false ? result.error.code : 'session-unavailable'}`)
     } catch (error) {
       shell.notify('error', this.t('message.editFailed'))
       throw error
@@ -235,10 +238,8 @@ export class InputHub implements SessionInputResolver {
   }
 
   /**
-   * The fork cut for editing a message in one turn: the previous completed
-   * turn's `turn/end` seq from the current window (undefined when the earlier
-   * turn's end lies outside the loaded window — the host then floors to the
-   * first available turn/end at or after the anchor).
+   * Eligibility boundary for editing a message in one turn: the previous
+   * completed turn's `turn/end` seq from the current window.
    * @param session - the session whose timeline supplies the boundary.
    * @param turn - turn the edited message opens.
    * @returns the anchor seq for `sessions.fork`, or undefined for the first turn.

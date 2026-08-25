@@ -14,6 +14,8 @@ export function extractSessionEventText(event: SessionEvent): string {
   switch (event.type) {
     case 'user/message':
       return contentText(event.data.content)
+    case 'session/revision':
+      return contentText(event.data.replacement.content)
     case 'assistant/message':
       return contentText(event.data.message.content)
     case 'tool/call':

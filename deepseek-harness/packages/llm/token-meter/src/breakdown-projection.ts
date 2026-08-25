@@ -32,6 +32,7 @@ const contextBreakdownStateSchema = z.object({
     end: tokenCount,
     tokens: tokenCount,
   }).optional(),
+  nodes: z.array(z.object({ seq: tokenCount, tokens: tokenCount }).strict()),
 }).strict()
 type ContextBreakdownState = z.infer<typeof contextBreakdownStateSchema>
 
@@ -54,11 +55,11 @@ const breakdownSchema = z.object({
  */
 export const contextBreakdownProjectionDefinition = {
   key: 'contextBreakdown',
-  stateVersion: 2,
+  stateVersion: 3,
   stateSchema: contextBreakdownStateSchema,
-  init: () => ({ systemTokens: 0, toolsTokens: 0, messageTokens: 0 }),
+  init: () => ({ systemTokens: 0, toolsTokens: 0, messageTokens: 0, nodes: [] }),
   apply: (state, event) => {
-    const fold = foldSurfaceProjection(state.claim, event)
+    const fold = foldSurfaceProjection({ nodes: state.nodes, claim: state.claim }, event)
     let systemTokens = state.systemTokens
     let toolsTokens = state.toolsTokens
     if (event.type === 'request/header') {
@@ -70,11 +71,17 @@ export const contextBreakdownProjectionDefinition = {
       && toolsTokens === state.toolsTokens
       && fold.deltaTokens === 0
       && fold.claim === undefined
-      && state.claim === undefined) return state
+      && state.claim === undefined
+      && fold.nodes.length === state.nodes.length
+      && fold.nodes.every((node, index) => {
+        const previous = state.nodes[index]
+        return previous !== undefined && node.seq === previous.seq && node.tokens === previous.tokens
+      })) return state
     return {
       systemTokens,
       toolsTokens,
       messageTokens: state.messageTokens + fold.deltaTokens,
+      nodes: fold.nodes,
       ...fold.claim === undefined ? {} : { claim: fold.claim },
     }
   },

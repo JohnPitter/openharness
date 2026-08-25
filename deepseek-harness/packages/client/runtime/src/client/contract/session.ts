@@ -71,6 +71,14 @@ export interface ISession {
    * @returns the normalized accepted title and its event seq, or the business error.
    */
   rename(title: string): Promise<RpcResult<{ title: string; seq: number }>>
+  /** Replace one latest completed user message in the same session. */
+  revise(
+    anchorSeq: number,
+    anchorMessageId: MessageId,
+    text: string,
+    signal?: AbortSignal,
+    operationId?: string,
+  ): Promise<RpcResult<{ revision: number; eventSeq: number; operationId: string }>>
   /**
    * Extend the history window backwards (older messages pagination).
    * @returns completion; failures land in snapshot.openState/loadingOlder.

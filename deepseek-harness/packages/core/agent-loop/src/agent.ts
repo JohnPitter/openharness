@@ -65,6 +65,7 @@ export class ReactLoopAgent implements Agent {
   readonly inbox: Inbox
   private phase: Phase
   private activityDone: Promise<void> = Promise.resolve()
+  private readonly committedMessages = new Set<string>()
 
   /** The agent-scoped registration boundary; the lifecycle owner unwinds it after the driver exits. */
   readonly scope: Scope
@@ -120,6 +121,11 @@ export class ReactLoopAgent implements Agent {
   }
 
   followup(input: UserMessage): void {
+    this.send(input, 'next-turn', true)
+  }
+
+  followupCommitted(input: UserMessage): void {
+    this.committedMessages.add(input.id)
     this.send(input, 'next-turn', true)
   }
 
@@ -280,7 +286,9 @@ export class ReactLoopAgent implements Agent {
         phase.step = step
         try {
           for (const message of decision.messages) {
-            this.session.append('user/message', message, { surfaceOp: 'append' })
+            if (!this.committedMessages.delete(message.id)) {
+              this.session.append('user/message', message, { surfaceOp: 'append' })
+            }
           }
           // max-tokens is sticky: once any step hits the ceiling, later steps
           // that complete normally must not downgrade the turn outcome.

@@ -115,6 +115,34 @@ describe('legacy request-header format', () => {
   })
 })
 
+describe('revision projection', () => {
+  it('C/D: rebuilds header, context, messages, and tool surface from the retained prefix', () => {
+    const session = Session.create(SessionId('revision-projection'))
+    session.append('turn/start', { turn: 1 })
+    const old = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'old request' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('request/header', { header: { config: CONFIG, system: 'old header', tools: [tool('old-tool')] }, reason: 'initial' })
+    session.append('request/context', { provider: 'mock', model: 'old-model', contextWindow: 1_000 })
+    session.append('tool/result', { turn: 1, step: 1, message: {
+      role: 'tool', callId: 'old-call', content: [{ type: 'text', text: 'old tool text' }], isError: false,
+    } as never }, { surfaceOp: 'append' })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    session.append('session/revision', {
+      kind: 'cut', operationId: 'projection-cut', revision: 1, anchorSeq: old.seq,
+      throughSeq: session.events.at(-1)!.seq, anchorMessageId: old.data.id,
+      replacement: createUserMessage({ content: [{ type: 'text', text: 'new request' }], source: { kind: 'user' } }),
+    }, { surfaceOp: { op: 'cut', anchorSeq: old.seq, throughSeq: session.events.at(-1)!.seq, revision: 1 } })
+    session.append('request/header', { header: { config: CONFIG, system: 'new header', tools: [tool('new-tool')] }, reason: 'change' })
+    session.append('request/context', { provider: 'mock', model: 'new-model', contextWindow: 2_000 })
+
+    expect(session.requestHeader()).toMatchObject({ system: 'new header', tools: [{ name: 'new-tool' }] })
+    expect(session.requestContext()).toEqual({ provider: 'mock', model: 'new-model', contextWindow: 2_000 })
+    expect(session.deriveMessages().flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : [])))
+      .toEqual(['new request'])
+  })
+})
+
 describe('Session.requestContext', () => {
   const CAPACITY = { provider: 'mock', model: 'm', contextWindow: 128_000 }
 

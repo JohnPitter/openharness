@@ -2,6 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { AttachmentIdType, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import { foldSessionRevision } from '@deepseek-ai/dsh-session/surface'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type {
   HistoryEntry, IApiClient, MessageId, MuxFrame, PromptContentPart, QueueAction, RpcError,
@@ -261,6 +262,34 @@ export class Session implements SessionFace {
       this.notifier.markDirty()
     }
     return result
+  }
+
+  /** Replace one completed user message without changing the session identity. */
+  async revise(
+    anchorSeq: number,
+    anchorMessageId: MessageId,
+    text: string,
+    signal?: AbortSignal,
+    operationId?: string,
+  ): Promise<RpcResult<{ revision: number; eventSeq: number; operationId: string }>> {
+    const id = operationId ?? await deterministicRevisionOperationId(
+      this.sessionId,
+      anchorSeq,
+      anchorMessageId,
+      text,
+    )
+    try {
+      const response = (await this.api.sessions.revise({
+        sessionId: this.sessionId,
+        operationId: id,
+        anchorSeq,
+        anchorMessageId,
+        content: [{ type: 'text', text }],
+      } as never, signal)).result
+      return response.ok ? { ok: true, value: { ...response.value, operationId: id } } : response
+    } catch (error) {
+      return transportError(error)
+    }
   }
 
   /**
@@ -660,7 +689,7 @@ export class Session implements SessionFace {
     this.baseSeq = this.events[0]?.seq ?? 0
     this.hasMore = hasMore
     if (this.events.some(event => event.type === 'turn/start')) this.firstPromptPendingTurn = false
-    this.conversation.replaceWindow(entries.map(conversationInput), hasMore)
+    this.conversation.replaceWindow(logicalConversationEntries(this.events, this.views), hasMore)
     if (projections !== undefined) this.projections.seed(projections)
     const buffered = this.liveBuffer
     this.liveBuffer = []
@@ -676,6 +705,10 @@ export class Session implements SessionFace {
     this.views.push(view)
     if (event.type === 'turn/start') this.firstPromptPendingTurn = false
     const queueChanged = this.queueMirror.acceptDurable(event)
+    if (event.type === 'session/revision') {
+      this.conversation.replaceWindow(logicalConversationEntries(this.events, this.views), this.hasMore)
+      return 'immediate'
+    }
     const publication = this.conversation.append({ event, view })
     return queueChanged ? 'immediate' : publication
   }
@@ -786,6 +819,38 @@ export class Session implements SessionFace {
 /** Convert one wire history row into the assembler's transport-neutral input. */
 function conversationInput(entry: HistoryEntry): ConversationEventInput {
   return { event: entry.event, view: entry.view }
+}
+
+/** Derive one reload-stable identity for a revision payload. */
+async function deterministicRevisionOperationId(
+  sessionId: string,
+  anchorSeq: number,
+  anchorMessageId: MessageId,
+  text: string,
+): Promise<string> {
+  const normalized = text.normalize('NFC').replace(/\r\n?/gu, '\n')
+  const input = `${sessionId}\0${anchorSeq}\0${anchorMessageId}\0${normalized}`
+  const bytes = new TextEncoder().encode(input)
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
+  const hex = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
+  return `revision:${hex}`
+}
+
+/** Rebuild the visible conversation after a durable revision cut. */
+function logicalConversationEntries(
+  events: readonly SessionEvent[],
+  views: readonly (ToolEventView | undefined)[],
+): ConversationEventInput[] {
+  return foldSessionRevision(events).map((event) => {
+    if (event.type !== 'session/revision') return { event, view: views[events.indexOf(event)] }
+    const replacement = {
+      ...event,
+      type: 'user/message' as const,
+      data: event.data.replacement,
+      surfaceOp: 'append' as const,
+    } as unknown as SessionEvent
+    return { event: replacement, view: views[events.indexOf(event)] }
+  })
 }
 
 /** A generic command row alone remains control-plane content; every other visible Chat Node activates the conversation. */

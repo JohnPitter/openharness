@@ -129,7 +129,7 @@ async function bench() {
 }
 
 describe('conversation slot inject API', () => {
-  it('assembles the thin API side-effect-free', async () => {
+  it('I: explicit fork still creates and opens a different child session', async () => {
     const b = await bench()
     const { injected } = b.conversationApi(ROOT)
     // Assembly has no session side effects: opening the event window belongs

@@ -205,24 +205,28 @@ describe('contextBreakdown session projection', () => {
       time: 0,
       data: { shadowedRange: { start, end }, shadowedSeqs: [start, end], shadowedTokenCount: 5 },
     } as unknown as SessionEvent)
-    let state = definition.init()
+    let state: Parameters<typeof definition.apply>[0] = definition.init()
     state = definition.apply(state, append(1))
     state = definition.apply(state, append(3))
-    // No metering event: the replacement contributes zero instead of throwing.
+    // The retained active-node index prices an unmetered replacement exactly.
     expect(definition.wire.view(definition.apply(state, replace(1, 3))).messageTokens)
-      .toBe(definition.wire.view(state).messageTokens)
+      .toBe(definition.wire.view(state).messageTokens - estimateMessage(
+        createUserMessage({ content: [{ type: 'text', text: 'x' }], source: { kind: 'user' } }),
+      ))
     // An adjacent claim for another range contradicts the replacement.
     const mismatched = definition.apply(state, meter(1, 1, 8))
     expect(() => definition.apply(mismatched, replace(1, 3))).toThrow('no adjacent shadow price')
-    // A claim expires after one intervening event, so replacement delta is zero.
+    // A claim expires after one intervening event; retained nodes still price it.
     let expired = definition.apply(state, meter(1, 3, 8))
     expired = definition.apply(expired, { type: 'todo/write', seq: 9, time: 0, data: { todos: [] } } as unknown as SessionEvent)
     expect(definition.wire.view(definition.apply(expired, replace(1, 3))).messageTokens)
-      .toBe(definition.wire.view(state).messageTokens)
+      .toBe(definition.wire.view(state).messageTokens - estimateMessage(
+        createUserMessage({ content: [{ type: 'text', text: 'x' }], source: { kind: 'user' } }),
+      ))
     // The armed claim prices exactly the next event's matching replacement.
     const armed = definition.apply(state, meter(1, 3, 8))
     expect(definition.wire.view(definition.apply(armed, replace(1, 3))).messageTokens)
-      .toBe(definition.wire.view(state).messageTokens - 5 + estimateMessage(
+      .toBe(definition.wire.view(state).messageTokens - estimateMessage(
         createUserMessage({ content: [{ type: 'text', text: 'x' }], source: { kind: 'user' } }),
       ))
   })
@@ -237,8 +241,8 @@ describe('contextBreakdown session projection', () => {
       if (row === undefined) throw new Error('contextBreakdown checkpoint row is missing')
       return Object.keys(row.val as Record<string, unknown>).sort()
     }
-    // Growth adds no per-node bookkeeping to the durable state.
-    expect(stateKeys()).toEqual(['messageTokens', 'systemTokens', 'toolsTokens'])
+    // The checkpoint retains active priced nodes for exact revision replay.
+    expect(stateKeys()).toEqual(['messageTokens', 'nodes', 'systemTokens', 'toolsTokens'])
     const shadowed = session.surface.nodes.slice(
       session.surface.nodes.indexOf(first),
       session.surface.nodes.indexOf(last) + 1,
@@ -251,7 +255,7 @@ describe('contextBreakdown session projection', () => {
       surfaceOp: { op: 'replace', start: first, end: last },
       sourceEventSeqs: [...shadowed],
     })
-    expect(stateKeys()).toEqual(['messageTokens', 'systemTokens', 'toolsTokens'])
+    expect(stateKeys()).toEqual(['messageTokens', 'nodes', 'systemTokens', 'toolsTokens'])
     expect(projected(ctx, session).messageTokens)
       .toBe(ctx.tokenMeter.measure(session).surfaceTokens)
   })

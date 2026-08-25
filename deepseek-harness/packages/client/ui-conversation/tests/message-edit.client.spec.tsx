@@ -12,7 +12,7 @@ import {
   createSnapshotStore, EMPTY_CHAT_SNAPSHOT, EMPTY_CONVERSATION_VIEWS,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  ChatConversationViewNode, ClientContext, ConversationSnapshot, SessionId, TurnLocation,
+  ChatConversationViewNode, ClientContext, ConversationLocation, ConversationSnapshot, SessionId, TurnLocation,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
@@ -94,7 +94,7 @@ describe('UserMessageNodeView edit affordance', () => {
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: '编辑消息' }))
-    expect(editMessage).toHaveBeenCalledWith('hello edit', node.location)
+    expect(editMessage).toHaveBeenCalledWith('hello edit', node.location, node.id, node.anchorSeq)
   })
 
   it('hides the edit action on steering bubbles and without owner wiring', () => {
@@ -252,7 +252,11 @@ describe('InputHub edit orchestration', () => {
       order.push('prompt')
       return Promise.resolve({ ok: true as const, value: { accepted: true as const } })
     })
-    await runtime.sessions.add({ id: 's1', session: { prompt } })
+    const revise = vi.fn(() => {
+      order.push('revise')
+      return Promise.resolve({ ok: true as const, value: { revision: 1, eventSeq: 30, operationId: 'test-operation' } })
+    })
+    await runtime.sessions.add({ id: 's1', session: { prompt, revise } })
     const hub = new InputHub(runtime.ctx, makeTranslate(zh, {}))
     const fiber = runtime.ctx.plugin(ConversationController, { input: hub, blocks: new ComposerBlockRegistry() })
     await fiber.await()
@@ -266,35 +270,40 @@ describe('InputHub edit orchestration', () => {
         turns: new Map([[1, turnLocation(1, 19)], [2, turnLocation(2, 29)]]),
       }
     })
-    return { runtime, hub, shell, prompt, order }
+    return { runtime, hub, shell, prompt, revise, order }
   }
 
-  it('forks at the previous turn end, prompts the revised text in the child, then switches', async () => {
+  it('I: clicking edit and saving revises with message metadata, never forks', async () => {
     const b = await hubBench()
-    const forkOpts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }[] = []
-    const originalFork = b.runtime.sessions.fork.bind(b.runtime.sessions)
-    b.runtime.sessions.fork = (opts) => {
-      b.order.push('fork')
-      forkOpts.push(opts)
-      return originalFork(opts)
-    }
-    const originalOpen = b.runtime.sessions.open.bind(b.runtime.sessions)
-    b.runtime.sessions.open = (id) => {
-      b.order.push('open')
-      originalOpen(id)
-    }
-    b.shell.editMessage({ text: 'original', location: { kind: 'turn', turn: turnLocation(2, 29) } })
+    render(
+      <UserMessageNodeView
+        {...{
+          node: userNode('user', 'original', turnLocation(2, 29)),
+          t,
+          renderMessageImages: () => null,
+          editMessage: (text: string, location: ConversationLocation, messageId?: string, anchorSeq?: number) => {
+            b.shell.editMessage({
+              text, location,
+              ...(messageId === undefined ? {} : { messageId }),
+              ...(anchorSeq === undefined ? {} : { anchorSeq }),
+            })
+          },
+        } as unknown as ChatNodeViewProps<'user' | 'steering'>}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '编辑消息' }))
     b.shell.setDraft('revised')
     b.shell.submit('queue')
-    await vi.waitFor(() => { expect(b.order).toEqual(['fork', 'prompt', 'open']) })
-    expect(forkOpts).toEqual([{ sessionId: SID, atSeq: 19, increaseTitle: false }])
-    expect(b.prompt).toHaveBeenCalledWith([{ type: 'text', text: 'revised' }], 'queue')
+    await vi.waitFor(() => { expect(b.order).toEqual(['revise']) })
+    expect(b.revise).toHaveBeenCalledWith(3, '3', 'revised')
+    expect(b.prompt).not.toHaveBeenCalled()
+    expect(b.runtime.sessions.list.getSnapshot().current).toBe(SID)
     await b.runtime.dispose()
   })
 
-  it('failure keeps the editing state and the draft, and surfaces the edit-failed notice', async () => {
+  it('E: failure keeps the editing state and the draft, and surfaces the edit-failed notice', async () => {
     const b = await hubBench()
-    b.runtime.sessions.fork = () => Promise.reject(new Error('fork-unavailable'))
+    b.revise.mockRejectedValue(new Error('revision-unavailable'))
     b.shell.editMessage({ text: 'original', location: { kind: 'turn', turn: turnLocation(2, 29) } })
     b.shell.setDraft('revised')
     b.shell.submit('queue')
