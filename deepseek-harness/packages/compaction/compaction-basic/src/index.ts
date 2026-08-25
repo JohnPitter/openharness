@@ -26,6 +26,7 @@ import {
   assertNoActiveCompaction,
   compactSurfaceRegion,
   loggedSummarizerSpanBudget,
+  pressureSummarizerSpanBudget,
   selectCompactableRange,
 } from './region.ts'
 
@@ -282,8 +283,12 @@ export class BasicCompactionEngine extends CompactionEngine {
    * Overflow bypasses the pressure threshold; when the last `request/context`
    * record carries a window, the summarized span is capped so the auxiliary call
    * fits. A zero safe span budget produces no range and therefore no auxiliary
- * LLM request. A registered `compaction-basic` settings section overlays
-   * `thresholdRatio` for pressure; it does not change overflow.
+   * LLM request. Pressure uses the same envelope-aware cap when it is positive
+   * and leaves the span uncapped when that budget is zero, so a small advertised
+   * capacity can still reduce below threshold. A positive cap is forwarded so
+   * overflow retries can shrink the span. A registered `compaction-basic`
+   * settings section overlays `thresholdRatio` for pressure; it does not change
+   * overflow.
    * @param agent - agent whose latest durable routed request is measured.
    * @param trigger - normal step-boundary pressure or context-overflow recovery.
    * @param signal - live turn cancellation signal forwarded to summarization.
@@ -362,16 +367,17 @@ export class BasicCompactionEngine extends CompactionEngine {
     }
     if (measurement.totalTokens < spec.thresholdTokens) return null
 
+    const spanBudget = pressureSummarizerSpanBudget(context.contextWindow, policy.maxTokens)
     let result: CompactionResult | null = null
     for (let attempt = 0; attempt <= spec.compactionRetries; attempt += 1) {
-      const range = selectCompactableRange(agent.session, measurement, spec.retainTokens)
+      const range = selectCompactableRange(agent.session, measurement, spec.retainTokens, spanBudget)
       if (range === null) {
         /* v8 ignore else -- concrete replacement preserves a compactable checkpoint; subclass hooks cannot mutate it. */
         if (result === null) return null
         /* v8 ignore next -- paired with the defensive post-success branch above. */
         break
       }
-      result = await this.compactRegion(range.start, range.end, agent, signal)
+      result = await this.compactRegion(range.start, range.end, agent, signal, spanBudget)
       measurement = meter.measure(agent.session)
       if (measurement.totalTokens < spec.thresholdTokens) return result
     }
@@ -396,6 +402,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     end: number,
     agent: Agent,
     signal?: AbortSignal,
+    maxSpanTokens?: number,
   ): Promise<CompactionResult> {
     return compactSurfaceRegion(
       this.regionDependencies(),
@@ -403,7 +410,11 @@ export class BasicCompactionEngine extends CompactionEngine {
       start,
       end,
       agent,
-      { owner: 'current-turn', stability: 'whole-surface' },
+      {
+        owner: 'current-turn',
+        stability: 'whole-surface',
+        ...maxSpanTokens === undefined ? {} : { maxSpanTokens },
+      },
       signal,
     )
   }
@@ -411,6 +422,8 @@ export class BasicCompactionEngine extends CompactionEngine {
   /**
    * Force one useful idle-session compaction below the pressure threshold, and
    * resolve only after its standalone marker pair is durably checkpointed.
+   * Prunes oversized tool results first, then caps the summarizer span from the
+   * recorded request window.
    * @param agent - idle agent whose next-turn admission this call reserves.
    * @param signal - cancellation scoped to this compaction request.
    * @param sourceCommandId - initiating command identity for presentation correlation.
@@ -427,11 +440,18 @@ export class BasicCompactionEngine extends CompactionEngine {
         const operationSignal = AbortSignal.any([agentSignal, signal])
         try {
           operationSignal.throwIfAborted()
+          const prune = this.ctx.get('toolResultPruner')
+          if (prune !== undefined) prune.pruneSession(agent.session)
+          const target = routedTarget(agent.session)
+          const maxTokens = target === undefined
+            ? this.config.maxTokens
+            : resolveTargetPolicy(this.config, target).maxTokens
+          const spanBudget = loggedSummarizerSpanBudget(agent.session, maxTokens)
           const range = selectCompactableRange(
             agent.session,
             this.ctx.tokenMeter.measure(agent.session),
             0,
-            loggedSummarizerSpanBudget(agent.session, this.config.maxTokens),
+            spanBudget,
           )
           if (range === null) return null
           return await compactSurfaceRegion(
@@ -443,7 +463,7 @@ export class BasicCompactionEngine extends CompactionEngine {
             {
               owner: null,
               stability: 'selected-span',
-              maxSpanTokens: loggedSummarizerSpanBudget(agent.session, this.config.maxTokens),
+              maxSpanTokens: spanBudget,
               ...sourceCommandId === undefined ? {} : { sourceCommandId },
               flush: async () => {
                 await this.ctx.sessions.flush(agent.session)

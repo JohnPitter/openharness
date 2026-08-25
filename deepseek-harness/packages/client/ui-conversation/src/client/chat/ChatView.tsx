@@ -174,9 +174,7 @@ export function ChatView({
       const key = order[i]
       if (key === undefined) continue
       const node = nodeStore.get(key)
-      if (node?.kind === 'user'
-        && (node.location.kind === 'turn' || node.location.kind === 'step')
-        && node.location.turn.status === 'closed') return node.anchorSeq
+      if (node?.kind === 'user') return node.anchorSeq
     }
     return undefined
   }, [nodeStore, order])

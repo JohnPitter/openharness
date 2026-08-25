@@ -13,7 +13,7 @@ import {
   asCompactionUserSettings,
   registerCompactionUserSettings,
 } from '@deepseek-ai/dsh-compaction-basic/src/user-settings.ts'
-import { selectCompactableRange, summarizerSpanBudget } from '@deepseek-ai/dsh-compaction-basic/src/region.ts'
+import { selectCompactableRange, summarizerSpanBudget, pressureSummarizerSpanBudget } from '@deepseek-ai/dsh-compaction-basic/src/region.ts'
 import type { SummarizationInput, SummaryResult } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { compactionInstruction } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { CompactionId, toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
@@ -819,6 +819,8 @@ describe('pressure measurement and retention', () => {
     ))
     expect(spanBudget + maxTokens + SUMMARIZER_ENVELOPE_RESERVE).toBe(Math.floor(272_144 / 2))
     expect(summarizerSpanBudget(128, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)).toBe(0)
+    expect(pressureSummarizerSpanBudget(128, maxTokens)).toBeUndefined()
+    expect(pressureSummarizerSpanBudget(272_144, maxTokens)).toBe(spanBudget)
     const ctx = createContext()
     const session = conversation(2)
     expect(selectCompactableRange(session, ctx.tokenMeter.measure(session), 0, 0)).toBeNull()
@@ -962,6 +964,31 @@ describe('optional model-free tool-result pruning', () => {
     expect(ctx.tokenMeter.measure(session).totalTokens).toBeGreaterThan(400)
     expect(await compactIfNeeded(compact, session, 'context-overflow')).not.toBeNull()
     expect(compact.calls.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('caps pressure summarizer span using the routed window', async () => {
+    const ctx = createContext(64_000)
+    const compact = new TestCompactionEngine(ctx, {
+      auto: false,
+      thresholdRatio: 0.01,
+      retainTokens: 50,
+    })
+    const session = conversation(8, 'pressure '.repeat(80).trim())
+    const priced = ctx.tokenMeter.measure(session)
+    expect(priced.totalTokens).toBeGreaterThan(640)
+    const budget = pressureSummarizerSpanBudget(64_000, 8_192)
+    expect(budget).toBeGreaterThan(0)
+    const uncapped = selectCompactableRange(session, priced, 50)
+    const capped = selectCompactableRange(session, priced, 50, budget)
+    expect(uncapped).not.toBeNull()
+    expect(capped).not.toBeNull()
+    if (uncapped !== null && capped !== null && uncapped.end !== capped.end) {
+      expect(capped.end).toBeLessThan(uncapped.end)
+    }
+    const region = vi.spyOn(compact, 'compactRegion')
+    expect(await compactIfNeeded(compact, session, 'pressure')).not.toBeNull()
+    expect(compact.calls).toHaveLength(1)
+    expect(region.mock.calls[0]?.[4]).toBe(budget)
   })
 
   it('retains the original compaction-basic behavior without the optional plugin', async () => {

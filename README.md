@@ -28,7 +28,7 @@ O app consulta as GitHub Releases públicas. Quando há uma tag mais nova, a tit
 | **Os planos que você já tem** | Kimi for Code, Claude Code, Codex, GLM Coding Plan, OpenCode Zen, DeepSeek. Sign in no card ou cola o token. |
 | **Workflow** | O planejador só pensa e delega. O trabalhador pesquisa e edita, no modelo do chip da direita; trocar o preset compacta antes do próximo prompt. |
 | **Marcos** | O modelo que fecha o trabalho grava um marco; o trilho à esquerda empilha ticks do topo, sem esticar na coluna. Clique abre o preview; clique fora volta ao padrão. |
-| **Editar mensagem** | Mensagens de usuário enviadas podem ser revisadas em uma nova sessão sem alterar a original. |
+| **Editar mensagem** | A última mensagem do usuário é revisada na mesma sessão, sem fork. |
 | **Busca na web** | DuckDuckGo por padrão, sem chave extra. A busca nativa DeepSeek fica desligada (ela cobra saldo DeepSeek mesmo se o chat for outro). |
 | **Remote** | Opt-in na sidebar. Túnel HTTPS + QR; o celular usa o harness completo enquanto o PC está ligado. |
 | **J-Space** | Protocolo de construção nos modos Standard, Code e Workflow: classifica o trabalho e carrega só o que a tarefa precisa. |
@@ -65,7 +65,7 @@ Opt-in. O exe publica um HTTPS público a partir de `127.0.0.1` (túnel Cloudfla
 ```powershell
 wails generate module
 Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
-wails build -ldflags "-X openharness/internal/update.Version=0.1.27"
+wails build -ldflags "-X openharness/internal/update.Version=0.1.28"
 go test ./...
 ```
 
@@ -89,9 +89,9 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | [Release](.github/workflows/release.yml) | tag `v*.*.*` | cria a GitHub Release |
 
 ```powershell
-git tag v0.1.27
-git push origin v0.1.27
-gh release upload v0.1.27 build/bin/openharness.exe
+git tag v0.1.28
+git push origin v0.1.28
+gh release upload v0.1.28 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.

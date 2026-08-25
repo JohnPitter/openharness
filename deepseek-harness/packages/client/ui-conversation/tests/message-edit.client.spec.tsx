@@ -135,6 +135,20 @@ describe('SessionInputShell editing state', () => {
     expect(shell.snapshot.editing).toEqual({ previousDraft: 'work in progress', atSeq: 19 })
   })
 
+  it('enters editing on the first turn when the message seq is the revision anchor', () => {
+    const { shell, editBoundary } = shellBench()
+    const entered = shell.editMessage({
+      text: 'first message',
+      location: { kind: 'turn', turn: turnLocation(1, 19) },
+      messageId: 'm1',
+      anchorSeq: 3,
+    })
+    expect(entered).toBe(true)
+    expect(editBoundary).not.toHaveBeenCalled()
+    expect(shell.snapshot.draft).toBe('first message')
+    expect(shell.snapshot.editing).toEqual({ previousDraft: '', atSeq: 3, messageId: 'm1' })
+  })
+
   it('refuses the window’s first turn (no fork boundary)', () => {
     const { shell } = shellBench()
     shell.setDraft('keep me')

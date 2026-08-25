@@ -130,6 +130,19 @@ export function summarizerSpanBudget(
 }
 
 /**
+ * Pressure span cap for a routed window. Production windows keep the
+ * envelope-aware budget. A zero envelope-aware result leaves pressure
+ * uncapped so a small advertised capacity can still reduce below threshold.
+ * @param contextWindow - positive adapter-owned model capacity.
+ * @param maxTokens - configured summarizer output limit.
+ * @returns a positive span cap, or `undefined` when the envelope-aware budget is zero.
+ */
+export function pressureSummarizerSpanBudget(contextWindow: number, maxTokens: number): number | undefined {
+  const safe = summarizerSpanBudget(contextWindow, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
+  return safe > 0 ? safe : undefined
+}
+
+/**
  * Resolve the next head-anchored range while retaining a priced recent tail
  * and never splitting an assistant tool-call/result pair.
  * @param session - session supplying authoritative current surface positions.

@@ -10,7 +10,9 @@ A user needs to correct the latest completed prompt without creating a second co
 
 ## Decision
 
-Editing is limited to the latest completed user message in the same session. It keeps the session id and never forks. The Host uses the shared per-session admission and cancellation path, then appends a durable revision cut that anchors on the latest completed user message and removes the old user/generated assistant/tool/milestone/todo tail from active projections through the captured log tail. The replacement message is appended in that same session.
+Editing is limited to the latest user message in the same session. It keeps the session id and never forks. The Host uses the shared per-session admission and cancellation path, then appends a durable revision cut that anchors on the latest completed user message and removes the old user/generated assistant/tool/milestone/todo tail from active projections through the captured log tail. The replacement message is appended in that same session.
+
+The Chat view offers edit on the latest user node while the session is idle. A revision cut can leave that node in an orphaned open turn, so eligibility does not require a closed-turn Location.
 
 The revision cut is folded by every active projection that consumes the session history. The conversation surface, model-visible history, session search, and token meter therefore exclude the removed tail and include the replacement. Repeated editing is supported by anchoring each new operation on the current latest completed user message and its resulting revision.
 
@@ -34,4 +36,4 @@ A revision is durable append-only history rather than destructive log deletion, 
 
 ## Verification
 
-The owning [session subsystem reference](../../../../docs/subsystems/session.md) documents the revision event, cut operation, service method, shared admission, and at-most-once dispatch contract; its [paired reference](../../../../docs/subsystems/session.md) remains paired. Focused implementation and integration coverage exercises latest-message eligibility, repeated revisions, projection/model/search/token-meter removal, operation-id reuse, cancellation races, crash-after-commit recovery, and unchanged explicit forks.
+The owning [session subsystem reference](../../../../docs/subsystems/session.md) documents the revision event, cut operation, service method, shared admission, and at-most-once dispatch contract; its [paired reference](../../../../docs/subsystems/session.md) remains paired. Focused implementation and integration coverage exercises latest-message eligibility, including an idle session-located or orphaned-open-turn tail, repeated revisions, projection/model/search/token-meter removal, operation-id reuse, cancellation races, crash-after-commit recovery, and unchanged explicit forks.

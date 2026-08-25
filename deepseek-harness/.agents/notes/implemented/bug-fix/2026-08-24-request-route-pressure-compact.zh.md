@@ -12,7 +12,7 @@ Status: implemented
 
 压力压缩 LLM 在每一种计费单位上都会跑。实时覆盖仍是设置 → 通用：`auto` 与 `thresholdPercent`。按请求计费的路由仍跳过自动标题提供方；该跳过留在[路由计费 note](../feature/2026-08-23-route-metering.zh.md)。
 
-溢出和 `compactNow` 会限制已计价区间，使摘要请求在最新 `request/context` 带有容量时装进已路由窗口。没有窗口时仍尝试一次最大平衡缩减。
+Overflow、pressure 和 `compactNow` 会限制已计价区间，使摘要请求装进已路由窗口。压力在 envelope 感知上限为正时使用该上限；该预算为零时不设上限，以便较小的已公布容量仍能压到阈值以下。`compactNow` 会先剪枝超大工具结果。没有记录窗口时，溢出和 `/compact` 仍尝试一次最大的平衡缩减。
 
 ## 备选方案
 
@@ -24,8 +24,8 @@ Status: implemented
 
 ## 影响
 
-编码计划上每一次自动压力压缩花费一次请求。已经 100% 的会话可通过溢出或 `/compact` 恢复，而不让摘要器自己溢出。按请求计费路由仍跳过标题生成。
+编码计划上每一次自动压力压缩花费一次请求。到达通用阈值的会话摘要一段有上限的区间，而不是整段表层。已经 100% 的会话可通过溢出或 `/compact` 恢复，而不让摘要器自己溢出。按请求计费路由仍跳过标题生成。
 
 ## 测试
 
-`compaction-basic.spec.ts` 覆盖剪枝无法清阈值时按请求计费压力仍摘要、该计费上溢出仍摘要、`maxSpanTokens` 切短从头锚定区间、小窗口上 `summarizerSpanBudget` 余量，以及溢出压缩大于已公布窗口的会话。`compaction-loop-repro.spec.ts` 仍通过真实循环恢复抛出与带内 `CONTEXT_WINDOW_EXCEEDED`。
+`compaction-basic.spec.ts` 覆盖剪枝无法清阈值时按请求计费压力仍摘要、该计费上溢出仍摘要、`maxSpanTokens` 切短从头锚定区间、小窗口上 `summarizerSpanBudget` 余量、envelope 感知预算为零时压力不设上限、生产规模窗口上压力转发正上限，以及溢出压缩大于已公布窗口的会话。`compaction-loop-repro.spec.ts` 仍通过真实循环恢复抛出与带内 `CONTEXT_WINDOW_EXCEEDED`。

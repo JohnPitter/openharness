@@ -6,7 +6,7 @@ import css from './ChatView.module.css'
 
 interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly nodeKey: string
-  /** Only the latest completed user message may be revised. */
+  /** Only the latest user message may be revised. */
   readonly editLatestUserSeq?: number | undefined
   readonly useSession: ChatViewSlotProps['useSession']
   readonly renderSlot: ChatViewSlotProps['renderSlot']
@@ -26,20 +26,19 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
   const routedNode = node as ChatNode | undefined
   const owner = useMemo<ChatNodeOwnerProps | null>(() => {
     if (node === undefined) return null
-    // Revision is available only for the latest user message in a closed turn.
-    const location = node.location
+    // A revision cut can leave the replacement in an orphaned open turn, so
+    // eligibility is latest-user plus an idle session (parent withholds the
+    // callback while running).
     const editable = editMessage !== undefined
       && node.kind === 'user'
       && node.anchorSeq === editLatestUserSeq
-      && (location.kind === 'turn' || location.kind === 'step')
-      && location.turn.status === 'closed'
     return {
       selectedCallId,
       cwd,
       openFile,
       inspectCall,
       forkAt,
-      ...(editable ? { editMessage } : {}),
+      editMessage: editable ? editMessage : undefined,
       continueTurn,
       renderMessageImages,
       fileMentions,

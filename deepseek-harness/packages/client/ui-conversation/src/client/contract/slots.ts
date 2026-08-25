@@ -422,8 +422,8 @@ export interface ChatNodeOwnerProps {
   inspectCall: (callId: CallId) => void
   forkAt: (seq: number) => void
   /**
-   * Edit the latest completed user message in place. Undefined while the
-   * session is running or the message is not the completed transcript tail.
+   * Edit the latest user message in place. Undefined while the session is
+   * running or the node is not the latest user message.
    */
   editMessage?: ((text: string, location: ConversationLocation, messageId?: string, anchorSeq?: number) => void) | undefined
   /**

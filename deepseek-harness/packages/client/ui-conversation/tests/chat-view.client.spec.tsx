@@ -196,7 +196,14 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
         : undefined
     })
     const nodeProps = <Kind extends ChatNode['kind']>(): ChatNodeViewProps<Kind> => (
-      { ...props, ...nodeOwner, useTurnData } as unknown as ChatNodeViewProps<Kind>
+      {
+        ...props,
+        ...nodeOwner,
+        useTurnData,
+        // Owner withholds edit on non-latest / running nodes; the parent slot
+        // stub must not leak back onto those bubbles.
+        editMessage: nodeOwner.editMessage,
+      } as unknown as ChatNodeViewProps<Kind>
     )
     switch (nodeOwner.node.kind) {
       case 'user':
@@ -449,6 +456,29 @@ describe('ChatView', () => {
         'fixture:user:1', 'fixture:assistant:2',
         'fixture:tool:a', 'call:a', 'fixture:tool:b', 'call:b',
       ])
+  })
+
+  it('offers edit only on the latest user message, including a session-located tail', () => {
+    const editMessage = vi.fn()
+    const h = makeHarness({ nodes: [user(1, 'older prompt'), user(5, 'latest prompt')] })
+    render(<h.ChatView {...h.props} editMessage={editMessage} />)
+    const buttons = screen.getAllByRole('button', { name: '编辑消息' })
+    expect(buttons).toHaveLength(1)
+    fireEvent.click(buttons[0]!)
+    expect(editMessage).toHaveBeenCalledWith(expect.objectContaining({
+      text: 'latest prompt',
+      messageId: '5',
+      anchorSeq: 5,
+    }))
+  })
+
+  it('hides the latest-message edit action while the session is running', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'latest prompt')],
+      running: true,
+    })
+    render(<h.ChatView {...h.props} />)
+    expect(screen.queryByRole('button', { name: '编辑消息' })).toBeNull()
   })
 
   it('jumps a rail waypoint to its transcript row', () => {

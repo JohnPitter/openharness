@@ -12,7 +12,7 @@ General Settings expose `compaction-basic.auto` and `thresholdPercent` (default 
 
 Pressure compact LLM runs on every metering unit. The live overlay remains Settings → General: `auto` and `thresholdPercent`. A request-metered route still skips the automatic title provider; that skip stays on the [route-metering note](../feature/2026-08-23-route-metering.md).
 
-Overflow and `compactNow` cap the priced span so the summarizer request fits the routed window when the last `request/context` record carries capacity. Without a window they still attempt one maximal balanced reduction.
+Overflow, pressure, and `compactNow` cap the priced span so the summarizer request fits the routed window. Pressure uses the envelope-aware cap when it is positive; a zero envelope-aware budget leaves pressure uncapped so a small advertised capacity can still reduce below threshold. `compactNow` prunes oversized tool results first. Without a recorded window, overflow and `/compact` still attempt one maximal balanced reduction.
 
 ## Alternatives considered
 
@@ -24,8 +24,8 @@ Overflow and `compactNow` cap the priced span so the summarizer request fits the
 
 ## Consequences
 
-Each automatic pressure compact on a coding plan spends one request. A session already at 100% can recover through overflow or `/compact` without the summarizer overflowing. Title generation remains skipped on request-metered routes.
+Each automatic pressure compact on a coding plan spends one request. A session at the General threshold summarizes a capped span instead of the whole surface. A session already at 100% can recover through overflow or `/compact` without the summarizer overflowing. Title generation remains skipped on request-metered routes.
 
 ## Testing
 
-`compaction-basic.spec.ts` covers request-metered pressure summarization when prune cannot clear the threshold, overflow still summarizing on that metering, a `maxSpanTokens` cut that shrinks the head-anchored range, `summarizerSpanBudget` headroom on a small window, and overflow compacting a session larger than the advertised window. `compaction-loop-repro.spec.ts` still recovers thrown and in-band `CONTEXT_WINDOW_EXCEEDED` through the real loop.
+`compaction-basic.spec.ts` covers request-metered pressure summarization when prune cannot clear the threshold, overflow still summarizing on that metering, a `maxSpanTokens` cut that shrinks the head-anchored range, `summarizerSpanBudget` headroom on a small window, pressure leaving the span uncapped when the envelope-aware budget is zero, pressure forwarding a positive cap on a production-sized window, and overflow compacting a session larger than the advertised window. `compaction-loop-repro.spec.ts` still recovers thrown and in-band `CONTEXT_WINDOW_EXCEEDED` through the real loop.

@@ -23,7 +23,7 @@ export interface MessageIconActionsProps {
   tokensPerSecond?: number | undefined
   /** Clock before icons (user) or after (assistant). */
   clock: 'start' | 'end'
-  /** Edit this sent message (fork-based, text-only); omission hides the edit action. */
+  /** Edit this sent message in place (text-only); omission hides the edit action. */
   onEdit?: (() => void) | undefined
   /** Fork the session at this message; omission hides the branch action. */
   onBranch?: (() => void) | undefined

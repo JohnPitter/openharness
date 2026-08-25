@@ -14,7 +14,7 @@ The shared LLM error classifier and pi-ai stream mapping map the pi-ai `detected
 
 Compaction retries adaptively within one transaction: it makes up to three attempts under one compaction start/end bracket and the same `compactionId`. After each `CONTEXT_WINDOW_EXCEEDED`, it halves the span budget and reselects balanced ranges. It does not mutate the surface between attempts; cancellation and non-context errors are not retried.
 
-The window resolver uses the recorded `requestContext` window. An undefined window uses the explicit 128K safety fallback (`SUMMARIZER_CONTEXT_WINDOW_FALLBACK`); a null or invalid window fails closed with a zero budget and no LLM call.
+The window resolver uses the recorded `requestContext` window. An undefined window uses the explicit 128K safety fallback (`SUMMARIZER_CONTEXT_WINDOW_FALLBACK`); a null or invalid window fails closed with a zero budget and no LLM call. Pressure forwards the same envelope-aware cap when it is positive; a zero envelope-aware budget leaves pressure uncapped. `compactNow` prunes oversized tool results before selecting the span.
 
 The `/compact` message appends only allowlisted stable error codes, such as `CONTEXT_WINDOW_EXCEEDED`; it never exposes raw error chains or prompt content.
 

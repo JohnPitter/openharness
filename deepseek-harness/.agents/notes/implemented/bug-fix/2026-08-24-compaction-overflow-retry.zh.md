@@ -14,7 +14,7 @@ v0.1.23 在真实的 272K Codex（`gpt-5.6-sol`）会话上仍会压缩失败：
 
 压缩在一个事务内自适应重试：在一个压缩 start/end 括号和同一个 `compactionId` 下最多执行三次尝试。每次 `CONTEXT_WINDOW_EXCEEDED` 后，跨度预算减半并重新选择平衡区间。尝试之间不会修改表层；取消和非上下文错误不会重试。
 
-窗口解析器使用记录下来的 `requestContext` 窗口。未定义的窗口使用明确的 128K 安全回退（`SUMMARIZER_CONTEXT_WINDOW_FALLBACK`）；null 或无效窗口以零预算 fail-closed，且不调用 LLM。
+窗口解析器使用记录下来的 `requestContext` 窗口。未定义的窗口使用明确的 128K 安全回退（`SUMMARIZER_CONTEXT_WINDOW_FALLBACK`）；null 或无效窗口以零预算 fail-closed，且不调用 LLM。压力在 envelope 感知上限为正时转发该上限；该预算为零时不设上限。`compactNow` 在选择区间前会剪枝超大工具结果。
 
 `/compact` 消息只追加允许列表中的稳定错误代码，例如 `CONTEXT_WINDOW_EXCEEDED`；绝不暴露原始错误链或提示内容。
 
