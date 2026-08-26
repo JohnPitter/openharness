@@ -180,9 +180,9 @@ go vet ./...  # lint
   o preset recompõe a sessão e compacta antes do próximo prompt comum.
 - **Marcos:** o modelo que fecha o trabalho grava `milestone_write` (título +
   corpo). O transcript não é índice: o trilho à esquerda empilha ticks do topo
-  em ritmo de 8px (só passa de 80 waypoints comprime na altura da coluna) e
-  salta para o chip; compactação preserva os títulos. Clique ou
-  hover abre o preview daquele marco; clicar fora (ou Escape) volta aos ticks,
+  em ritmo de 8px e rola quando a pilha passa da coluna; compactação
+  preserva os títulos. Clique ou hover abre o preview daquele marco (fixo na
+  viewport, sem cortar no composer); clicar fora (ou Escape) volta aos ticks,
   sem botão X. No Workflow o trabalhador escreve; o planejador não vê a tool.
   Em coluna estreita o preview cobre o texto a partir da margem esquerda;
   recolhido, o trilho mantém ocupação zero.

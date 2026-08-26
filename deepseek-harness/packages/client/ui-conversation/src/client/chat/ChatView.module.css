@@ -215,10 +215,11 @@
   pointer-events: none;
 }
 
-/* Compact tick stack from the top (8px rhythm). A session past PACK_LIMIT
-   drops `[data-packed]` and the track fills the available column height.
-   Titles live in `.railPreview`. The right edge stays 28px left of the
-   message column on a wide gutter. */
+/* Compact tick stack from the top (8px rhythm). The scroller caps at the
+   sticky column; a taller stack scrolls instead of compressing. Titles live
+   in `.railPreview` (viewport-fixed). No transform on `.rail`: a containing
+   block would trap that fixed preview. The right edge stays 28px left of
+   the message column on a wide gutter. */
 .rail {
   position: sticky;
   top: 16px;
@@ -227,20 +228,31 @@
   width: 16px;
   height: auto;
   max-height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
-  margin-left: max(12px, calc(50% - min(var(--dsh-chat-content-width), 100%) / 2 - 28px));
-  transform: translateX(-100%);
+  margin-left: max(-4px, calc(50% - min(var(--dsh-chat-content-width), 100%) / 2 - 44px));
   overflow: visible;
   pointer-events: none;
 }
 
-.rail:not([data-packed]) {
-  height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
+.railStack {
+  width: 16px;
+  max-height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rail[data-scrollable] {
+  width: 24px;
+}
+
+.rail[data-scrollable] .railStack {
+  width: 24px;
+  pointer-events: auto;
 }
 
 .railTrack {
   position: relative;
   width: 16px;
-  height: 100%;
 }
 
 .railTrack::before {
@@ -296,23 +308,17 @@
   background: var(--dsw-alias-state-business-primary);
 }
 
-.rail:not([data-packed]) .railTick {
-  transform: translateY(-50%);
-}
-
 .railPreview {
   pointer-events: auto;
-  position: absolute;
-  left: 22px;
-  z-index: 3;
+  position: fixed;
+  z-index: 20;
   width: max-content;
-  max-width: min(240px, calc(100cqi - 40px));
+  max-width: min(240px, calc(100vw - 40px));
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: var(--dsw-alias-button-floating-fill);
   box-shadow: var(--dsw-shadow-lv2);
-  transform: translateY(-50%);
 }
 
 .railPreviewTitle {
@@ -335,20 +341,10 @@
 @container (max-width: 840px) {
   .rail {
     margin-left: 8px;
-    transform: none;
-  }
-
-  .railPreview {
-    left: 20px;
-    max-width: min(240px, calc(100cqi - 32px));
   }
 }
 
 @media (max-width: 480px) {
-  .rail:not([data-packed]) {
-    height: calc(100dvh - var(--dsh-composer-height, 152px) - 72px);
-  }
-
   .railPreview {
     max-width: min(220px, calc(100vw - 40px));
   }

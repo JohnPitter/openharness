@@ -1,8 +1,15 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import css from './ChatView.module.css'
+import {
+  packedTrackHeight,
+  placeRailPreview,
+  shouldFollowTrackTail,
+  tickTop,
+  trackOverflows,
+} from './rail-preview.ts'
 
 interface ChatRailProps {
   readonly order: readonly string[]
@@ -32,48 +39,26 @@ function clipBody(text: string): string {
   return line.length > 280 ? `${line.slice(0, 279)}…` : line
 }
 
-/** Compact Codex-style rhythm: 8px per tick from the top, not stretched. */
-const TICK_STEP_PX = 8
-const TICK_PAD_PX = 6
-/** Beyond this count the stack would overflow a typical column; compress. */
-const PACK_LIMIT = 80
-
-function isPacked(count: number): boolean {
-  return count <= PACK_LIMIT
-}
-
-function tickTop(index: number, count: number): string {
-  if (count <= 1) return `${TICK_PAD_PX}px`
-  if (isPacked(count)) return `${TICK_PAD_PX + index * TICK_STEP_PX}px`
-  return `${(index / (count - 1)) * 100}%`
-}
-
-function tickCenter(index: number, count: number): string {
-  if (count <= 1) return `${TICK_PAD_PX + TICK_STEP_PX / 2}px`
-  if (isPacked(count)) return `${TICK_PAD_PX + index * TICK_STEP_PX + TICK_STEP_PX / 2}px`
-  return `${(index / (count - 1)) * 100}%`
-}
-
-function packedTrackHeight(count: number): number {
-  return TICK_PAD_PX * 2 + Math.max(count, 1) * TICK_STEP_PX
-}
-
 /**
  * Jump index: ticks pack from the top on an 8px rhythm so a short session
- * never stretches markers across the conversation column. Titles live in a
- * floating preview for the hovered or pinned waypoint; a click jumps and
- * pins that preview, and Escape or a pointer down outside the rail returns
- * to ticks. ChatView mounts this in a full-flow overlay so it can stick in
- * the conversation scrollport. Narrow columns overlay the preview on the
- * transcript from the left padding — the track stays sticky and never
- * switches to absolute positioning.
+ * never stretches markers across the conversation column. When the stack
+ * exceeds the sticky column the track scrolls and follows its tail until
+ * the pointer moves it. Titles live in a viewport-fixed preview for the
+ * hovered or pinned waypoint so the conversation scroller and composer
+ * cannot clip it. A click jumps and pins that preview; Escape or a pointer
+ * down outside the rail returns to ticks.
  * @param props - ordered Chat keys, node map, locale, and jump handler.
  * @returns the rail, or null when the session has no waypoints.
  */
 export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
   const [pinnedKey, setPinnedKey] = useState<string | null>(null)
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
+  const [previewPos, setPreviewPos] = useState<{ left: number; top: number } | null>(null)
+  const [scrollable, setScrollable] = useState(false)
   const navRef = useRef<HTMLElement | null>(null)
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const previewRef = useRef<HTMLDivElement | null>(null)
+  const followTail = useRef(true)
   const previewDomId = `dsh-rail-preview-${useId().replace(/:/g, '')}`
   const previewKey = pinnedKey ?? hoveredKey
 
@@ -110,57 +95,100 @@ export function ChatRail({ order, nodes, t, onJump }: ChatRailProps) {
     return items
   }, [order, nodes])
 
-  if (waypoints.length === 0) return null
-  const packed = isPacked(waypoints.length)
+  useLayoutEffect(() => {
+    const track = trackRef.current
+    if (track === null) return
+    const sync = (): void => {
+      setScrollable(trackOverflows(track))
+      if (followTail.current) track.scrollTop = track.scrollHeight
+    }
+    sync()
+    window.addEventListener('resize', sync)
+    return () => { window.removeEventListener('resize', sync) }
+  }, [waypoints.length])
+
   const preview = previewKey === null
     ? undefined
     : waypoints.find(item => item.key === previewKey)
-  const previewIndex = preview === undefined
-    ? -1
-    : waypoints.findIndex(item => item.key === preview.key)
+
+  useLayoutEffect(() => {
+    if (preview === undefined) {
+      setPreviewPos(null)
+      return
+    }
+    const place = (): void => {
+      const tick = navRef.current?.querySelector<HTMLElement>('[data-active]')
+      const panel = previewRef.current
+      if (tick === null || tick === undefined || panel === null) return
+      setPreviewPos(placeRailPreview(
+        tick.getBoundingClientRect(),
+        { width: panel.offsetWidth, height: panel.offsetHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+      ))
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [preview])
+
+  if (waypoints.length === 0) return null
 
   return (
     <nav
       ref={navRef}
       className={css.rail}
       data-pinned={pinnedKey !== null ? '' : undefined}
-      data-packed={packed ? '' : undefined}
+      data-scrollable={scrollable ? '' : undefined}
       aria-label={t('rail.aria')}
       onPointerLeave={() => { setHoveredKey(null) }}
     >
       <div
-        className={css.railTrack}
+        ref={trackRef}
+        className={css.railStack}
         data-virtual-count={waypoints.length}
-        style={packed ? { height: packedTrackHeight(waypoints.length) } : undefined}
+        onScroll={event => {
+          followTail.current = shouldFollowTrackTail(event.currentTarget)
+        }}
+        onWheel={event => {
+          if (!scrollable) return
+          event.stopPropagation()
+        }}
       >
-        {waypoints.map((item, index) => (
-          <button
-            key={item.key}
-            type="button"
-            className={css.railTick}
-            style={{ top: tickTop(index, waypoints.length) }}
-            data-kind={item.kind}
-            data-active={previewKey === item.key ? '' : undefined}
-            aria-label={item.kind === 'milestone'
-              ? t('rail.milestone', { title: item.title })
-              : t('rail.user', { title: item.title })}
-            aria-expanded={pinnedKey === item.key ? true : undefined}
-            aria-controls={previewKey === item.key ? previewDomId : undefined}
-            onPointerEnter={event => {
-              if (event.pointerType === 'mouse') setHoveredKey(item.key)
-            }}
-            onClick={() => {
-              setPinnedKey(item.key)
-              onJump(item.key)
-            }}
-          />
-        ))}
+        <div className={css.railTrack} style={{ height: packedTrackHeight(waypoints.length) }}>
+          {waypoints.map((item, index) => (
+            <button
+              key={item.key}
+              type="button"
+              className={css.railTick}
+              style={{ top: tickTop(index) }}
+              data-kind={item.kind}
+              data-active={previewKey === item.key ? '' : undefined}
+              aria-label={item.kind === 'milestone'
+                ? t('rail.milestone', { title: item.title })
+                : t('rail.user', { title: item.title })}
+              aria-expanded={pinnedKey === item.key ? true : undefined}
+              aria-controls={previewKey === item.key ? previewDomId : undefined}
+              onPointerEnter={event => {
+                if (event.pointerType === 'mouse') setHoveredKey(item.key)
+              }}
+              onClick={() => {
+                setPinnedKey(item.key)
+                onJump(item.key)
+              }}
+            />
+          ))}
+        </div>
       </div>
       {preview !== undefined && (
         <div
+          ref={previewRef}
           id={previewDomId}
           className={css.railPreview}
-          style={{ top: tickCenter(Math.max(0, previewIndex), waypoints.length) }}
+          style={previewPos ?? { visibility: 'hidden', left: 0, top: 0 }}
           data-kind={preview.kind}
         >
           <div className={css.railPreviewTitle}>{preview.title}</div>
