@@ -40,6 +40,7 @@ import type {
   MutableModels,
   SimpleStreamOptions,
   ThinkingLevel,
+  Transport,
 } from '@earendil-works/pi-ai'
 import {
   attributionHeaders,
@@ -133,6 +134,7 @@ function profileOptions(
   profile: ResolvedPiAiProviderProfile,
   reasoning: ModelThinkingLevel | undefined,
   apiKey: string | undefined,
+  transport: Transport | undefined = profile.transport,
 ): SimpleStreamOptions {
   const enabledReasoning: ThinkingLevel | undefined = reasoning === 'off' ? undefined : reasoning
   return {
@@ -140,12 +142,43 @@ function profileOptions(
     ...enabledReasoning === undefined ? {} : { reasoning: enabledReasoning },
     ...profile.thinkingBudgets === undefined ? {} : { thinkingBudgets: profile.thinkingBudgets },
     ...profile.cacheRetention === undefined ? {} : { cacheRetention: profile.cacheRetention },
-    ...profile.transport === undefined ? {} : { transport: profile.transport },
+    ...transport === undefined ? {} : { transport },
     ...profile.timeoutMs === undefined ? {} : { timeoutMs: profile.timeoutMs },
     ...profile.websocketConnectTimeoutMs === undefined ? {} : { websocketConnectTimeoutMs: profile.websocketConnectTimeoutMs },
     // The agent recovery layer owns visible attempts; one adapter call is one SDK attempt.
     maxRetries: 0,
   }
+}
+
+/** Profile transport that may open or reuse a pi-ai WebSocket session cache. */
+function usesWebSocketEligibleTransport(profile: ResolvedPiAiProviderProfile): boolean {
+  const transport = profile.transport
+  return transport === undefined
+    || transport === 'auto'
+    || transport === 'websocket'
+    || transport === 'websocket-cached'
+}
+
+/**
+ * One WebSocket-cached owner per provider route; additional session ids fall
+ * back to SSE so a parent and child agent do not open colliding sockets.
+ */
+function resolveSessionTransport(
+  provider: string,
+  profile: ResolvedPiAiProviderProfile,
+  sessionId: GenerateOptions['sessionId'],
+  owners: Map<string, string>,
+): Transport | undefined {
+  if (!usesWebSocketEligibleTransport(profile)) return profile.transport
+  if (sessionId === undefined) return profile.transport
+  const id = String(sessionId)
+  const owner = owners.get(provider)
+  if (owner === undefined) {
+    owners.set(provider, id)
+    return profile.transport
+  }
+  if (owner === id) return profile.transport
+  return 'sse'
 }
 
 /** OpenAI-family wires that accept `prompt_cache_key` for session prefix cache. */
@@ -292,6 +325,8 @@ function requestHeaders(headers: Readonly<Record<string, string>> | undefined): 
  */
 export class PiAiAdapter extends LlmAdapter {
   private snapshot: PiAiSnapshot | undefined
+  /** First session id per route that owns the profile WebSocket transport. */
+  private readonly websocketSessionOwner = new Map<string, string>()
 
   constructor(private readonly config: PiAiAdapterOptions) {
     super()
@@ -306,6 +341,7 @@ export class PiAiAdapter extends LlmAdapter {
   private current(): PiAiSnapshot {
     const profiles = this.config.profiles()
     if (this.snapshot?.profiles === profiles) return this.snapshot
+    this.websocketSessionOwner.clear()
     const models: MutableModels = createModels(this.config.auth)
     for (const profile of profiles.values()) models.setProvider(profile.piProvider)
     this.snapshot = { profiles, models }
@@ -553,7 +589,17 @@ export class PiAiAdapter extends LlmAdapter {
           maxBytes: profile.requestImageMaxBytes,
         })
       const events = snapshot.models.streamSimple(model, context, {
-        ...profileOptions(profile, reasoning, apiKey),
+        ...profileOptions(
+          profile,
+          reasoning,
+          apiKey,
+          resolveSessionTransport(
+            options.provider,
+            profile,
+            options.sessionId,
+            this.websocketSessionOwner,
+          ),
+        ),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...sessionCacheOptions(options.sessionId, profile.cacheRetention),

@@ -12,9 +12,10 @@ Status: implemented
 
 ## 决策
 
-- `classifyPiAiError` 识别另外两种传输层措辞，并将两者都映射为 `TRANSPORT`：
+- `classifyPiAiError` 识别传输层措辞并映射为 `TRANSPORT`：
   - 流式输出中途的套接字断开，呈现为裸的 `terminated`（undici）或 `Premature close`（Node 流层）；
-  - 在终止事件之前被截断的流，每个 pi-ai 提供方各自抛出不同措辞（`Anthropic stream ended before message_stop`、`… before a terminal response event`、`… ended without a terminal event`、`Stream ended without finish_reason`），统一按 `stream ended before/without` 匹配。
+  - 在终止事件之前被截断的流，每个 pi-ai 提供方各自抛出不同措辞（`Anthropic stream ended before message_stop`、`… before a terminal response event`、`… ended without a terminal event`、`Stream ended without finish_reason`），统一按 `stream ended before/without` 匹配；
+  - OpenAI Codex WebSocket 失败呈现为 `WebSocket error`、`WebSocket closed 1006` 或 `websocket_connection_limit_reached`。
 - 该分类器带有一条 `XXX(pi-ai upstream)` 注记，点名扁平化发生的位置并说明期望的修复方式：如果 pi-ai 有朝一日转发原始的 `Error` 或提供一个让我们捕获 `cause` 的钩子，就改为基于 `code`/`cause` 分类。在此之前分类仍是尽力而为的文本匹配。
 - `llm-pi-ai/README.md` 新增一条 Known-Limitations 条目，记录 pi-ai 会扁平化 cause 链，因此 harness code 是从消息文本中分类出来的。
 

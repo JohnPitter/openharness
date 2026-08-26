@@ -214,3 +214,4 @@ pi-ai 事件会变为 harness 推理、文本、工具调用、usage 与 finish 
 - **历史中的 `system` 消息使用 pi-ai 通用上下文转换**：提供方特定位置由 pi-ai 决定，而非由 harness 拥有的协议覆盖决定。
 - **无法获取提供方 HTTP 状态**：pi-ai 错误事件不会在所有提供方上公开稳定 HTTP 状态；失败只公开稳定 harness 错误 code。
 - **重试策略由提供方持有，而不是 SDK 重试**：每个提供方 profile 都可以提供嵌套的 `retryPolicy`；省略时解析为 normal 模式并重试五次，`dsh-llm-retry` 会在 agent 的失败步骤扩展点上执行有效路由策略。pi-ai SDK 重试仍保持禁用，因此持久化的 agent 步骤与 `llm/retry` 事件记录每次可见尝试，直接 `ctx.llm.stream()` 调用仍只尝试一次。
+- **每条 websocket 合格路由只有一个 WebSocket-cached 拥有者**：profile 使用 `websocket`、`websocket-cached` 或 `auto` 时，该路由上第一个 `sessionId` 保持 profile 传输方式；同路由上其余 `sessionId` 改走 SSE，以免并发 agent（例如 Workflow 中 planner 与 spawn worker 共用 OpenAI Codex 账号）在同一账号上打开冲突的 cached WebSocket。

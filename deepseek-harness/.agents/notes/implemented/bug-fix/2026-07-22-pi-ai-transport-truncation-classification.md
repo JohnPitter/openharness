@@ -12,9 +12,10 @@ The detail loss is upstream and unrecoverable in the adapter: pi-ai reduces a ca
 
 ## Decision
 
-- `classifyPiAiError` recognizes two more transport wordings and maps both to `TRANSPORT`:
+- `classifyPiAiError` recognizes transport wordings and maps them to `TRANSPORT`:
   - a mid-stream socket drop rendered as a bare `terminated` (undici) or `Premature close` (Node stream layer);
-  - a stream truncated before its terminal event, which each pi-ai provider throws with its own wording (`Anthropic stream ended before message_stop`, `… before a terminal response event`, `… ended without a terminal event`, `Stream ended without finish_reason`), matched on `stream ended before/without`.
+  - a stream truncated before its terminal event, which each pi-ai provider throws with its own wording (`Anthropic stream ended before message_stop`, `… before a terminal response event`, `… ended without a terminal event`, `Stream ended without finish_reason`), matched on `stream ended before/without`;
+  - OpenAI Codex WebSocket failures surfaced as `WebSocket error`, `WebSocket closed 1006`, or `websocket_connection_limit_reached`.
 - The classifier carries an `XXX(pi-ai upstream)` note naming the flattening site and stating the intended fix: classify on `code`/`cause` if pi-ai ever forwards the original `Error` or a hook that lets us capture the `cause`. Classification stays best-effort text matching until then.
 - `llm-pi-ai/README.md` gains a Known-Limitations bullet recording that pi-ai flattens the cause chain and that harness codes are therefore classified from message text.
 
