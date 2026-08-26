@@ -506,6 +506,39 @@ describe('ModelsSection', () => {
     })
   })
 
+  it('lets a Cursor card paste a token without a model list', async () => {
+    const CursorConfig = Schema.object({
+      apiKeyEnv: Schema.string().role('credential-ref'),
+      refreshTokenEnv: Schema.string(),
+      baseURL: Schema.string(),
+      models: Schema.dict(Schema.string()),
+    })
+    const { face } = scriptedFace({})
+    const namespace: SettingsNamespaceView = {
+      ns: 'llm-cursor',
+      schema: JSON.parse(JSON.stringify(CursorConfig.toJSON())) as unknown,
+      value: { apiKeyEnv: 'CURSOR_ACCESS_TOKEN', models: { 'composer-2.5': 'Composer 2.5' } },
+      applies: 'live',
+      secrets: [],
+      revision: 0,
+    }
+    const { ProviderEditor } = await import('../src/client/ProviderEditor.tsx')
+    render(<ProviderEditor
+      provider="cursor"
+      displayName="Cursor"
+      namespace={namespace}
+      schema={settingsSchema}
+      settingsPath={[]}
+      api={face as never}
+      t={t}
+      readOnly={false}
+      onClose={() => {}}
+    />)
+    expect(screen.queryByText(/llm-cursor/)).toBeNull()
+    expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
+    expect(screen.getByText<HTMLButtonElement>(en.apply).disabled).toBe(false)
+  })
+
   it('materializes inherited models and adds an arbitrary DeepSeek id', async () => {
     const { mutate } = await mountDeepSeekCard({
       mutate: vi.fn(() => Promise.resolve(ok(wireNamespaces()[0]))),

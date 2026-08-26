@@ -84,6 +84,13 @@ describe('CursorAdapter native transport', () => {
     expect(headers?.['x-cursor-timezone']).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
   })
 
+  it('declares request metering', () => {
+    const adapter = new CursorAdapter(async () => 'jwt', () => ({}))
+    expect(adapter.providerInfo('cursor')).toMatchObject({
+      id: 'cursor', name: 'Cursor', metering: 'requests',
+    })
+  })
+
   it('uses the official checksum vector', () => {
     // C=1700000 -> raw [0,0,0,25,240,160] -> obfuscated [165,166,168,180,72,237] -> paaotEjt
     expect(checksum('machine', 'mac', 1700000000000)).toBe('paaotEjtmachine/mac')

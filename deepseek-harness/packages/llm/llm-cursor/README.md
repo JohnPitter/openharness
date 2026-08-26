@@ -4,8 +4,8 @@ Provider Cursor para o DSH com dois transportes: `sdk` (padrão, Cloud Agent `@c
 
 ```yaml
 llm-cursor:
-  transportMode: sdk # sdk ou native
-  apiKeyEnv: CURSOR_API_KEY # crsr_; CURSOR_ACCESS_TOKEN também aceita JWT
+  transportMode: native # native (LLM no loop) ou sdk (Cloud Agent)
+  apiKeyEnv: CURSOR_ACCESS_TOKEN # JWT; Sign in no card, ou cole o token
   refreshTokenEnv: CURSOR_REFRESH_TOKEN
   defaultModel: composer-2.5
   baseURL: https://api2.cursor.sh
@@ -16,7 +16,8 @@ llm-cursor:
   machineId: your-stable-machine-id
   macMachineId: your-stable-mac-machine-id
   ghostMode: false # true, false ou implicit-false
-  models: {}
+  models:
+    composer-2.5: Composer 2.5
 ```
 
 `clientVersion` é um valor estático no código (`3.17.19`, a versão mais recente publicada no canal `stable`/`win32-x64-user` no momento desta implementação — consultada via `GET {baseURL}/updates/api/update/{platform}/{applicationName}/{currentVersion}/{machineId}/{releaseTrack}`, o mesmo endpoint que o updater do cliente oficial usa). O backend rejeita versões que considera desatualizadas com um erro `resource_exhausted` cujo `details[].debug.error` é `ERROR_GPT_4_VISION_PREVIEW_RATE_LIMIT` e cujo `title` é "Update Required" — mas esse mesmo código também é usado para falhas de billing/quota da conta (`analyticsMetadata.actionRequired: "payment"`), então "Update Required" não implica necessariamente que `clientVersion` esteja desatualizado. Sobrescreva `clientVersion` explicitamente na configuração quando o backend exigir uma versão mais recente que a compilada nesta release.

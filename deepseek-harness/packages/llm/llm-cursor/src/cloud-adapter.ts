@@ -1,6 +1,12 @@
-import { Agent, Cursor } from '@cursor/sdk'
 import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, StreamChunk, ToolSchema, TokenUsage } from '@deepseek-ai/dsh-llm'
+
+type CursorSdk = typeof import('@cursor/sdk')
+type CursorAgent = Awaited<ReturnType<CursorSdk['Agent']['create']>>
+
+async function loadCursorSdk(): Promise<CursorSdk> {
+  return import('@cursor/sdk')
+}
 
 type InteractionUpdate = { type: string; text?: string; usage?: TokenUsage }
 type Pending = { resolve: (value: unknown) => void; reject: (error: unknown) => void }
@@ -11,7 +17,7 @@ type CustomTool = {
   execute: (args: Record<string, unknown>, context: { toolCallId?: string }) => Promise<unknown>
 }
 type Session = {
-  agent?: Awaited<ReturnType<typeof Agent.create>>
+  agent?: CursorAgent
   run?: { wait: () => Promise<{ status?: string; error?: { message?: string }; usage?: TokenUsage }>; cancel?: () => void }
   pendingCalls: Map<string, Pending>
   lastToolsSignature?: string
@@ -59,12 +65,15 @@ export class CursorCloudAdapter extends LlmAdapter {
 
   constructor(private readonly resolveKey: () => Promise<string>, private readonly models: () => Record<string, string>) { super() }
 
-  override providerInfo(provider: string) { return { id: provider, name: 'Cursor' } }
+  override providerInfo(provider: string) {
+    return { id: provider, name: 'Cursor', metering: 'requests' as const }
+  }
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     if (provider !== 'cursor') return []
     try {
       const key = await this.resolveKey()
+      const { Cursor } = await loadCursorSdk()
       const models = await Cursor.models.list({ apiKey: key })
       return models.map(model => ({ provider: 'cursor', id: model.id, name: model.displayName }))
     } catch (error) {
@@ -139,6 +148,7 @@ export class CursorCloudAdapter extends LlmAdapter {
       }
     }
     try {
+      const { Agent } = await loadCursorSdk()
       const agent = session.agent ?? await Agent.create({ apiKey: key, model: { id: options.model }, tools: ['mcp'], disallowedTools: BUILTIN_TOOLS, local: { cwd: process.cwd(), customTools: customTools as never } })
       session.agent = agent
       const run = await agent.send(serializeCloudPrompt(options), {
@@ -169,8 +179,9 @@ export class CursorCloudAdapter extends LlmAdapter {
     this.cleanup()
     if (options.tools === undefined) {
       const key = await this.resolveKey()
-      let agent: Awaited<ReturnType<typeof Agent.create>> | undefined
+      let agent: CursorAgent | undefined
       try {
+        const { Agent } = await loadCursorSdk()
         agent = await Agent.create({ apiKey: key, model: { id: options.model }, cloud: { repos: [] } })
         const updates: InteractionUpdate[] = []
         const run = await agent.send(serializeCloudPrompt(options), {

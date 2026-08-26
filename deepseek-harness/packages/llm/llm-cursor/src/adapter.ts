@@ -143,7 +143,7 @@ export class CursorAdapter extends LlmAdapter {
   }
 
   override providerInfo(provider: string) {
-    return { id: provider, name: 'Cursor' }
+    return { id: provider, name: 'Cursor', metering: 'requests' as const }
   }
 
   private headers(key: string): Record<string, string> {

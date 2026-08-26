@@ -36,13 +36,16 @@ import type { en } from './locales.ts'
 import styles from './ModelsSection.module.css'
 
 /** Per-adapter-family curated field sets (unknown namespaces get the hint alone). */
-type EditorLayout = 'deepseek' | 'kimi' | 'pi-ai' | 'unknown'
+type EditorLayout = 'deepseek' | 'kimi' | 'pi-ai' | 'cursor' | 'unknown'
 
 /** The public DeepSeek endpoint shown as the deepseek base-URL placeholder. */
 const DEEPSEEK_PUBLIC_BASE_URL = 'https://api.deepseek.com'
 
 /** The public Kimi for Code endpoint shown as the kimi base-URL placeholder. */
 const KIMI_PUBLIC_BASE_URL = 'https://api.kimi.com/coding/v1'
+
+/** The public Cursor API origin shown as the cursor base-URL placeholder. */
+const CURSOR_PUBLIC_BASE_URL = 'https://api2.cursor.sh'
 
 /** Props of {@link ProviderEditor}. */
 export interface ProviderEditorProps {
@@ -133,6 +136,7 @@ function layoutOf(ns: string): EditorLayout {
   if (ns === 'llm-deepseek') return 'deepseek'
   if (ns === 'llm-kimi') return 'kimi'
   if (ns === 'llm-pi-ai') return 'pi-ai'
+  if (ns === 'llm-cursor') return 'cursor'
   return 'unknown'
 }
 
@@ -203,7 +207,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   }, [api.credentials, keyRef])
 
   useEffect(() => {
-    if (layout !== 'pi-ai') return
+    if (layout !== 'pi-ai' && layout !== 'cursor') return
     let stale = false
     const load = (): void => {
       void fetchOauthStatus().then((snapshot) => {
@@ -237,7 +241,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
 
   // The model list is validated by the same per-row checker for both families,
   // so a bad row is named by its position rather than by a blanket message.
-  const modelFailure = validateDeepSeekModels(schema.getPath(draft, ['models']))
+  const modelFailure = layout === 'cursor' ? undefined : validateDeepSeekModels(schema.getPath(draft, ['models']))
   const keyFailure = apiKeyFailure(keyDraft)
   // What a probe or a write must carry: the typed key with paste whitespace
   // removed. A blank field yields an empty string, which both call sites read
@@ -256,7 +260,8 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     ?? stringAt(fallback, 'baseURL')
     ?? (layout === 'kimi'
       ? KIMI_PUBLIC_BASE_URL
-      : layout === 'deepseek' ? DEEPSEEK_PUBLIC_BASE_URL : undefined)
+      : layout === 'deepseek' ? DEEPSEEK_PUBLIC_BASE_URL
+        : layout === 'cursor' ? CURSOR_PUBLIC_BASE_URL : undefined)
   const probe = {
     settingsNs: namespace.ns,
     // Naming the route lets an adapter that already describes it answer from
@@ -280,7 +285,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       && stringAt(fallback, 'apiKeyEnv') === undefined && keyValue.length > 0
       ? schema.setPath(draft, ['apiKeyEnv'], keyRef)
       : draft
-    if (props.credentialOnly !== true) {
+    if (props.credentialOnly !== true && layout !== 'cursor') {
       // The same checker gates the submit button, so a card cannot reach this
       // with a bad row; it stays because the schema check below would refuse
       // the write with a message naming a path instead of the row, and because
@@ -369,7 +374,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
    * narrowed so the per-family branches below are total: an unknown namespace
    * renders the hint instead and never reaches this body.
    */
-  const curatedFields = (family: 'deepseek' | 'kimi' | 'pi-ai'): ReactNode => {
+  const curatedFields = (family: 'deepseek' | 'kimi' | 'pi-ai' | 'cursor'): ReactNode => {
     // What a hand-declared route names for itself and nothing else can supply.
     // A whole-section `llm-deepseek` profile is a composition fact with no
     // per-route identity for its schema to carry, hence the family test.
@@ -381,7 +386,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       ? t('keyEnvLocked')
       : keyState?.configured === true && props.credentialRequired !== true
         ? t('keyStored')
-        : family === 'pi-ai' ? t('keyPlaceholderNative') : t('keyPlaceholder')
+        : family === 'pi-ai' || family === 'cursor' ? t('keyPlaceholderNative') : t('keyPlaceholder')
     const catalogProps = {
       models,
       overridden: modelsOverridden,
@@ -535,7 +540,9 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                   ? DEEPSEEK_PUBLIC_BASE_URL
                   : family === 'kimi'
                     ? KIMI_PUBLIC_BASE_URL
-                    : stringAt(fallback, 'baseURL') ?? t('baseUrlDefault')}
+                    : family === 'cursor'
+                      ? CURSOR_PUBLIC_BASE_URL
+                      : stringAt(fallback, 'baseURL') ?? t('baseUrlDefault')}
                 aria-label={t('baseUrl')}
                 disabled={disabled}
                 onChange={(event) => {
@@ -568,7 +575,9 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 </div>
               )
               : null}
-            <ModelListEditor {...catalogProps} probe={probe} probeBlocked={keyFailure} api={api} />
+            {family === 'cursor'
+              ? null
+              : <ModelListEditor {...catalogProps} probe={probe} probeBlocked={keyFailure} api={api} />}
           </div>
         </details>}
       </>

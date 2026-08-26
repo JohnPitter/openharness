@@ -126,13 +126,23 @@ Composição em `packages/bundle/base/cordis.patch.yml` (`llm-pi-ai.config.provi
 
 Claude Code: o pi-ai detecta `sk-ant-oat` e manda Bearer + identity de Claude Code.
 Codex: o token precisa ser JWT com `chatgpt_account_id`; `sk-` da Platform não serve nessa rota.
-Cursor **não** entra: não há `/v1/chat/completions` oficial do plano Cursor (só Cloud Agents / SDK, que é outro agente, não um LLM no loop do harness).
+
+## Provider Cursor
+
+`packages/llm/llm-cursor` é um plugin próprio (não entra no catálogo pi-ai). Default
+`transportMode: native`: Connect/protobuf HTTP/2 em `api2.cursor.sh`, o modelo
+roda no loop do harness. `sdk` (Cloud Agent `@cursor/sdk`) fica como opt-in em
+`settings.yaml`. Chave `CURSOR_ACCESS_TOKEN` (JWT) + `CURSOR_REFRESH_TOKEN`;
+Sign in no card (PKCE-shaped em `/dsh-llm-cursor/oauth`) ou colar o token.
+`layoutOf` mapeia `llm-cursor` → família `cursor`. `metering: 'requests'`.
+Registrado em `cordis.patch.yml` + `package.json` + `tsconfig.host.json`.
 
 Login OAuth (Settings → Models, no card do provider): Claude Code e Codex
 aceitam **Sign in** (PKCE no browser, callback localhost) **e** colar token.
 Codex também oferece device code se a porta 1455 estiver ocupada. Tokens ficam
 em `$DSH_HOME/pi-ai-oauth.json` e o pi-ai faz refresh no request. HTTP:
-`GET/POST /dsh-llm-pi-ai/oauth/{status,login,logout}`.
+`GET/POST /dsh-llm-pi-ai/oauth/{status,login,logout}`. Cursor usa o mesmo
+padrão de botões no card, contra `GET/POST /dsh-llm-cursor/oauth/{status,login,logout}`.
 
 Para mudanças só de UI basta `build:lib:client` + web (com os env de marca
 acima). A face host do tsdown no Windows não expande o glob
@@ -160,7 +170,7 @@ go vet ./...  # lint
 - A chave da API se configura na própria UI do harness (settings) ou via
   `DEEPSEEK_API_KEY` / `KIMI_API_KEY` / `ANTHROPIC_API_KEY` /
   `CLAUDE_CODE_OAUTH_TOKEN` / `OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN` /
-  `ZAI_API_KEY` / `OPENCODE_API_KEY`.
+  `ZAI_API_KEY` / `OPENCODE_API_KEY` / `CURSOR_ACCESS_TOKEN`.
 - Auto-update consulta as GitHub Releases públicas; não precisa de token.
   O chip na titlebar checa no boot (com retries) e a cada 15 min. Uma
   instância já aberta não vê um tag novo até o próximo check.
@@ -186,7 +196,7 @@ go vet ./...  # lint
   sem botão X. No Workflow o trabalhador escreve; o planejador não vê a tool.
   Em coluna estreita o preview cobre o texto a partir da margem esquerda;
   recolhido, o trilho mantém ocupação zero.
-- **Custo por rota:** coding plans (Kimi, Claude Code, Codex, GLM, OpenCode)
+- **Custo por rota:** coding plans (Kimi, Claude Code, Codex, GLM, OpenCode, Cursor)
   cobram por request; DeepSeek e plataformas pay-per-token cobram por token.
   Em rota de request o harness não dispara título-LLM (o fallback de primeiras
   palavras continua). Compactação automática no percentual da aba Geral ainda

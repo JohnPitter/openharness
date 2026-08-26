@@ -8,6 +8,8 @@ import { CursorAdapter, defaultMachineId, type GhostMode } from './adapter.ts'
 import { CursorCloudAdapter } from './cloud-adapter.ts'
 import { createUserApiKey, decodeJwtExp, refreshTokens, DEFAULT_BACKEND_URL, DEFAULT_WEBSITE_URL } from './auth.ts'
 import { registerCursorLoginFlow } from './login.ts'
+import { handleCursorOauthHttp, OAUTH_HTTP_PREFIX } from './oauth-http.ts'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export { CursorAdapter } from './adapter.ts'
 export { CursorCloudAdapter } from './cloud-adapter.ts'
@@ -18,6 +20,7 @@ export {
 } from './auth.ts'
 export type { CursorAuthTransport, CursorTokens, LoginInteractiveOptions } from './auth.ts'
 export { RECORD_SCOPE, recordKeyFor } from './login.ts'
+export { OAUTH_HTTP_PREFIX } from './oauth-http.ts'
 
 export interface Config {
   apiKeyEnv: string
@@ -33,11 +36,15 @@ export interface Config {
   ghostMode: GhostMode
   transportMode?: 'native' | 'sdk'
 }
+const DEFAULT_MODELS: Record<string, string> = {
+  'composer-2.5': 'Composer 2.5',
+}
+
 export const Config = z.object({
-  apiKeyEnv: z.string().default('CURSOR_API_KEY'),
+  apiKeyEnv: z.string().default('CURSOR_ACCESS_TOKEN'),
   refreshTokenEnv: z.string().default('CURSOR_REFRESH_TOKEN'),
   defaultModel: z.string().default('composer-2.5'),
-  models: z.dict(z.string()).default({}),
+  models: z.dict(z.string()).default(DEFAULT_MODELS),
   baseURL: z.string().default(DEFAULT_BACKEND_URL),
   websiteURL: z.string().default(DEFAULT_WEBSITE_URL),
   clientVersion: z.string().default('3.17.19'),
@@ -45,7 +52,7 @@ export const Config = z.object({
   machineId: z.string(),
   macMachineId: z.string(),
   ghostMode: z.union([z.const(true), z.const(false), z.const('implicit-false')]).default(false),
-  transportMode: z.union([z.const('native'), z.const('sdk')]).default('sdk'),
+  transportMode: z.union([z.const('native'), z.const('sdk')]).default('native'),
 })
 
 export const name = 'llm-cursor'
@@ -162,8 +169,12 @@ export function apply(ctx: Context, config: Config): void {
   }, 'llm-cursor.transport')
   ctx.llm.registerAdapter(['cursor'], adapter)
   ctx.llm.registerConfigurableProviders([{
-    provider: 'cursor', displayName: 'Cursor', settingsNs: NS, settingsPath: [], declared: false,
+    provider: 'cursor', displayName: 'Cursor', settingsNs: NS, settingsPath: [],
   }])
+  ctx.llm.registerModelDiscovery(NS, async (request) => {
+    const models = await adapter.listModels(request.provider ?? 'cursor')
+    return models.map(model => ({ id: model.id, name: model.name }))
+  })
   installSettingsSection(ctx, NS, Config, config, {
     setSource: () => {},
     onChange: () => {},
@@ -176,5 +187,45 @@ export function apply(ctx: Context, config: Config): void {
     registerCursorLoginFlow(actx, {
       accessRef, refreshRef, backendURL: () => config.baseURL, websiteURL: () => config.websiteURL,
     })
+  })
+
+  ctx.inject(['webServer'], (httpCtx) => {
+    const webServer = httpCtx.get('webServer') as {
+      register: (route: {
+        kind: 'prefix'
+        path: string
+        handler: (req: IncomingMessage, res: ServerResponse) => void
+      }) => () => void
+    }
+    const store = {
+      readAccess: readAccessToken,
+      persist: async (tokens: { accessToken: string, refreshToken: string }) => {
+        const credentials = ctx.get('credentials')
+        if (credentials === undefined) return
+        await credentials.set(accessRef(), tokens.accessToken)
+        await credentials.set(refreshRef(), tokens.refreshToken)
+      },
+      clear: async () => {
+        const credentials = ctx.get('credentials')
+        if (credentials === undefined) return
+        await credentials.unset(accessRef())
+        await credentials.unset(refreshRef())
+        await credentials.unset(sdkKeyRef())
+      },
+      backendURL: () => config.baseURL,
+      websiteURL: () => config.websiteURL,
+    }
+    httpCtx.effect(
+      () => webServer.register({
+        kind: 'prefix',
+        path: OAUTH_HTTP_PREFIX,
+        handler: (req, res) => {
+          void handleCursorOauthHttp(store, req, res, () => {
+            ctx.emit('llm/adapters-updated')
+          })
+        },
+      }),
+      'llm-cursor: oauth http',
+    )
   })
 }

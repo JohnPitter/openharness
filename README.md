@@ -6,7 +6,7 @@
   <img src="frontend/dist/logo.png" width="112" alt="OpenHarness" />
 </p>
 
-OpenHarness é o [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) em app Windows: sidecar Node local, UI oficial, sessões e chaves no seu disco. Sem nuvem no meio. Sem agente aninhado (Cursor Cloud / SDK). O loop fala direto com o provedor.
+OpenHarness é o [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) em app Windows: sidecar Node local, UI oficial, sessões e chaves no seu disco. Sem nuvem no meio. O loop fala direto com o provedor (Cursor no transporte nativo Connect, não Cloud Agent).
 
 [Download](https://github.com/JohnPitter/openharness/releases/latest) · [Releases](https://github.com/JohnPitter/openharness/releases) · [Notas para agentes](AGENTS.md)
 
@@ -14,7 +14,7 @@ OpenHarness é o [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harn
 
 1. Abra a [release mais recente](https://github.com/JohnPitter/openharness/releases/latest) e baixe `openharness.exe`.
 2. Execute. Na primeira abertura o runtime vai para `%LOCALAPPDATA%\openharness\runtime`.
-3. Em **Settings → Modelos**, ligue um card (Kimi, Claude Code, Codex, GLM, OpenCode ou DeepSeek) e crie uma sessão.
+3. Em **Settings → Modelos**, ligue um card (Kimi, Claude Code, Codex, GLM, OpenCode, Cursor ou DeepSeek) e crie uma sessão.
 
 Windows 10/11 x64. [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) já vem no Windows recente.
 
@@ -25,7 +25,7 @@ O app consulta as GitHub Releases públicas. Quando há uma tag mais nova, a tit
 | | |
 | --- | --- |
 | **No seu PC** | Sidecar local. Sessões e chaves em `%LOCALAPPDATA%\openharness\dsh-home`. |
-| **Os planos que você já tem** | Kimi for Code, Claude Code, Codex, GLM Coding Plan, OpenCode Zen, DeepSeek. Sign in no card ou cola o token. |
+| **Os planos que você já tem** | Kimi for Code, Claude Code, Codex, GLM Coding Plan, OpenCode Zen, Cursor, DeepSeek. Sign in no card ou cola o token. |
 | **Workflow** | O planejador só pensa e delega. O trabalhador pesquisa e edita, no modelo do chip da direita; trocar o preset compacta antes do próximo prompt. |
 | **Marcos** | O modelo que fecha o trabalho grava um marco; o trilho à esquerda empilha ticks do topo e rola quando a lista passa da coluna. Clique abre o preview; clique fora volta ao padrão. |
 | **Editar mensagem** | A última mensagem do usuário é revisada na mesma sessão, sem fork. |
@@ -45,6 +45,7 @@ Um card por família na lista padrão (Settings → Modelos):
 | Claude Code | `claude-code` | `CLAUDE_CODE_OAUTH_TOKEN` | Plano Pro/Max (Sign in ou `claude setup-token`) |
 | Codex | `openai-codex` | `CODEX_ACCESS_TOKEN` | Plano ChatGPT Codex (JWT) |
 | GLM Coding Plan | `zai` | `ZAI_API_KEY` | Coding Plan Z.AI |
+| Cursor | `cursor` | `CURSOR_ACCESS_TOKEN` | Plano Cursor (Sign in ou JWT; transporte Connect nativo) |
 | OpenCode | `opencode` | `OPENCODE_API_KEY` | [Zen](https://opencode.ai/docs/zen) (`https://opencode.ai/zen/v1`) |
 
 Console Anthropic e OpenAI Platform entram em **Adicionar provedor**. A chave OpenCode sai de [opencode.ai/auth](https://opencode.ai/auth).
@@ -66,7 +67,7 @@ Opt-in. O exe publica um HTTPS público a partir de `127.0.0.1` (túnel Cloudfla
 ```powershell
 wails generate module
 Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
-wails build -ldflags "-X openharness/internal/update.Version=0.1.34"
+wails build -ldflags "-X openharness/internal/update.Version=0.1.35"
 go test ./...
 ```
 
@@ -90,9 +91,9 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | [Release](.github/workflows/release.yml) | tag `v*.*.*` | cria a GitHub Release |
 
 ```powershell
-git tag v0.1.34
-git push origin v0.1.34
-gh release upload v0.1.34 build/bin/openharness.exe
+git tag v0.1.35
+git push origin v0.1.35
+gh release upload v0.1.35 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.

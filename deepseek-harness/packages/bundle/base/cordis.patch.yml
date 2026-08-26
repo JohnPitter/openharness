@@ -98,8 +98,8 @@
     # - Codex: ChatGPT Codex JWT (`tokens.access_token` in
     #   %USERPROFILE%\.codex\auth.json), not an `sk-` Platform key.
     # - GLM Coding Plan: Z.AI coding endpoint (not api.z.ai/api/paas/v4).
-    # Cursor is not shipped: there is no official chat-completions API for the
-    # Cursor plan (only Cloud Agents / SDK, which is a nested agent, not an LLM).
+    # - Cursor: native Connect/protobuf via `llm-cursor` (`CURSOR_ACCESS_TOKEN`).
+    #   Cloud Agent SDK remains an explicit `transportMode: sdk` override.
     - id: llm-pi-ai
       name: '@deepseek-ai/dsh-llm-pi-ai'
       config:
