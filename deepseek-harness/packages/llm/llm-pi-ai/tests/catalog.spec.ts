@@ -1211,16 +1211,30 @@ describe('OpenHarness shipped catalog routes', () => {
           {
             id: 'glm-5.3',
             name: 'GLM-5.3',
+            contextWindow: 1_000_000,
+            maxTokens: 131_072,
+            reasoningEfforts: { low: 'low', high: 'high', max: 'max' },
+          },
+          {
+            id: 'glm-5.3-flash',
+            name: 'GLM-5.3-Flash',
+            contextWindow: 1_000_000,
+            maxTokens: 131_072,
+            input: ['text', 'image'],
+            reasoningEfforts: { low: 'low', high: 'high', max: 'max' },
+          },
+          { id: 'glm-5.2', name: 'GLM-5.2', contextWindow: 1_000_000, maxTokens: 131_072 },
+          { id: 'glm-5.1', name: 'GLM-5.1', contextWindow: 202_752, maxTokens: 131_072 },
+          { id: 'glm-5-turbo', name: 'GLM-5-Turbo', contextWindow: 200_000, maxTokens: 131_072 },
+          {
+            id: 'glm-5v-turbo',
+            name: 'GLM-5V-Turbo',
             contextWindow: 200_000,
             maxTokens: 131_072,
-            reasoningEfforts: { high: 'high', max: 'max' },
+            input: ['text', 'image'],
           },
-          { id: 'glm-5.2' },
-          { id: 'glm-5.1' },
-          { id: 'glm-5-turbo' },
-          { id: 'glm-5v-turbo' },
-          { id: 'glm-4.7' },
-          { id: 'glm-4.5-air' },
+          { id: 'glm-4.7', name: 'GLM-4.7', contextWindow: 200_000, maxTokens: 131_072 },
+          { id: 'glm-4.5-air', name: 'GLM-4.5-Air', contextWindow: 200_000, maxTokens: 131_072 },
         ],
         compat: { thinkingFormat: 'zai' },
       },
@@ -1247,9 +1261,18 @@ describe('OpenHarness shipped catalog routes', () => {
     expect(resolved.get('openai-codex')?.piProvider.auth.apiKey).toBeDefined()
     const glmModels = resolved.get('zai')?.piProvider.getModels() ?? []
     expect(glmModels.map(model => model.id)).toEqual([
-      'glm-5.3', 'glm-5.2', 'glm-5.1', 'glm-5-turbo', 'glm-5v-turbo', 'glm-4.7', 'glm-4.5-air',
+      'glm-5.3', 'glm-5.3-flash', 'glm-5.2', 'glm-5.1', 'glm-5-turbo', 'glm-5v-turbo', 'glm-4.7', 'glm-4.5-air',
     ])
-    expect(glmModels.find(model => model.id === 'glm-5.3')?.reasoning).toBe(true)
+    expect(glmModels.find(model => model.id === 'glm-5.3')).toMatchObject({
+      name: 'GLM-5.3', contextWindow: 1_000_000, reasoning: true,
+    })
+    expect(glmModels.find(model => model.id === 'glm-5.3-flash')).toMatchObject({
+      name: 'GLM-5.3-Flash', contextWindow: 1_000_000, input: ['text', 'image'], reasoning: true,
+    })
+    expect(glmModels.find(model => model.id === 'glm-5.2')?.name).toBe('GLM-5.2')
+    expect(glmModels.find(model => model.id === 'glm-5-turbo')).toMatchObject({
+      name: 'GLM-5-Turbo', contextWindow: 200_000,
+    })
     expect(resolved.get('opencode')?.displayName).toBe('OpenCode')
     expect(resolved.get('opencode')?.piProvider.baseUrl).toBe('https://opencode.ai/zen/v1')
     expect((resolved.get('opencode')?.piProvider.getModels() ?? []).map(model => model.id))
