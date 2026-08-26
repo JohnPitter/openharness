@@ -14,6 +14,8 @@ Host 报告的 `ModelSelection` 是唯一的选择事实，其中包含提供方
 
 Host 半边还持有 J-space 开关（`ui-jspace.enabled`）。关闭时会省略构建协议提示词段，并调用 `ctx.skills.hideFromModel('j-space')`，因此模型目录和 `skill` 工具不再暴露该名称；`/j-space` 仍可供用户调用。打开时注入协议并恢复模型调用。切换会在下一步重发 skill 目录。
 
+Settings → Usages（`id: usages`）是用量面板：来自 `usage.panel` 的 Host 本地按日请求与 token 历史、按用量排序的模型，以及来自 `llm.accountUsage` 的 coding-plan 配额卡片。侧栏用量 chip 仍打开该分节。
+
 `/client` 导出面为插件本体（`apply`/`inject`）、`ModelDirectoryResolver`、`ModelDirectory` 及其状态形状、slot 注入面类型。
 
 ## 模型体验

@@ -29,6 +29,7 @@ export type {
   GoalsApi, GoalRef,
   SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView,
   CredentialsApi, CredentialView, ConfigurableProviderView, DiscoveredModelView, AccountUsageView, AccountUsageWindowView, LlmApi,
+  UsageApi, UsageBuckets, UsageDayView, UsageModelView, UsagePanelView,
 } from './api.ts'
 export {
   RpcId,

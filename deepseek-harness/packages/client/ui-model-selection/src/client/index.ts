@@ -252,7 +252,7 @@ export function apply(ctx: ClientContext): void {
     }, UsageStatusChip))
   })
 
-  // Settings → Usage: every coding-plan provider's account quotas in one place.
+  // Settings → Usage panel: local daily/token history plus coding-plan quotas.
   ctx.slots.inject('settings.section', () => {
     const connection = ctx.get('connection') as ConnectionHandle
     const injected = (): UsagesSectionInjected => ({

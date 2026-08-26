@@ -293,6 +293,14 @@ export class FakeApiClient implements IApiClient {
     accountUsage: payload => this.record('llm.accountUsage', payload, Promise.resolve(ok({ supported: false }))),
   }
 
+  readonly usage: IApiClient['usage'] = {
+    panel: payload => this.record('usage.panel', payload, Promise.resolve(ok({
+      days: [],
+      models: [],
+      totals: { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    }))),
+  }
+
   /** When true, streams never fire onOpen (misbehaving-carrier material for the handshake timeout guard). */
   suppressStreamOpen = false
 

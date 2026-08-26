@@ -34,7 +34,7 @@ import { deriveEventMessage, foldSurface } from '@deepseek-ai/dsh-session/surfac
 import type {
   ApiProxy, ClientRequest, ClientResponse, HistoryEntry, HostFrame, MuxFrame, RpcReceipt,
   ModelProviderGroup, ModelSelection, RpcRequest, RpcResponse, RpcResult, ServerRequest, ServerResponse, SessionSummary,
-  ToolCallView, ToolEventView, ToolResultView, WorkspaceId, WorkspaceView,
+  ToolCallView, ToolEventView, ToolResultView, UsagePanelView, WorkspaceId, WorkspaceView,
 } from './api.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { AbstractApiClient, RpcId, SESSION_SEARCH_RESULT_LIMIT } from './api.ts'
@@ -63,6 +63,73 @@ function assistantMessage(content: ContentBlock[], model = 'fx-1'): AssistantMes
 
 function toolResultMessage(callId: string, content: ContentBlock[], isError: boolean): ToolResultMessage {
   return createToolResultMessage({ callId: CallId(callId), content, isError })
+}
+
+/** Local `YYYY-MM-DD` for fixture usage-panel days that stay current. */
+function fixtureIsoDate(daysAgo: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() - daysAgo)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${String(date.getFullYear())}-${month}-${day}`
+}
+
+/** Deterministic usage-panel sample so Settings → Panel has rows without a live host. */
+function fixtureUsagePanel(): UsagePanelView {
+  const today = {
+    date: fixtureIsoDate(0),
+    requests: 6,
+    inputTokens: 18_400,
+    outputTokens: 3_200,
+    cacheReadTokens: 4_100,
+    cacheWriteTokens: 800,
+  }
+  const yesterday = {
+    date: fixtureIsoDate(1),
+    requests: 11,
+    inputTokens: 42_000,
+    outputTokens: 9_400,
+    cacheReadTokens: 12_200,
+    cacheWriteTokens: 1_500,
+  }
+  const earlier = {
+    date: fixtureIsoDate(3),
+    requests: 4,
+    inputTokens: 9_100,
+    outputTokens: 2_050,
+    cacheReadTokens: 1_200,
+    cacheWriteTokens: 400,
+  }
+  return {
+    days: [today, yesterday, earlier],
+    models: [
+      {
+        provider: 'kimi-for-coding',
+        model: 'kimi-for-coding',
+        requests: 14,
+        inputTokens: 51_000,
+        outputTokens: 11_200,
+        cacheReadTokens: 14_000,
+        cacheWriteTokens: 2_100,
+      },
+      {
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-flash',
+        requests: 7,
+        inputTokens: 18_500,
+        outputTokens: 3_450,
+        cacheReadTokens: 3_500,
+        cacheWriteTokens: 600,
+      },
+    ],
+    totals: {
+      requests: today.requests + yesterday.requests + earlier.requests,
+      inputTokens: today.inputTokens + yesterday.inputTokens + earlier.inputTokens,
+      outputTokens: today.outputTokens + yesterday.outputTokens + earlier.outputTokens,
+      cacheReadTokens: today.cacheReadTokens + yesterday.cacheReadTokens + earlier.cacheReadTokens,
+      cacheWriteTokens: today.cacheWriteTokens + yesterday.cacheWriteTokens + earlier.cacheWriteTokens,
+    },
+  }
 }
 
 const MARKDOWN_FIXTURE = [
@@ -3105,6 +3172,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       }),
       accountUsage: request => ok(request, { supported: false }),
     },
+    usage: {
+      panel: request => ok(request, fixtureUsagePanel()),
+    },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
       // audit correlation; a settled or unknown id is not-pending.
@@ -3280,6 +3350,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'llm.models': return this.api.llm.models(request)
       case 'llm.discoverModels': return this.api.llm.discoverModels(request, signal)
       case 'llm.accountUsage': return this.api.llm.accountUsage(request, signal)
+      case 'usage.panel': return this.api.usage.panel(request)
     }
   }
 

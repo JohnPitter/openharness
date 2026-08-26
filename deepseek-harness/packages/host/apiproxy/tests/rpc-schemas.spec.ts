@@ -31,6 +31,7 @@ import {
   workspaceRenameRequestSchema, workspaceRenameValueSchema, workspaceViewSchema,
 } from '../src/api/workspace.schema.ts'
 import { skillEntrySchema, skillListRequestSchema, skillListValueSchema } from '../src/api/skills.schema.ts'
+import { usagePanelRequestSchema, usagePanelValueSchema } from '../src/api/usage.schema.ts'
 import {
   agentPresetEntrySchema, agentPresetListValueSchema, agentPresetOpenDocumentValueSchema,
 } from '../src/api/agent-presets.schema.ts'
@@ -587,5 +588,21 @@ describe('agent-preset schemas', () => {
       .toEqual({ opened: false, path: '/presets/mine' })
     // A closed reply must carry the path the surface shows instead.
     expect(() => agentPresetOpenDocumentValueSchema.parse({ opened: false })).toThrow()
+  })
+})
+
+describe('usage.panel schemas', () => {
+  it('accepts the empty ledger and rejects a malformed date', () => {
+    const empty = {
+      days: [],
+      models: [],
+      totals: { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    }
+    expect(usagePanelRequestSchema.parse({})).toEqual({})
+    expect(usagePanelValueSchema.parse(empty)).toEqual(empty)
+    expect(() => usagePanelValueSchema.parse({
+      ...empty,
+      days: [{ ...empty.totals, date: '25-08-2026' }],
+    })).toThrow()
   })
 })

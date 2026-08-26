@@ -58,6 +58,7 @@ import {
   SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
   truncateUnicodeCodePoints,
 } from './api/session-search.ts'
+import { UsagePanelLedger } from './usage-panel.ts'
 // Type-only: resolves `ctx.get('sessionProjections')` to the projection registry.
 import type {} from '@deepseek-ai/dsh-session-projection'
 // Type-only: resolves `ctx.get('tasks')` to the background job registry.
@@ -635,6 +636,11 @@ export interface ApiProxyDefaults {
    * falls back to platform detection ({@link canOpenNativePath}).
    */
   canOpenPath?: () => boolean
+  /**
+   * Durable usage-panel ledger path. Absent, the fold stays process-local
+   * (tests). The gateway plugin writes `$DSH_HOME/usage-panel.json`.
+   */
+  usagePanelPath?: string
 }
 
 /** The tool/call payload fields the presenter path reads. */
@@ -1410,6 +1416,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const agent = ctx.agents.get(session.id)
     if (agent?.session !== session) return
     broadcast({ type: 'session/queue', sessionId: session.id, items: queueItems(agent, event.data) })
+  })
+
+  const sessionPersistence = ctx.get('sessionPersistence')
+  const usagePanel = new UsagePanelLedger({
+    ...defaults.usagePanelPath === undefined ? {} : { path: defaults.usagePanelPath },
+    ...sessionPersistence === undefined ? {} : { persistence: sessionPersistence },
+  })
+  ctx.on('session/event', (session, event) => {
+    usagePanel.ingestEvent(session.id, event)
   })
 
   /** Remove a wait before settling it: synchronous deletion makes the first claimant win. */
@@ -3666,6 +3681,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             error: error instanceof Error ? error.message : String(error),
           })
         }
+      },
+    },
+
+    usage: {
+      async panel(request) {
+        await usagePanel.ready()
+        return ok(request, usagePanel.snapshot())
       },
     },
 

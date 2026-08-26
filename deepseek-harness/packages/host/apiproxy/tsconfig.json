@@ -12,6 +12,9 @@
       "path": "../../goal/goal"
     },
     {
+      "path": "../../util/home-paths"
+    },
+    {
       "path": "../../settings/settings"
     },
     {
@@ -25,6 +28,9 @@
     },
     {
       "path": "../../api/remotes/tsconfig.host.json"
+    },
+    {
+      "path": "../../util/atomic-write"
     },
     {
       "path": "../../util/brand"

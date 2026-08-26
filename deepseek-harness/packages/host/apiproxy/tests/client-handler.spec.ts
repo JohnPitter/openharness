@@ -28,6 +28,7 @@ function scriptedApi(overrides: {
   settings?: Partial<ApiProxy['settings']>
   credentials?: Partial<ApiProxy['credentials']>
   llm?: Partial<ApiProxy['llm']>
+  usage?: Partial<ApiProxy['usage']>
   respond?: ApiProxy['respond']
 } = {}): ApiProxy {
   async function *empty<F>(): AsyncGenerator<RpcRequest<F>> { /* no frames */ }
@@ -133,6 +134,14 @@ function scriptedApi(overrides: {
       discoverModels: err,
       accountUsage: r => ok(r, { supported: false }),
       ...overrides.llm,
+    },
+    usage: {
+      panel: r => ok(r, {
+        days: [],
+        models: [],
+        totals: { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      }),
+      ...overrides.usage,
     },
     events: { mux: () => empty<MuxFrame>(), host: () => empty<HostFrame>(), ...overrides.events },
     respond: overrides.respond ?? (() => Promise.resolve({ accepted: false as const, reason: 'not-pending' as const })),
@@ -765,6 +774,13 @@ describe('config unary surface', () => {
         discoverModels: record('llm.discoverModels', r => ok(r, { models: [{ id: 'acme-large', contextWindow: 65536 }] })),
         accountUsage: record('llm.accountUsage', r => ok(r, { supported: true, plan: 'Moderato', windows: [] })),
       },
+      usage: {
+        panel: record('usage.panel', r => ok(r, {
+          days: [],
+          models: [],
+          totals: { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        })),
+      },
     })
     const c = client(api)
 
@@ -798,11 +814,20 @@ describe('config unary surface', () => {
     expect(discovered.result).toEqual({ ok: true, value: { models: [{ id: 'acme-large', contextWindow: 65536 }] } })
     const quota = await c.llm.accountUsage({ provider: 'kimi-for-coding' })
     expect(quota.result).toEqual({ ok: true, value: { supported: true, plan: 'Moderato', windows: [] } })
+    const panel = await c.usage.panel({})
+    expect(panel.result).toEqual({
+      ok: true,
+      value: {
+        days: [],
+        models: [],
+        totals: { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      },
+    })
 
     expect(seen.map(call => call.method)).toEqual([
       'settings.describe', 'settings.openDocument', 'settings.update', 'settings.replace', 'settings.mutate',
       'credentials.describe', 'credentials.set', 'credentials.unset',
-      'llm.providers', 'llm.models', 'llm.discoverModels', 'llm.accountUsage',
+      'llm.providers', 'llm.models', 'llm.discoverModels', 'llm.accountUsage', 'usage.panel',
     ])
     expect(seen[2]?.payload).toEqual({ ns: 'llm-deepseek', patch: { baseURL: 'https://next' } })
     expect(seen[4]?.payload)

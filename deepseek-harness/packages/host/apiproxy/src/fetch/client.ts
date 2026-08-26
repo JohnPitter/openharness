@@ -64,6 +64,7 @@ import {
   credentialsDescribeValueSchema, credentialsSetValueSchema, credentialsUnsetValueSchema,
 } from '../api/credentials.schema.ts'
 import { llmAccountUsageValueSchema, llmDiscoverModelsValueSchema, llmModelsValueSchema, llmProvidersValueSchema } from '../api/llm.schema.ts'
+import { usagePanelValueSchema } from '../api/usage.schema.ts'
 import {
   subagentHistoryValueSchema,
   subagentInterruptValueSchema,
@@ -168,6 +169,9 @@ export interface IApiClient {
     discoverModels(payload: RequestPayload<'llm.discoverModels'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.discoverModels'>>>
     accountUsage(payload: RequestPayload<'llm.accountUsage'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.accountUsage'>>>
   }
+  usage: {
+    panel(payload: RequestPayload<'usage.panel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'usage.panel'>>>
+  }
   /** client-response passthrough (rpcId is a backfill of the server-request's id — never minted here). */
   respond(message: ClientResponse, signal?: AbortSignal): Promise<RpcReceipt>
 }
@@ -233,6 +237,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'llm.models': llmModelsValueSchema,
   'llm.discoverModels': llmDiscoverModelsValueSchema,
   'llm.accountUsage': llmAccountUsageValueSchema,
+  'usage.panel': usagePanelValueSchema,
 }
 
 /** Default timeout for bounded unary calls (rpc-compare 2026-07-19: a hung host must not leave callers pending forever). */
@@ -513,6 +518,10 @@ export abstract class AbstractApiClient implements IApiClient {
     models: (payload, signal) => this.callUnary('llm.models', payload, signal),
     discoverModels: (payload, signal) => this.callUnary('llm.discoverModels', payload, signal),
     accountUsage: (payload, signal) => this.callUnary('llm.accountUsage', payload, signal),
+  }
+
+  readonly usage: IApiClient['usage'] = {
+    panel: (payload, signal) => this.callUnary('usage.panel', payload, signal),
   }
 
   readonly events: IApiClient['events'] = {
