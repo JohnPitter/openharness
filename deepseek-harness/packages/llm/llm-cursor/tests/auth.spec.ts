@@ -25,6 +25,7 @@ vi.mock('node:http2', () => ({ connect: http2.connect }))
 
 import {
   AUTH_CLIENT_ID, createUserApiKey, decodeJwtExp, exchangeApiKey, loginInteractive, refreshTokens,
+  windowsBrowserStartCommand,
 } from '../src/auth.ts'
 
 /** A minimal unsigned JWT carrying only the claims these tests need. */
@@ -54,6 +55,15 @@ describe('decodeJwtExp', () => {
   it('rejects a payload carrying no numeric exp', () => {
     expect(() => decodeJwtExp(jwt({ sub: 'user_1' }))).toThrow(/no numeric "exp"/)
     expect(() => decodeJwtExp(jwt({ exp: 'soon' }))).toThrow(/no numeric "exp"/)
+  })
+})
+
+describe('windowsBrowserStartCommand', () => {
+  it('quotes the URL so cmd start does not split on query &', () => {
+    const url = 'https://cursor.com/loginDeepControl?challenge=abc&uuid=def&mode=login'
+    expect(windowsBrowserStartCommand(url)).toBe(`start "" ${JSON.stringify(url)}`)
+    expect(windowsBrowserStartCommand(url)).toContain('&uuid=def')
+    expect(windowsBrowserStartCommand(url)).toContain('&mode=login')
   })
 })
 

@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LlmError } from '@deepseek-ai/dsh-llm'
-import { checksum, CursorAdapter } from '../src/adapter.ts'
+import { checksum, CATALOG_LISTING_TIMEOUT_MS, CursorAdapter, rejectedWhenAborted } from '../src/adapter.ts'
 import type { CursorHttp2Transport, Http2RequestOptions, Http2Response } from '../src/transport.ts'
 import { encodeModelsResponse, encodeResponseFixture, frame, trailerFrame } from '../src/protobuf.ts'
 
 const base = { provider: 'cursor', model: 'composer-2.5', messages: [] as never[] }
+
+afterEach(() => { vi.useRealTimers() })
 
 /** One text-delta data frame followed by a clean trailer — a complete, successful stream. */
 const textFrames = (text: string): Uint8Array => {
@@ -47,7 +49,7 @@ describe('CursorAdapter native transport', () => {
       requestBody = options.body
       return okResponse(textFrames('hello'))
     })
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     const chunks = []
     for await (const c of adapter.stream({
       ...base,
@@ -66,7 +68,7 @@ describe('CursorAdapter native transport', () => {
       headers = options.headers
       return okResponse(textFrames('ok'))
     })
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     for await (const _ of adapter.stream({
       ...base,
       tools: [{ name: 'my tool', description: 'desc', parameters: { type: 'object' } }],
@@ -85,7 +87,7 @@ describe('CursorAdapter native transport', () => {
   })
 
   it('declares request metering', () => {
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}))
+    const adapter = new CursorAdapter(async () => 'jwt', () => [])
     expect(adapter.providerInfo('cursor')).toMatchObject({
       id: 'cursor', name: 'Cursor', metering: 'requests',
     })
@@ -102,7 +104,7 @@ describe('CursorAdapter native transport', () => {
       sessionIds.push(options.headers['x-session-id'] ?? '')
       return okResponse(textFrames('ok'))
     })
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     for await (const _ of adapter.stream(base)) { }
     for await (const _ of adapter.stream(base)) { }
     expect(sessionIds[0]).toBe(sessionIds[1])
@@ -110,13 +112,13 @@ describe('CursorAdapter native transport', () => {
 
   it('reports HTTP and missing credentials', async () => {
     const transport = fakeTransport(() => okResponse(new Uint8Array(), 401))
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     await expect(async () => {
       for await (const _ of adapter.stream(base)) { }
     }).rejects.toMatchObject({ code: 'AUTH' })
     const missing = new CursorAdapter(async () => {
       throw new LlmError('missing', 'MISSING_CREDENTIAL')
-    }, () => ({}), undefined, transport)
+    }, () => [], undefined, transport)
     await expect(async () => {
       for await (const _ of missing.stream(base)) { }
     }).rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
@@ -131,7 +133,7 @@ describe('CursorAdapter native transport', () => {
       })
       return okResponse(textFrames('ok'))
     })
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     const pending = (async () => {
       for await (const _ of adapter.stream({ ...base, signal: controller.signal })) { }
     })()
@@ -150,7 +152,7 @@ describe('CursorAdapter native transport', () => {
       yield trailerFrame()
     }
     const transport = fakeTransport(() => ({ status: 200, headers: {}, body: slowBody() }))
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     const pending = (async () => {
       const chunks = []
       for await (const c of adapter.stream({ ...base, signal: controller.signal })) chunks.push(c)
@@ -171,13 +173,79 @@ describe('CursorAdapter native transport', () => {
         contextTokenLimit: 8192,
       }]))
     })
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({ fallback: 'Fallback' }), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
     await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'server-id', name: 'Display' }])
+  })
+
+  it('falls back to the catalog when the unary listing is empty', async () => {
+    const transport = fakeTransport(() => okResponse(encodeModelsResponse([])))
+    const adapter = new CursorAdapter(
+      async () => 'jwt',
+      () => [{ id: 'fallback', name: 'Fallback' }],
+      undefined,
+      transport,
+    )
+    await expect(adapter.listModels('cursor')).resolves.toEqual([
+      { provider: 'cursor', id: 'fallback', name: 'Fallback' },
+    ])
+  })
+
+  it('falls back to the catalog when listing exceeds the bound', async () => {
+    vi.useFakeTimers()
+    const transport = fakeTransport(async (options) => {
+      await new Promise((_, reject) => {
+        options.signal?.addEventListener('abort', () => {
+          reject(new LlmError('request aborted', 'ABORTED'))
+        }, { once: true })
+      })
+      return okResponse(new Uint8Array())
+    })
+    const adapter = new CursorAdapter(
+      async () => 'jwt',
+      () => [{ id: 'fallback', name: 'Fallback' }],
+      undefined,
+      transport,
+    )
+    const pending = adapter.listModels('cursor')
+    await vi.advanceTimersByTimeAsync(CATALOG_LISTING_TIMEOUT_MS)
+    await expect(pending).resolves.toEqual([{ provider: 'cursor', id: 'fallback', name: 'Fallback' }])
+    vi.useRealTimers()
+  })
+
+  it('resolves catalog capacities for a listed model', async () => {
+    const adapter = new CursorAdapter(async () => 'jwt', () => [{
+      id: 'composer-2.5',
+      name: 'Composer 2.5',
+      contextWindow: 200_000,
+      maxTokens: 32_768,
+    }])
+    await expect(adapter.resolveModel('cursor', 'composer-2.5')).resolves.toMatchObject({
+      provider: 'cursor',
+      id: 'composer-2.5',
+      name: 'Composer 2.5',
+      context: { contextWindow: 200_000 },
+      defaultMaxTokens: 32_768,
+    })
+  })
+
+  it('returns no models for a foreign provider and default capacities for an unlisted id', async () => {
+    const adapter = new CursorAdapter(async () => 'jwt', () => [])
+    await expect(adapter.listModels('other')).resolves.toEqual([])
+    await expect(adapter.resolveModel('cursor', 'unknown')).resolves.toMatchObject({
+      id: 'unknown',
+      name: 'unknown',
+      context: { contextWindow: 200_000 },
+      defaultMaxTokens: 32_768,
+    })
+  })
+
+  it('rejects immediately when the listing abort has already fired', async () => {
+    await expect(rejectedWhenAborted(AbortSignal.abort())).rejects.toMatchObject({ code: 'ABORTED' })
   })
 
   it('falls back to configured models on unary auth failure', async () => {
     const transport = fakeTransport(() => okResponse(new Uint8Array(), 401))
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({ fallback: 'Fallback' }), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
     await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'fallback', name: 'Fallback' }])
   })
 
@@ -188,7 +256,7 @@ describe('CursorAdapter native transport', () => {
     body.set(data)
     body.set(trailer, data.length)
     const transport = fakeTransport(() => okResponse(body))
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     const chunks = []
     for await (const c of adapter.stream(base)) chunks.push(c)
     expect(chunks.at(-2)).toEqual({ type: 'usage', usage: { inputTokens: 0, outputTokens: 7 } })
@@ -202,7 +270,7 @@ describe('CursorAdapter native transport', () => {
       details: [{ debug: { details: { detail: 'You have hit your usage limit.' } } }],
     })
     const transport = fakeTransport(() => okResponse(trailer))
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     await expect(async () => {
       for await (const _ of adapter.stream(base)) { }
     }).rejects.toMatchObject({ code: 'RATE_LIMIT', message: expect.stringContaining('You have hit your usage limit.') as string })
@@ -211,7 +279,7 @@ describe('CursorAdapter native transport', () => {
   it('maps unauthenticated/permission_denied trailers to AUTH', async () => {
     for (const code of ['unauthenticated', 'permission_denied']) {
       const transport = fakeTransport(() => okResponse(trailerFrame({ code, message: 'nope' })))
-      const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+      const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
       await expect(async () => {
         for await (const _ of adapter.stream(base)) { }
       }).rejects.toMatchObject({ code: 'AUTH' })
@@ -220,7 +288,7 @@ describe('CursorAdapter native transport', () => {
 
   it('maps an unrecognized trailer error code to PROVIDER_ERROR', async () => {
     const transport = fakeTransport(() => okResponse(trailerFrame({ code: 'internal', message: 'boom' })))
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     await expect(async () => {
       for await (const _ of adapter.stream(base)) { }
     }).rejects.toMatchObject({ code: 'PROVIDER_ERROR' })
@@ -228,7 +296,7 @@ describe('CursorAdapter native transport', () => {
 
   it('treats a clean trailer with no error as a normal stream end', async () => {
     const transport = fakeTransport(() => okResponse(textFrames('done')))
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     const chunks = []
     for await (const c of adapter.stream(base)) chunks.push(c)
     expect(chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
@@ -236,7 +304,7 @@ describe('CursorAdapter native transport', () => {
 
   it('rejects an unknown Connect frame flag as a PROTOCOL error', async () => {
     const transport = fakeTransport(() => okResponse(frame(new Uint8Array([1, 2, 3]), 3)))
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     await expect(async () => {
       for await (const _ of adapter.stream(base)) { }
     }).rejects.toMatchObject({ code: 'PROTOCOL' })
@@ -249,7 +317,7 @@ describe('CursorAdapter native transport', () => {
       },
       close() {},
     }
-    const adapter = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     await expect(async () => {
       for await (const _ of adapter.stream(base)) { }
     }).rejects.toMatchObject({ code: 'TIMEOUT' })
@@ -257,7 +325,7 @@ describe('CursorAdapter native transport', () => {
 
   it('disposes its owned transport but not an injected one', () => {
     const transport = fakeTransport(() => okResponse(textFrames('ok')))
-    const injected = new CursorAdapter(async () => 'jwt', () => ({}), undefined, transport)
+    const injected = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
     injected.dispose()
     expect(transport.closed).toBe(false)
   })

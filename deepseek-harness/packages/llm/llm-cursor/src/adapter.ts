@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { release } from 'node:os'
 import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, LlmModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import {
   decodePayload,
   decodeResponse,
@@ -30,6 +30,89 @@ export interface CursorTransportConfig {
 
 const endpoint = '/aiserver.v1.ChatService/StreamUnifiedChatWithTools'
 const modelsEndpoint = '/aiserver.v1.AiService/GetUsableModels'
+
+/** One advisory catalog row, the same fields the Settings model-list editor writes. */
+export interface CursorCatalogModel {
+  /** Wire model id Cursor accepts. */
+  id: string
+  /** Selector label; defaults to {@link id}. */
+  name?: string
+  /** Combined request/response context when known. */
+  contextWindow?: number
+  /** Per-request output cap when known. */
+  maxTokens?: number
+}
+
+/** Combined context used when a catalog row omits {@link CursorCatalogModel.contextWindow}. */
+export const DEFAULT_CONTEXT_WINDOW = 200_000
+/** Output cap used when a catalog row omits {@link CursorCatalogModel.maxTokens}. */
+export const DEFAULT_MAX_TOKENS = 32_768
+/**
+ * Bound on `listModels` credential resolution and the GetUsableModels RPC.
+ * Must stay below the host picker catalog's 4s per-provider bound so a hung
+ * listing falls back to {@link DEFAULT_MODELS} instead of dropping the Cursor group.
+ */
+export const CATALOG_LISTING_TIMEOUT_MS = 2_500
+
+/** Schema and adapter fallback when live listing is empty, times out, or fails. */
+export const DEFAULT_MODELS: CursorCatalogModel[] = [
+  {
+    id: 'composer-2.5',
+    name: 'Composer 2.5',
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    maxTokens: DEFAULT_MAX_TOKENS,
+  },
+]
+
+/** Map configured catalog rows to picker identities.
+ * @param models - advisory catalog rows.
+ * @returns picker identities, one per row.
+ */
+export function catalogModelInfo(models: readonly CursorCatalogModel[]): LlmModelInfo[] {
+  return models.map(model => ({
+    provider: 'cursor',
+    id: model.id,
+    name: model.name ?? model.id,
+  }))
+}
+
+/**
+ * Exact-model metadata for one catalog id, or the default capacities when the
+ * id is unlisted (a live listing the Settings array has not adopted yet).
+ * @param models - advisory catalog rows.
+ * @param provider - registered route id.
+ * @param model - exact model id.
+ * @returns identity plus default or row capacities.
+ */
+export function resolveCatalogModel(
+  models: readonly CursorCatalogModel[],
+  provider: string,
+  model: string,
+): LlmResolvedModelInfo {
+  const row = models.find(entry => entry.id === model)
+  return {
+    provider,
+    id: model,
+    name: row?.name ?? model,
+    context: { contextWindow: row?.contextWindow ?? DEFAULT_CONTEXT_WINDOW },
+    defaultMaxTokens: row?.maxTokens ?? DEFAULT_MAX_TOKENS,
+  }
+}
+
+/** Reject once `signal` aborts, including when it is already aborted.
+ * @param signal - abort that settles this promise.
+ * @returns a promise that rejects with `LlmError` code `ABORTED`.
+ */
+export function rejectedWhenAborted(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    const fail = (): void => { reject(new LlmError('request aborted', 'ABORTED')) }
+    if (signal.aborted) {
+      fail()
+      return
+    }
+    signal.addEventListener('abort', fail, { once: true })
+  })
+}
 
 function textOf(message: GenerateOptions['messages'][number]): string {
   return message.content.map((block) => {
@@ -111,7 +194,7 @@ export class CursorAdapter extends LlmAdapter {
 
   /**
    * @param resolveKey - resolves the current bearer access token.
-   * @param models - resolves the configured provider→model-name catalog fallback.
+   * @param models - resolves the configured advisory catalog used when live listing fails.
    * @param config - transport origin, client identity headers, and timeout.
    * @param transport - inject a fake transport for tests; when omitted, an
    *   HTTP/2 session transport is created and owned by this instance (closed
@@ -119,7 +202,7 @@ export class CursorAdapter extends LlmAdapter {
    */
   constructor(
     private readonly resolveKey: () => Promise<string>,
-    private readonly models: () => Record<string, string>,
+    private readonly models: () => readonly CursorCatalogModel[],
     private readonly config: CursorTransportConfig = {
       baseURL: 'https://api2.cursor.sh',
       clientVersion: '3.17.19',
@@ -172,14 +255,21 @@ export class CursorAdapter extends LlmAdapter {
     }
   }
 
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve(resolveCatalogModel(this.models(), provider, model))
+  }
+
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     if (provider !== 'cursor') return []
+    const catalog = catalogModelInfo(this.models())
+    const signal = AbortSignal.timeout(CATALOG_LISTING_TIMEOUT_MS)
     try {
-      const key = await this.resolveKey()
+      const key = await Promise.race([this.resolveKey(), rejectedWhenAborted(signal)])
       const response = await this.transport.request({
         path: modelsEndpoint,
         headers: { ...this.headers(key), 'content-type': 'application/proto', accept: 'application/proto' },
         body: new Uint8Array(encodeModelsRequest()),
+        signal,
       })
       const bytes = await collectBody(response.body)
       if (response.status !== 200) throw new Error(`Cursor HTTP ${response.status}`)
@@ -188,10 +278,15 @@ export class CursorAdapter extends LlmAdapter {
       const payload = packets.length === 1 && first !== undefined && first.size === bytes.length
         ? decodePayload(first.flags, first.payload)
         : bytes
-      return decodeModelsResponse(payload).map(model => ({ provider: 'cursor', id: model.id, name: model.name }))
+      const listed = decodeModelsResponse(payload).map(model => ({
+        provider: 'cursor' as const,
+        id: model.id,
+        name: model.name,
+      }))
+      return listed.length > 0 ? listed : catalog
     } catch (error) {
       console.warn('Cursor listModels RPC failed; using configured catalog', error)
-      return Object.entries(this.models()).map(([id, name]) => ({ provider: 'cursor', id, name }))
+      return catalog
     }
   }
 

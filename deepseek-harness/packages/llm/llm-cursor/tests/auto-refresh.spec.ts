@@ -93,7 +93,7 @@ async function harness(config: Partial<LlmCursor.Config> = {}): Promise<Context>
     apiKeyEnv: 'CURSOR_ACCESS_TOKEN',
     refreshTokenEnv: 'CURSOR_REFRESH_TOKEN',
     defaultModel: 'composer-2.5',
-    models: {},
+    models: [],
     baseURL: 'https://api2.cursor.sh',
     clientVersion: '3.17.19',
     machineId: 'test-machine',
@@ -250,5 +250,14 @@ describe('llm-cursor auto-refresh', () => {
     await drain(ctx)
 
     expect(refreshCalls).toBe(0)
+  })
+
+  it('discovers the configured catalog when live listing is unavailable', async () => {
+    const ctx = await harness({
+      models: [{ id: 'composer-2.5', name: 'Composer 2.5', contextWindow: 200_000, maxTokens: 32_768 }],
+    })
+    await expect(ctx.llm.discoverModels('llm-cursor', { provider: 'cursor' })).resolves.toEqual([
+      { id: 'composer-2.5', name: 'Composer 2.5', contextWindow: 200_000, maxTokens: 32_768 },
+    ])
   })
 })

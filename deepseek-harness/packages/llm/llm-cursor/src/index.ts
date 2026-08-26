@@ -4,14 +4,20 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import { CursorAdapter, defaultMachineId, type GhostMode } from './adapter.ts'
+import {
+  CursorAdapter, defaultMachineId, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS, DEFAULT_MODELS,
+  type CursorCatalogModel, type GhostMode,
+} from './adapter.ts'
 import { CursorCloudAdapter } from './cloud-adapter.ts'
 import { createUserApiKey, decodeJwtExp, refreshTokens, DEFAULT_BACKEND_URL, DEFAULT_WEBSITE_URL } from './auth.ts'
 import { registerCursorLoginFlow } from './login.ts'
 import { handleCursorOauthHttp, OAUTH_HTTP_PREFIX } from './oauth-http.ts'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-export { CursorAdapter } from './adapter.ts'
+export {
+  CursorAdapter, CATALOG_LISTING_TIMEOUT_MS, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS, DEFAULT_MODELS,
+} from './adapter.ts'
+export type { CursorCatalogModel, GhostMode } from './adapter.ts'
 export { CursorCloudAdapter } from './cloud-adapter.ts'
 export { name as invariantName } from './invariant.ts'
 export {
@@ -26,7 +32,9 @@ export interface Config {
   apiKeyEnv: string
   refreshTokenEnv: string
   defaultModel: string
-  models: Record<string, string>
+  models: CursorCatalogModel[]
+  defaultContextWindow: number
+  maxTokens: number
   baseURL: string
   websiteURL: string
   clientVersion: string
@@ -36,15 +44,20 @@ export interface Config {
   ghostMode: GhostMode
   transportMode?: 'native' | 'sdk'
 }
-const DEFAULT_MODELS: Record<string, string> = {
-  'composer-2.5': 'Composer 2.5',
-}
+const catalogModel: z<CursorCatalogModel> = z.object({
+  id: z.string().required(),
+  name: z.string(),
+  contextWindow: z.number().step(1).min(1),
+  maxTokens: z.number().step(1).min(1),
+})
 
 export const Config = z.object({
   apiKeyEnv: z.string().default('CURSOR_ACCESS_TOKEN'),
   refreshTokenEnv: z.string().default('CURSOR_REFRESH_TOKEN'),
   defaultModel: z.string().default('composer-2.5'),
-  models: z.dict(z.string()).default(DEFAULT_MODELS),
+  models: z.array(catalogModel).default(DEFAULT_MODELS),
+  defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
+  maxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
   baseURL: z.string().default(DEFAULT_BACKEND_URL),
   websiteURL: z.string().default(DEFAULT_WEBSITE_URL),
   clientVersion: z.string().default('3.17.19'),
@@ -67,6 +80,7 @@ const REFRESH_SKEW_MS = 2 * 60 * 1000
 
 /** Install the Cursor provider route, its credential-backed access token, auto-refresh, and its optional interactive-login flow. */
 export function apply(ctx: Context, config: Config): void {
+  let current: () => Config = () => config
   const accessRef = () => credentialRef(config.apiKeyEnv)
   const refreshRef = () => credentialRef(config.refreshTokenEnv)
   const sdkKeyRef = () => credentialRef('CURSOR_SDK_KEY')
@@ -155,8 +169,8 @@ export function apply(ctx: Context, config: Config): void {
 
   const timezone = config.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
   const adapter = transportMode === 'sdk'
-    ? new CursorCloudAdapter(resolveKey, () => config.models)
-    : new CursorAdapter(resolveKey, () => config.models, {
+    ? new CursorCloudAdapter(resolveKey, () => current().models ?? DEFAULT_MODELS)
+    : new CursorAdapter(resolveKey, () => current().models ?? DEFAULT_MODELS, {
       baseURL: config.baseURL,
       clientVersion: config.clientVersion,
       timezone,
@@ -173,10 +187,21 @@ export function apply(ctx: Context, config: Config): void {
   }])
   ctx.llm.registerModelDiscovery(NS, async (request) => {
     const models = await adapter.listModels(request.provider ?? 'cursor')
-    return models.map(model => ({ id: model.id, name: model.name }))
+    const catalog = new Map((current().models ?? DEFAULT_MODELS).map(row => [row.id, row]))
+    return models.map(model => {
+      const row = catalog.get(model.id)
+      return {
+        id: model.id,
+        name: model.name,
+        ...row?.contextWindow === undefined ? {} : { contextWindow: row.contextWindow },
+        ...row?.maxTokens === undefined ? {} : { maxTokens: row.maxTokens },
+      }
+    })
   })
   installSettingsSection(ctx, NS, Config, config, {
-    setSource: () => {},
+    setSource: (source) => {
+      current = source
+    },
     onChange: () => {},
   })
 

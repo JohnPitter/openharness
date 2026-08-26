@@ -1,6 +1,6 @@
 # dsh-llm-cursor
 
-Provider Cursor para o DSH com dois transportes: `sdk` (padrão, Cloud Agent `@cursor/sdk`) e `native` (Connect/protobuf HTTP/2). O modo SDK é o caminho validado contra o backend real.
+Provider Cursor para o DSH com dois transportes: `native` (padrão, Connect/protobuf HTTP/2) e `sdk` (Cloud Agent `@cursor/sdk`).
 
 ```yaml
 llm-cursor:
@@ -17,7 +17,10 @@ llm-cursor:
   macMachineId: your-stable-mac-machine-id
   ghostMode: false # true, false ou implicit-false
   models:
-    composer-2.5: Composer 2.5
+    - id: composer-2.5
+      name: Composer 2.5
+      contextWindow: 200000
+      maxTokens: 32768
 ```
 
 `clientVersion` é um valor estático no código (`3.17.19`, a versão mais recente publicada no canal `stable`/`win32-x64-user` no momento desta implementação — consultada via `GET {baseURL}/updates/api/update/{platform}/{applicationName}/{currentVersion}/{machineId}/{releaseTrack}`, o mesmo endpoint que o updater do cliente oficial usa). O backend rejeita versões que considera desatualizadas com um erro `resource_exhausted` cujo `details[].debug.error` é `ERROR_GPT_4_VISION_PREVIEW_RATE_LIMIT` e cujo `title` é "Update Required" — mas esse mesmo código também é usado para falhas de billing/quota da conta (`analyticsMetadata.actionRequired: "payment"`), então "Update Required" não implica necessariamente que `clientVersion` esteja desatualizado. Sobrescreva `clientVersion` explicitamente na configuração quando o backend exigir uma versão mais recente que a compilada nesta release.
@@ -66,7 +69,7 @@ Sem tools, o adapter continua criando um Agent Cloud novo por stream. `onDelta` 
 
 `api2.cursor.sh` só oferece `h2` no ALPN de sua TLS; um cliente HTTP/1.1 (o `fetch` global do Node, via undici) recebe HTTP 464 "Incompatible Protocol Versions" do load balancer do host. Por isso o transporte (`src/transport.ts`, interface `CursorHttp2Transport`) usa `node:http2` diretamente: cada instância do adapter abre uma sessão HTTP/2 (`http2.connect(baseURL)`), reaberta lazily caso caia, e reaproveitada entre chamadas de `stream`/`listModels`. A sessão é fechada em `adapter.dispose()`, chamado quando o fiber do plugin descarrega (`ctx.effect()` em `index.ts`); um transporte injetado nos testes não é fechado pelo adapter — o teste o possui. O corpo da resposta é consumido como stream incremental, alimentando o mesmo decoder de frames Connect usado antes. `options.signal` aborta a requisição em qualquer fase (aguardando headers ou já recebendo o corpo) fechando o stream HTTP/2 subjacente. O timeout de espera por headers de resposta é configurável via `CursorTransportConfig.timeoutMs` (padrão 120000ms/120s) e produz `LlmError` código `TIMEOUT`.
 
-O checksum usa o algoritmo oficial, com `machineId`/`macMachineId` persistentes; sem `machineId`, o provider deriva um hash estável de plataforma, arquitetura e identidade do host. O `x-session-id` é gerado uma vez por instância do plugin. Frames gzip (flag `0x01`) são descomprimidos; flags desconhecidas produzem `LlmError` código `PROTOCOL`. `temperature` e `stop` retornam `UNSUPPORTED`. `listModels('cursor')` consulta o RPC unário `aiserver.v1.AiService/GetUsableModels` em `application/proto` sobre o mesmo transporte HTTP/2. A implementação usa `AvailableModelsRequest/Response`, que é a variante completa do dump 3.17.8: `models=2`, `model_names=1` e `AvailableModel` com `name=1`, `context_token_limit=15`, `client_display_name=17` e `server_model_name=18`; em falha de rede ou autenticação, usa o mapa configurado em `models` e registra `warn`.
+O checksum usa o algoritmo oficial, com `machineId`/`macMachineId` persistentes; sem `machineId`, o provider deriva um hash estável de plataforma, arquitetura e identidade do host. O `x-session-id` é gerado uma vez por instância do plugin. Frames gzip (flag `0x01`) são descomprimidos; flags desconhecidas produzem `LlmError` código `PROTOCOL`. `temperature` e `stop` retornam `UNSUPPORTED`. `listModels('cursor')` consulta o RPC unário `aiserver.v1.AiService/GetUsableModels` em `application/proto` sobre o mesmo transporte HTTP/2, com abort de 2,5s. A implementação usa `AvailableModelsRequest/Response`, que é a variante completa do dump 3.17.8: `models=2`, `model_names=1` e `AvailableModel` com `name=1`, `context_token_limit=15`, `client_display_name=17` e `server_model_name=18`; em falha, timeout, listagem vazia ou autenticação, usa o array `models` da configuração e registra `warn`.
 
 ### Frames Connect e erros de trailer
 

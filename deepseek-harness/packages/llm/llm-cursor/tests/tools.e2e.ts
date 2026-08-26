@@ -19,7 +19,7 @@ describe.skipIf(!process.env.CURSOR_API_KEY)('Cursor custom tools e2e (real API)
   afterEach(() => { adapter?.dispose() })
 
   it('completes the tool-call and result cycle', async () => {
-    adapter = new CursorCloudAdapter(async () => process.env.CURSOR_API_KEY!, () => ({}))
+    adapter = new CursorCloudAdapter(async () => process.env.CURSOR_API_KEY!, () => [])
     const first: ReturnType<CursorCloudAdapter['stream']> = adapter.stream({ provider: 'cursor', model, sessionId, messages: [user], tools })
     const firstChunks = []
     for await (const chunk of first) {

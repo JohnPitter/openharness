@@ -6,15 +6,16 @@ const sdk = vi.hoisted(() => {
   const send = vi.fn()
   const close = vi.fn()
   const create = vi.fn(async () => ({ send, close }))
-  return { send, close, create }
+  const list = vi.fn()
+  return { send, close, create, list }
 })
-vi.mock('@cursor/sdk', () => ({ Agent: { create: sdk.create }, Cursor: { models: { list: vi.fn() } } }))
-const { send, close, create } = sdk
+vi.mock('@cursor/sdk', () => ({ Agent: { create: sdk.create }, Cursor: { models: { list: sdk.list } } }))
+const { send, close, create, list } = sdk
 
 import { CursorCloudAdapter, serializeCloudPrompt } from '../src/cloud-adapter.ts'
 
 const base: GenerateOptions = { provider: 'cursor', model: 'composer-2.5', messages: [] }
-beforeEach(() => { send.mockReset(); close.mockReset(); create.mockClear() })
+beforeEach(() => { send.mockReset(); close.mockReset(); create.mockClear(); list.mockReset() })
 afterEach(() => { vi.useRealTimers() })
 
 const echoTool = { name: 'echo', description: 'Echo', parameters: { type: 'object' } }
@@ -26,7 +27,7 @@ const usage = { inputTokens: 3, outputTokens: 2, cacheReadTokens: 0, cacheWriteT
 
 async function collect(options: GenerateOptions) {
   const chunks = []
-  for await (const chunk of new CursorCloudAdapter(async () => 'crsr_test', () => ({})).stream(options)) chunks.push(chunk)
+  for await (const chunk of new CursorCloudAdapter(async () => 'crsr_test', () => []).stream(options)) chunks.push(chunk)
   return chunks
 }
 
@@ -82,7 +83,7 @@ describe('CursorCloudAdapter SDK transport', () => {
     const controller = new AbortController()
     let rejectWait: (error: Error) => void = () => {}
     send.mockResolvedValueOnce({ wait: () => new Promise((_resolve, reject) => { rejectWait = reject }) })
-    const iterator = new CursorCloudAdapter(async () => 'crsr_test', () => ({})).stream({ ...base, signal: controller.signal })[Symbol.asyncIterator]()
+    const iterator = new CursorCloudAdapter(async () => 'crsr_test', () => []).stream({ ...base, signal: controller.signal })[Symbol.asyncIterator]()
     const pending = iterator.next()
     await vi.waitFor(() => { expect(send).toHaveBeenCalled() })
     controller.abort()
@@ -98,7 +99,7 @@ describe('CursorCloudAdapter SDK transport', () => {
   })
 
   it('completes an agentic tool cycle across two calls', async () => {
-    const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => ({}))
+    const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => [])
     let pending!: Promise<unknown>
     let settled = false
     send.mockImplementationOnce(async (_prompt: string, options: MockSendOptions) => {
@@ -133,7 +134,7 @@ describe('CursorCloudAdapter SDK transport', () => {
     vi.useFakeTimers()
     const cancel = vi.fn()
     send.mockResolvedValueOnce({ cancel, wait: () => new Promise(() => {}) })
-    const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => ({}))
+    const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => [])
     const first = adapter.stream({ ...base, sessionId: 'ttl-1', tools: [echoTool] })[Symbol.asyncIterator]()
     void first.next().catch(() => undefined)
     await vi.waitFor(() => { expect(send).toHaveBeenCalled() })
@@ -148,7 +149,7 @@ describe('CursorCloudAdapter SDK transport', () => {
 
   it('aborts a waiting tool cycle and rejects its pending call', async () => {
     const controller = new AbortController()
-    const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => ({}))
+    const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => [])
     let execute!: (args: Record<string, unknown>, context: { toolCallId?: string }) => Promise<unknown>
     const cancel = vi.fn()
     send.mockImplementationOnce(async (_prompt: string, options: MockSendOptions) => {
@@ -169,5 +170,36 @@ describe('CursorCloudAdapter SDK transport', () => {
     await expect(waiting).rejects.toMatchObject({ code: 'ABORTED' })
     await expect(pending).rejects.toMatchObject({ code: 'ABORTED' })
     expect(cancel).toHaveBeenCalledOnce()
+  })
+
+  it('lists SDK models and falls back to the configured catalog', async () => {
+    list.mockResolvedValueOnce([{ id: 'live', displayName: 'Live' }])
+    const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => [{ id: 'fallback', name: 'Fallback' }])
+    await expect(adapter.listModels('cursor')).resolves.toEqual([
+      { provider: 'cursor', id: 'live', name: 'Live' },
+    ])
+    list.mockRejectedValueOnce(new Error('nope'))
+    await expect(adapter.listModels('cursor')).resolves.toEqual([
+      { provider: 'cursor', id: 'fallback', name: 'Fallback' },
+    ])
+    list.mockResolvedValueOnce([])
+    await expect(adapter.listModels('cursor')).resolves.toEqual([
+      { provider: 'cursor', id: 'fallback', name: 'Fallback' },
+    ])
+    await expect(adapter.listModels('other')).resolves.toEqual([])
+  })
+
+  it('resolves catalog capacities through the SDK adapter', async () => {
+    const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => [{
+      id: 'composer-2.5',
+      name: 'Composer 2.5',
+      contextWindow: 200_000,
+      maxTokens: 32_768,
+    }])
+    await expect(adapter.resolveModel('cursor', 'composer-2.5')).resolves.toMatchObject({
+      id: 'composer-2.5',
+      context: { contextWindow: 200_000 },
+      defaultMaxTokens: 32_768,
+    })
   })
 })

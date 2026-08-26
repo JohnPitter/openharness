@@ -1,5 +1,9 @@
 import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, LlmModelInfo, StreamChunk, ToolSchema, TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk, ToolSchema, TokenUsage } from '@deepseek-ai/dsh-llm'
+import {
+  CATALOG_LISTING_TIMEOUT_MS, catalogModelInfo, rejectedWhenAborted, resolveCatalogModel,
+} from './adapter.ts'
+import type { CursorCatalogModel } from './adapter.ts'
 
 type CursorSdk = typeof import('@cursor/sdk')
 type CursorAgent = Awaited<ReturnType<CursorSdk['Agent']['create']>>
@@ -63,22 +67,35 @@ function resultFor(message: GenerateOptions['messages'][number]): Array<{ id: st
 export class CursorCloudAdapter extends LlmAdapter {
   private readonly sessions = new Map<string, Session>()
 
-  constructor(private readonly resolveKey: () => Promise<string>, private readonly models: () => Record<string, string>) { super() }
+  constructor(
+    private readonly resolveKey: () => Promise<string>,
+    private readonly models: () => readonly CursorCatalogModel[],
+  ) { super() }
 
   override providerInfo(provider: string) {
     return { id: provider, name: 'Cursor', metering: 'requests' as const }
   }
 
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve(resolveCatalogModel(this.models(), provider, model))
+  }
+
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     if (provider !== 'cursor') return []
+    const catalog = catalogModelInfo(this.models())
+    const signal = AbortSignal.timeout(CATALOG_LISTING_TIMEOUT_MS)
     try {
-      const key = await this.resolveKey()
+      const key = await Promise.race([this.resolveKey(), rejectedWhenAborted(signal)])
       const { Cursor } = await loadCursorSdk()
-      const models = await Cursor.models.list({ apiKey: key })
-      return models.map(model => ({ provider: 'cursor', id: model.id, name: model.displayName }))
+      const models = await Promise.race([
+        Cursor.models.list({ apiKey: key }),
+        rejectedWhenAborted(signal),
+      ])
+      const listed = models.map(model => ({ provider: 'cursor' as const, id: model.id, name: model.displayName }))
+      return listed.length > 0 ? listed : catalog
     } catch (error) {
       console.warn('Cursor SDK listModels failed; using configured catalog', error)
-      return Object.entries(this.models()).map(([id, name]) => ({ provider: 'cursor', id, name }))
+      return catalog
     }
   }
 

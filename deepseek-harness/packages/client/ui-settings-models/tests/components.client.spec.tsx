@@ -506,18 +506,31 @@ describe('ModelsSection', () => {
     })
   })
 
-  it('lets a Cursor card paste a token without a model list', async () => {
+  it('lets a Cursor card edit inherited models and fetch a listing', async () => {
     const CursorConfig = Schema.object({
       apiKeyEnv: Schema.string().role('credential-ref'),
       refreshTokenEnv: Schema.string(),
       baseURL: Schema.string(),
-      models: Schema.dict(Schema.string()),
+      defaultContextWindow: Schema.number().step(1).min(1),
+      maxTokens: Schema.number().step(1).min(1),
+      models: Schema.array(Schema.object({
+        id: Schema.string().required(),
+        name: Schema.string(),
+        contextWindow: Schema.number().step(1).min(1),
+        maxTokens: Schema.number().step(1).min(1),
+      })).default([{
+        id: 'composer-2.5',
+        name: 'Composer 2.5',
+        contextWindow: 200_000,
+        maxTokens: 32_768,
+      }]),
     })
-    const { face } = scriptedFace({})
+    const discover = vi.fn(() => Promise.resolve(ok({ models: [{ id: 'composer-2', name: 'Composer 2' }] })))
+    const { face } = scriptedFace({ discover })
     const namespace: SettingsNamespaceView = {
       ns: 'llm-cursor',
       schema: JSON.parse(JSON.stringify(CursorConfig.toJSON())) as unknown,
-      value: { apiKeyEnv: 'CURSOR_ACCESS_TOKEN', models: { 'composer-2.5': 'Composer 2.5' } },
+      value: { apiKeyEnv: 'CURSOR_ACCESS_TOKEN' },
       applies: 'live',
       secrets: [],
       revision: 0,
@@ -536,6 +549,17 @@ describe('ModelsSection', () => {
     />)
     expect(screen.queryByText(/llm-cursor/)).toBeNull()
     expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.customized))
+    expect(screen.getByText(en.modelsInherited)).toBeTruthy()
+    expect(screen.getAllByLabelText(new RegExp(en.modelId)).map(input => (input as HTMLInputElement).value))
+      .toEqual(['composer-2.5'])
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await waitFor(() => { expect(discover).toHaveBeenCalled() })
+    expect(discover).toHaveBeenCalledWith({
+      settingsNs: 'llm-cursor',
+      provider: 'cursor',
+      baseURL: 'https://api2.cursor.sh',
+    })
     expect(screen.getByText<HTMLButtonElement>(en.apply).disabled).toBe(false)
   })
 

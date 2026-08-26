@@ -12,7 +12,7 @@ Status: implemented
 
 - 宿主构建在 `tsconfig.host.json` 中列出 `packages/llm/llm-cursor`。默认 `transportMode` 为 `native`（Connect/protobuf HTTP/2）；`sdk` 仍可在 settings 中显式覆盖。
 - `apiKeyEnv` 默认为 `CURSOR_ACCESS_TOKEN`。两个 adapter 均声明 `metering: 'requests'`。
-- Settings `layoutOf('llm-cursor')` 为家族 `cursor`：OAuth 按钮加可粘贴 token，没有 DeepSeek 形状的模型列表（目录是名称字典，由实时 `listModels` 填充）。
+- Settings `layoutOf('llm-cursor')` 为家族 `cursor`：OAuth 按钮、可粘贴 token，以及与 Kimi 共用的模型行数组编辑器（[目录](2026-08-26-llm-cursor-models-array-catalog.zh.md)）。
 - 插件挂载 `GET/POST /dsh-llm-cursor/oauth/{status,login,logout}`。Models 的 OAuth 客户端将该前缀与 pi-ai 合并，并把 `provider === 'cursor'` 路由到 Cursor。
 
 ## 考虑过的替代方案
@@ -21,9 +21,10 @@ Status: implemented
 
 **复用 pi-ai 的 OAuth HTTP 前缀。** 否决：该 handler 绑定 `PiAiAdapter` 路由；Cursor 的 token 与登录属于 `llm-cursor`。
 
-**把模型字典当成 DeepSeek 行来编辑。** 否决：Cursor `Config.models` 是 `Record<string, string>`；强行使用数组编辑器会禁用 Apply。
+**目录行编辑。** 由 [模型数组目录](2026-08-26-llm-cursor-models-array-catalog.zh.md) 负责；本笔记不选择 Settings 的模型列表控件。
 
 ## 后果
 
 - Settings → Models 显示 Cursor 卡片，可以 Sign in 或存储 JWT，再从实时列表选择模型。
+- Windows 的 Sign in 用 `start "" "<url>"` 打开浏览器，避免 `cmd` 把 `loginDeepControl?challenge=&uuid=&mode=` 在 `&` 处切断。
 - 桌面 runtime 必须把 `proto/lite.proto` 拷到打包后的 `lib/` 旁（`import.meta.url` 解析 `../proto/lite.proto`）。

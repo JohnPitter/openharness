@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-26-llm-cursor-settings-native.md
-2026-08-26-llm-cursor-settings-native.md: 3d2eaaf87cc64e978275dfde408c8f576b1969f3
-2026-08-26-llm-cursor-settings-native.zh.md: 658f5e98e86f64ef154f6dd38a866339456bab16
+2026-08-26-llm-cursor-settings-native.md: ed5d3275d127196324960838f778d46ebf9e0df6
+2026-08-26-llm-cursor-settings-native.zh.md: c78e2f692a3de3bb260d638d7e00a778ae395a4f

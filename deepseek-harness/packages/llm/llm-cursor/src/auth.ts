@@ -10,7 +10,7 @@
  */
 
 import { randomBytes, randomUUID, createHash } from 'node:crypto'
-import { spawn } from 'node:child_process'
+import { exec, spawn } from 'node:child_process'
 import { connect } from 'node:http2'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 
@@ -88,18 +88,31 @@ export function decodeJwtExp(token: string): number {
 }
 
 /**
+ * `cmd start` treats an unquoted `&` as a command separator, so a login URL
+ * that only keeps `?challenge=` is what the browser actually opens. Quote the
+ * whole URL the same way `llm-pi-ai` does.
+ * @param url - the login URL, including query parameters.
+ * @returns a `start "" "<url>"` command line.
+ */
+export function windowsBrowserStartCommand(url: string): string {
+  return `start "" ${JSON.stringify(url)}`
+}
+
+/**
  * Spawn the OS default browser at `url`. Fire-and-forget: a headless host with
  * no display still lets the caller hand the URL to the human another way
  * (`onLoginURL`), so a spawn failure here is swallowed rather than thrown.
  * @param url - the URL to open.
  */
 function openInBrowser(url: string): void {
-  const [command, args] = process.platform === 'win32'
-    ? ['cmd', ['/c', 'start', '""', url]]
-    : process.platform === 'darwin'
+  try {
+    if (process.platform === 'win32') {
+      exec(windowsBrowserStartCommand(url))
+      return
+    }
+    const [command, args] = process.platform === 'darwin'
       ? ['open', [url]]
       : ['xdg-open', [url]]
-  try {
     spawn(command, args, { stdio: 'ignore', detached: true }).unref()
   } catch {
     // No display, no such binary, or a sandboxed host: the caller still has
