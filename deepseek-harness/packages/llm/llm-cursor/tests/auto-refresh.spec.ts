@@ -95,7 +95,7 @@ async function harness(config: Partial<LlmCursor.Config> = {}): Promise<Context>
     defaultModel: 'composer-2.5',
     models: [],
     baseURL: 'https://api2.cursor.sh',
-    clientVersion: '3.17.19',
+    clientVersion: '3.17.21',
     machineId: 'test-machine',
     ghostMode: false,
     transportMode: 'native',

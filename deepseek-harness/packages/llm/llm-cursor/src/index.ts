@@ -5,8 +5,8 @@ import { LlmError } from '@deepseek-ai/dsh-llm'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import {
-  CursorAdapter, defaultMachineId, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS, DEFAULT_MODELS,
-  type CursorCatalogModel, type GhostMode,
+  CursorAdapter, defaultMachineId, DEFAULT_CLIENT_VERSION, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS,
+  DEFAULT_MODELS, type CursorCatalogModel, type GhostMode,
 } from './adapter.ts'
 import { CursorCloudAdapter } from './cloud-adapter.ts'
 import { createUserApiKey, decodeJwtExp, refreshTokens, DEFAULT_BACKEND_URL, DEFAULT_WEBSITE_URL } from './auth.ts'
@@ -15,7 +15,8 @@ import { handleCursorOauthHttp, OAUTH_HTTP_PREFIX } from './oauth-http.ts'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export {
-  CursorAdapter, CATALOG_LISTING_TIMEOUT_MS, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS, DEFAULT_MODELS,
+  CursorAdapter, CATALOG_LISTING_TIMEOUT_MS, DEFAULT_CLIENT_VERSION, DEFAULT_CONTEXT_WINDOW,
+  DEFAULT_MAX_TOKENS, DEFAULT_MODELS,
 } from './adapter.ts'
 export type { CursorCatalogModel, GhostMode } from './adapter.ts'
 export { CursorCloudAdapter } from './cloud-adapter.ts'
@@ -60,7 +61,7 @@ export const Config = z.object({
   maxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
   baseURL: z.string().default(DEFAULT_BACKEND_URL),
   websiteURL: z.string().default(DEFAULT_WEBSITE_URL),
-  clientVersion: z.string().default('3.17.19'),
+  clientVersion: z.string().default(DEFAULT_CLIENT_VERSION),
   timezone: z.string(),
   machineId: z.string(),
   macMachineId: z.string(),
@@ -168,14 +169,15 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   const timezone = config.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  // Live getters: Apply can raise clientVersion without tearing down the HTTP/2 session.
   const adapter = transportMode === 'sdk'
     ? new CursorCloudAdapter(resolveKey, () => current().models ?? DEFAULT_MODELS)
     : new CursorAdapter(resolveKey, () => current().models ?? DEFAULT_MODELS, {
-      baseURL: config.baseURL,
-      clientVersion: config.clientVersion,
-      timezone,
-      machineId: config.machineId ?? defaultMachineId(),
-      ghostMode: config.ghostMode,
+      get baseURL() { return current().baseURL },
+      get clientVersion() { return current().clientVersion },
+      get timezone() { return current().timezone ?? timezone },
+      get machineId() { return current().machineId ?? defaultMachineId() },
+      get ghostMode() { return current().ghostMode },
       ...(config.macMachineId === undefined ? {} : { macMachineId: config.macMachineId }),
     })
   ctx.effect(function* () {

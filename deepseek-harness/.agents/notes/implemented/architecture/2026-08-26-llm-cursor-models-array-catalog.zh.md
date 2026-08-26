@@ -26,5 +26,6 @@ Cursor 的 Settings 卡片没有模型列表，登录后 composer 选择器也�
 ## 后果
 
 - Settings → Models → Cursor → 自定义设置 在用户自定义或拉取之前显示 Composer 2.5。
+- 只有当 `x-cursor-client-version` 仍被后端接受时，实时 `GetUsableModels` 才会把 Grok 以及该账户目录的其余模型填进选择器（[版本钉扎](../../bug-fix/2026-08-26-llm-cursor-client-version-rejected.zh.md)）。
 - 挂起的 `GetUsableModels` 或 SDK `Cursor.models.list` 不再把 Cursor 从选择器中移除。
 - 手写进 `settings.yaml` 的 `models:` 映射对本节无效；数组是唯一接受的目录形式。

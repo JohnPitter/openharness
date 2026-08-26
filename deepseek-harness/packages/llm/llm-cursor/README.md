@@ -10,7 +10,7 @@ llm-cursor:
   defaultModel: composer-2.5
   baseURL: https://api2.cursor.sh
   websiteURL: https://cursor.com
-  clientVersion: 3.17.19
+  clientVersion: 3.17.21
   # Omitido: usa o fuso retornado por Intl.DateTimeFormat().resolvedOptions().timeZone
   timezone: America/Sao_Paulo
   machineId: your-stable-machine-id
@@ -23,7 +23,7 @@ llm-cursor:
       maxTokens: 32768
 ```
 
-`clientVersion` é um valor estático no código (`3.17.19`, a versão mais recente publicada no canal `stable`/`win32-x64-user` no momento desta implementação — consultada via `GET {baseURL}/updates/api/update/{platform}/{applicationName}/{currentVersion}/{machineId}/{releaseTrack}`, o mesmo endpoint que o updater do cliente oficial usa). O backend rejeita versões que considera desatualizadas com um erro `resource_exhausted` cujo `details[].debug.error` é `ERROR_GPT_4_VISION_PREVIEW_RATE_LIMIT` e cujo `title` é "Update Required" — mas esse mesmo código também é usado para falhas de billing/quota da conta (`analyticsMetadata.actionRequired: "payment"`), então "Update Required" não implica necessariamente que `clientVersion` esteja desatualizado. Sobrescreva `clientVersion` explicitamente na configuração quando o backend exigir uma versão mais recente que a compilada nesta release.
+`clientVersion` é um valor estático no código (`3.17.21`, a versão mais recente publicada no canal `stable`/`win32-x64-user` no momento desta implementação — o mesmo número em `product.json` do cliente desktop instalado). O backend rejeita um pin antigo com `resource_exhausted` cuja mensagem humana diz que a versão do Cursor não é mais suportada; `listModels` então cai no array `models` (só Composer 2.5) e o chat falha. Sobrescreva `clientVersion` na configuração, ou atualize o default compilado, quando o backend exigir uma versão mais recente. O mesmo código Connect também cobre billing/quota (`analyticsMetadata.actionRequired: "payment"`); o adapter distingue o caso de versão pelo texto `no longer supported` / `cursor.com/downloads` e mapeia esse trailer para `PROVIDER_ERROR`, não `RATE_LIMIT`.
 
 No modo `sdk`, `CURSOR_API_KEY` (ou `apiKeyEnv`) contém uma chave `crsr_...`; `CURSOR_SDK_KEY` é a referência persistida após mint. Se só houver `CURSOR_ACCESS_TOKEN` (JWT), o plugin chama `DashboardService/CreateUserApiKey` via HTTP/2, grava a chave e a reutiliza. No modo `native`, `apiKeyEnv`/`refreshTokenEnv` continuam apontando para JWT e refresh token (`CURSOR_ACCESS_TOKEN`/`CURSOR_REFRESH_TOKEN`).
 
@@ -78,7 +78,8 @@ Todo stream do protocolo Connect termina com um frame de flags `0x02` (end-of-st
 | `error.code` do Connect | `LlmError.code` |
 |---|---|
 | `unauthenticated`, `permission_denied` | `AUTH` |
-| `resource_exhausted` | `RATE_LIMIT` |
+| `resource_exhausted` (quota / billing) | `RATE_LIMIT` |
+| `resource_exhausted` (versão rejeitada: `no longer supported` / `cursor.com/downloads`) | `PROVIDER_ERROR` |
 | qualquer outro | `PROVIDER_ERROR` |
 
 A mensagem da `LlmError` combina `error.message` com o texto humano em `error.details[].debug.details.detail`, quando presente (o campo `error.message` sozinho costuma ser um placeholder genérico como `"Error"`; o texto útil para o usuário vive aninhado em `details`). Um stream que termina sem nenhum frame de trailer produz `LlmError` código `STREAM_CLOSED`.
@@ -97,4 +98,4 @@ O protocolo privado do Cursor pode alterar campos, cabeçalhos ou framing sem av
 
 O comportamento do bundle do cliente desktop de gravar `access_token` também no campo de refresh após um refresh (ver `src/auth.ts`) é documentado como possível bug de minificação no relatório de engenharia reversa que fundamenta esta implementação; `refreshTokens()` não o replica e não foi possível confirmar contra o backend real se o `refresh_token` original continua aceito indefinidamente após múltiplos refreshes — `tests/auth.e2e.ts` cobre um único ciclo de exchange+refresh quando `CURSOR_API_KEY` está definido, mas não uma sequência longa. O `client_id` de produção (`KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB`) é específico do cliente oficial e pode mudar sem aviso entre versões.
 
-O código de erro `resource_exhausted`/`ERROR_GPT_4_VISION_PREVIEW_RATE_LIMIT` que o backend envia com `title: "Update Required"` é reaproveitado tanto para uma versão de cliente desatualizada quanto para falhas de billing/quota da conta (`actionRequired: "payment"`); o adapter mapeia esse `error.code` para `RATE_LIMIT` em ambos os casos — não há como o cliente distinguir as duas causas apenas pelo trailer Connect, então uma conta com quota/pagamento pendente continua vendo esse erro mesmo com `clientVersion` atualizado.
+O código Connect `resource_exhausted` / `ERROR_GPT_4_VISION_PREVIEW_RATE_LIMIT` com `title: "Update Required"` cobre tanto um pin `clientVersion` rejeitado quanto billing/quota (`actionRequired: "payment"`). O adapter mapeia o primeiro para `PROVIDER_ERROR` quando a mensagem humana contém `no longer supported` ou `cursor.com/downloads`; os demais `resource_exhausted` continuam `RATE_LIMIT`. Uma conta com quota ou pagamento pendente ainda vê `RATE_LIMIT` com o pin atualizado.

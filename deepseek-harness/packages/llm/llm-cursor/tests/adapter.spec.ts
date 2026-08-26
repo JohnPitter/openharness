@@ -276,6 +276,24 @@ describe('CursorAdapter native transport', () => {
     }).rejects.toMatchObject({ code: 'RATE_LIMIT', message: expect.stringContaining('You have hit your usage limit.') as string })
   })
 
+  it('maps a version-rejected resource_exhausted trailer to PROVIDER_ERROR', async () => {
+    const details = [
+      'Your version of Cursor is no longer supported. Please update to continue.',
+      'Please update to the latest version at cursor.com/downloads to continue.',
+    ]
+    for (const detail of details) {
+      const transport = fakeTransport(() => okResponse(trailerFrame({
+        code: 'resource_exhausted',
+        message: 'Error',
+        details: [{ debug: { details: { detail } } }],
+      })))
+      const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
+      await expect(async () => {
+        for await (const _ of adapter.stream(base)) { }
+      }).rejects.toMatchObject({ code: 'PROVIDER_ERROR' })
+    }
+  })
+
   it('maps unauthenticated/permission_denied trailers to AUTH', async () => {
     for (const code of ['unauthenticated', 'permission_denied']) {
       const transport = fakeTransport(() => okResponse(trailerFrame({ code, message: 'nope' })))

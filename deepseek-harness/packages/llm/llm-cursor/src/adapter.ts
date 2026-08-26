@@ -17,6 +17,15 @@ import type { CursorHttp2Transport } from './transport.ts'
 
 export type GhostMode = true | false | 'implicit-false'
 
+/**
+ * Value sent as `x-cursor-client-version`. The backend rejects older pins with
+ * a `resource_exhausted` trailer whose detail says the Cursor version is no
+ * longer supported; {@link CursorAdapter.listModels} then falls back to {@link DEFAULT_MODELS}.
+ * Bump this when the installed Cursor (`product.json` `version`) or the
+ * `stable`/`win32-x64-user` updater channel publishes a newer build.
+ */
+export const DEFAULT_CLIENT_VERSION = '3.17.21'
+
 export interface CursorTransportConfig {
   baseURL: string
   clientVersion: string
@@ -205,7 +214,7 @@ export class CursorAdapter extends LlmAdapter {
     private readonly models: () => readonly CursorCatalogModel[],
     private readonly config: CursorTransportConfig = {
       baseURL: 'https://api2.cursor.sh',
-      clientVersion: '3.17.19',
+      clientVersion: DEFAULT_CLIENT_VERSION,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       machineId: defaultMachineId(),
       ghostMode: false,

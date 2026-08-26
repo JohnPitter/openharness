@@ -193,10 +193,20 @@ function isConnectErrorTrailer(value: unknown): value is ConnectErrorTrailer {
     && typeof value.error === 'object' && value.error !== null
 }
 
+/**
+ * Cursor reuses Connect `resource_exhausted` for both quota and a rejected
+ * client-version pin. The human detail (or `error.message`) names the version
+ * case; quota and billing keep {@link LlmError} `RATE_LIMIT`.
+ */
+function isClientVersionRejected(message: string): boolean {
+  const haystack = message.toLowerCase()
+  return haystack.includes('no longer supported') || haystack.includes('cursor.com/downloads')
+}
+
 /** Maps the Connect protocol's standard error codes to this adapter's stable {@link LlmError} codes. */
-function mapConnectErrorCode(code: unknown): string {
+function mapConnectErrorCode(code: unknown, message: string): string {
   if (code === 'unauthenticated' || code === 'permission_denied') return 'AUTH'
-  if (code === 'resource_exhausted') return 'RATE_LIMIT'
+  if (code === 'resource_exhausted') return isClientVersionRejected(message) ? 'PROVIDER_ERROR' : 'RATE_LIMIT'
   return 'PROVIDER_ERROR'
 }
 
@@ -222,10 +232,12 @@ function firstDetailMessage(details: unknown): string | undefined {
  * either `{}`/metadata (normal end) or `{"error": {...}}` (failure).
  * @param payload - the raw trailer frame payload (never gzip-compressed).
  * @throws LlmError when the trailer carries an `error`: code `AUTH` for
- *   `unauthenticated`/`permission_denied`, `RATE_LIMIT` for
- *   `resource_exhausted`, `PROVIDER_ERROR` otherwise. The message combines
- *   `error.message` with the nested human-readable detail when present; the
- *   server's original code is carried as `cause`.
+ *   `unauthenticated`/`permission_denied`, `RATE_LIMIT` for quota
+ *   `resource_exhausted`, `PROVIDER_ERROR` for a rejected client-version pin
+ *   (same Connect code, detail names the Cursor download) and any other
+ *   Connect code. The message combines `error.message` with the nested
+ *   human-readable detail when present; the server's original code is carried
+ *   as `cause`.
  */
 export function decodeTrailer(payload: Uint8Array): void {
   let parsed: unknown
@@ -239,7 +251,7 @@ export function decodeTrailer(payload: Uint8Array): void {
   const serverMessage = typeof error.message === 'string' && error.message.length > 0 ? error.message : 'Cursor stream error'
   const humanDetail = firstDetailMessage(error.details)
   const message = humanDetail === undefined ? serverMessage : `${serverMessage}: ${humanDetail}`
-  throw new LlmError(message, mapConnectErrorCode(error.code), {
+  throw new LlmError(message, mapConnectErrorCode(error.code, message), {
     cause: new Error(`Cursor error code: ${typeof error.code === 'string' ? error.code : 'unknown'}`),
   })
 }
