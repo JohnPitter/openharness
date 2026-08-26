@@ -239,6 +239,9 @@
                 contextWindow: 1000000
                 maxTokens: 65536
 
+    - id: llm-cursor
+      name: '@deepseek-ai/dsh-llm-cursor'
+
     - id: session-persistence-jsonl
       name: '@deepseek-ai/dsh-session-persistence-jsonl'
       config:
