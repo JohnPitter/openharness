@@ -26,6 +26,6 @@ The Sign-in and native-default decisions stay in [Cursor native default and Sett
 ## Consequences
 
 - Settings → Models → Cursor → Customized settings shows Composer 2.5 until the user customizes or fetches.
-- Live `GetUsableModels` fills the picker with Grok and the rest of the account catalog only when `x-cursor-client-version` is a pin the backend still accepts ([version pin](../../bug-fix/2026-08-26-llm-cursor-client-version-rejected.md)).
+- Live `GetUsableModels` fills the picker with Grok and the rest of the account catalog only when `x-cursor-client-version` is a pin the backend still accepts ([version pin](../../bug-fix/2026-08-26-llm-cursor-client-version-rejected.md)) and the unary body is decoded as Connect frames plus `model_names` ([listing decode](../../bug-fix/2026-08-27-llm-cursor-usable-models-connect-frames.md)).
 - A hung `GetUsableModels` or SDK `Cursor.models.list` no longer removes Cursor from the picker.
 - A hand-written `models:` map in `settings.yaml` is invalid for this section; the array form is the only accepted catalog.

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { gzipSync } from 'node:zlib'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import { checksum, CATALOG_LISTING_TIMEOUT_MS, CursorAdapter, rejectedWhenAborted } from '../src/adapter.ts'
 import type { CursorHttp2Transport, Http2RequestOptions, Http2Response } from '../src/transport.ts'
@@ -40,6 +41,16 @@ function fakeTransport(
 
 function okResponse(body: Uint8Array, status = 200): Http2Response {
   return { status, headers: {}, body: bodyOf(body) }
+}
+
+/** Connect unary body: one data frame plus a clean trailer, matching api2.cursor.sh. */
+function connectUnary(payload: Uint8Array, flags = 0): Uint8Array {
+  const data = frame(payload, flags)
+  const trailer = trailerFrame()
+  const out = new Uint8Array(data.length + trailer.length)
+  out.set(data)
+  out.set(trailer, data.length)
+  return out
 }
 
 describe('CursorAdapter native transport', () => {
@@ -165,20 +176,47 @@ describe('CursorAdapter native transport', () => {
 
   it('discovers models through the unary RPC', async () => {
     const transport = fakeTransport((options) => {
-      expect(options.headers['content-type']).toBe('application/proto')
-      return okResponse(encodeModelsResponse([{
+      expect(options.headers['content-type']).toBe('application/connect+proto')
+      expect(options.body[0]).toBe(0)
+      return okResponse(connectUnary(encodeModelsResponse([{
         name: 'server-id',
         clientDisplayName: 'Display',
         serverModelName: 'server-id',
         contextTokenLimit: 8192,
-      }]))
+      }])))
     })
     const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
     await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'server-id', name: 'Display' }])
   })
 
+  it('discovers model_names when AvailableModel rows are absent', async () => {
+    const transport = fakeTransport(() => okResponse(connectUnary(encodeModelsResponse([], ['grok-4', 'composer-2.5']))))
+    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
+    await expect(adapter.listModels('cursor')).resolves.toEqual([
+      { provider: 'cursor', id: 'grok-4', name: 'grok-4' },
+      { provider: 'cursor', id: 'composer-2.5', name: 'composer-2.5' },
+    ])
+  })
+
+  it('inflates a gzip GetUsableModels data frame', async () => {
+    const proto = encodeModelsResponse([{ name: 'gzip-id', clientDisplayName: 'Gzip', serverModelName: 'gzip-id' }])
+    const transport = fakeTransport(() => okResponse(connectUnary(gzipSync(proto), 1)))
+    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
+    await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'gzip-id', name: 'Gzip' }])
+  })
+
+  it('still reads an unframed protobuf listing body', async () => {
+    const transport = fakeTransport(() => okResponse(encodeModelsResponse([{
+      name: 'raw-id',
+      clientDisplayName: 'Raw',
+      serverModelName: 'raw-id',
+    }])))
+    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
+    await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'raw-id', name: 'Raw' }])
+  })
+
   it('falls back to the catalog when the unary listing is empty', async () => {
-    const transport = fakeTransport(() => okResponse(encodeModelsResponse([])))
+    const transport = fakeTransport(() => okResponse(connectUnary(encodeModelsResponse([]))))
     const adapter = new CursorAdapter(
       async () => 'jwt',
       () => [{ id: 'fallback', name: 'Fallback' }],
@@ -241,6 +279,15 @@ describe('CursorAdapter native transport', () => {
 
   it('rejects immediately when the listing abort has already fired', async () => {
     await expect(rejectedWhenAborted(AbortSignal.abort())).rejects.toMatchObject({ code: 'ABORTED' })
+  })
+
+  it('falls back to the catalog when the listing trailer carries an error', async () => {
+    const transport = fakeTransport(() => okResponse(trailerFrame({
+      code: 'unauthenticated',
+      message: 'expired',
+    })))
+    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
+    await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'fallback', name: 'Fallback' }])
   })
 
   it('falls back to configured models on unary auth failure', async () => {

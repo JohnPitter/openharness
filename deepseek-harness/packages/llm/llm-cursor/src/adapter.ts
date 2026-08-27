@@ -11,6 +11,7 @@ import {
   encodeRequest,
   frame,
   parseFrames,
+  payloadFromConnectBody,
 } from './protobuf.ts'
 import { createHttp2Transport } from './transport.ts'
 import type { CursorHttp2Transport } from './transport.ts'
@@ -276,18 +277,13 @@ export class CursorAdapter extends LlmAdapter {
       const key = await Promise.race([this.resolveKey(), rejectedWhenAborted(signal)])
       const response = await this.transport.request({
         path: modelsEndpoint,
-        headers: { ...this.headers(key), 'content-type': 'application/proto', accept: 'application/proto' },
-        body: new Uint8Array(encodeModelsRequest()),
+        headers: this.headers(key),
+        body: frame(encodeModelsRequest()),
         signal,
       })
       const bytes = await collectBody(response.body)
       if (response.status !== 200) throw new Error(`Cursor HTTP ${response.status}`)
-      const packets = parseFrames(bytes)
-      const first = packets[0]
-      const payload = packets.length === 1 && first !== undefined && first.size === bytes.length
-        ? decodePayload(first.flags, first.payload)
-        : bytes
-      const listed = decodeModelsResponse(payload).map(model => ({
+      const listed = decodeModelsResponse(payloadFromConnectBody(bytes)).map(model => ({
         provider: 'cursor' as const,
         id: model.id,
         name: model.name,

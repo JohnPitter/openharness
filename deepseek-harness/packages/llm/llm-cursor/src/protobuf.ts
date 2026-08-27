@@ -60,28 +60,82 @@ export function encodeModelsRequest(): Uint8Array {
   return modelsRequestType.encode(message).finish()
 }
 
-/** Encode a model-picker fixture with protobufjs reflection. */
+/** Encode a model-picker fixture with protobufjs reflection.
+ * @param models - `AvailableModel` rows (`models = 2`).
+ * @param modelNames - wire `model_names = 1` strings, used when the backend omits rows.
+ * @returns protobuf bytes for {@link decodeModelsResponse} or a Connect data frame.
+ */
 export function encodeModelsResponse(
   models: Array<{ name: string; clientDisplayName?: string; serverModelName?: string; contextTokenLimit?: number }>,
+  modelNames: readonly string[] = [],
 ): Uint8Array {
-  const message = modelsResponseType.fromObject({ models })
+  const message = modelsResponseType.fromObject({
+    models,
+    ...(modelNames.length === 0 ? {} : { modelNames: [...modelNames] }),
+  })
   modelsResponseType.verify(message)
   return modelsResponseType.encode(message).finish()
 }
 
-/** Decode the model-picker response selected from the dump's complete AvailableModels schema. */
+function listedModel(model: Record<string, unknown>): { id: string; name: string; contextWindow?: number } | undefined {
+  const rawId = model.serverModelName ?? model.name
+  const id = typeof rawId === 'string' ? rawId : ''
+  if (id.length === 0) return undefined
+  const rawName = model.clientDisplayName ?? model.name
+  const name = typeof rawName === 'string' && rawName.length > 0 ? rawName : id
+  const contextWindow = typeof model.contextTokenLimit === 'number' ? model.contextTokenLimit : undefined
+  return { id, name, ...(contextWindow === undefined ? {} : { contextWindow }) }
+}
+
+/** Decode the model-picker response selected from the dump's complete AvailableModels schema.
+ * `model_names = 1` ids are included when no `AvailableModel` row already carries that id.
+ */
 export function decodeModelsResponse(data: Uint8Array): Array<{ id: string; name: string; contextWindow?: number }> {
   const decoded = modelsResponseType.decode(data)
   const value = modelsResponseType.toObject(decoded, { longs: String, enums: String, defaults: false }) as Record<string, unknown>
   const models = Array.isArray(value.models) ? value.models as Array<Record<string, unknown>> : []
-  return models.map((model) => {
-    const rawId = model.serverModelName ?? model.name
-    const id = typeof rawId === 'string' ? rawId : ''
-    const rawName = model.clientDisplayName ?? model.name
-    const name = typeof rawName === 'string' ? rawName : id
-    const contextWindow = typeof model.contextTokenLimit === 'number' ? model.contextTokenLimit : undefined
-    return { id, name, ...(contextWindow === undefined ? {} : { contextWindow }) }
-  }).filter(model => model.id.length > 0)
+  const listed = models.map(listedModel).filter((model): model is NonNullable<typeof model> => model !== undefined)
+  const seen = new Set(listed.map(model => model.id))
+  const names = Array.isArray(value.modelNames) ? value.modelNames : []
+  for (const raw of names) {
+    if (typeof raw !== 'string' || raw.length === 0 || seen.has(raw)) continue
+    seen.add(raw)
+    listed.push({ id: raw, name: raw })
+  }
+  return listed
+}
+
+/** Protobuf payload of a Connect unary body, or `bytes` when it is not framed.
+ * When `parseFrames` consumes the whole buffer, gzip data (`flags = 1`) is inflated and a
+ * trailer (`flags = 2`) is passed to {@link decodeTrailer}, matching the chat stream.
+ * @param bytes - HTTP/2 response body of `GetUsableModels` or a test fixture.
+ * @returns concatenated data-frame payloads, or the original buffer when frames do not cover it.
+ * @throws LlmError when a trailer carries `error`, or a data frame uses unknown flags.
+ */
+export function payloadFromConnectBody(bytes: Uint8Array): Uint8Array {
+  const packets = parseFrames(bytes)
+  let covered = 0
+  for (const packet of packets) covered += packet.size
+  if (packets.length === 0 || covered !== bytes.length) return bytes
+  const pieces: Uint8Array[] = []
+  for (const packet of packets) {
+    if (packet.flags === 2) {
+      decodeTrailer(packet.payload)
+      continue
+    }
+    pieces.push(decodePayload(packet.flags, packet.payload))
+  }
+  if (pieces.length === 0) return new Uint8Array()
+  if (pieces.length === 1) return pieces[0] ?? new Uint8Array()
+  let total = 0
+  for (const piece of pieces) total += piece.length
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const piece of pieces) {
+    out.set(piece, offset)
+    offset += piece.length
+  }
+  return out
 }
 
 export type Decoded = {

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-26-llm-cursor-models-array-catalog.md
-2026-08-26-llm-cursor-models-array-catalog.md: de5a7bf3464794949aafc414872981a559b58e25
-2026-08-26-llm-cursor-models-array-catalog.zh.md: a69c43066451a1cfa878e17217aed98ec1fcefc9
+2026-08-26-llm-cursor-models-array-catalog.md: 9c8138b24f4d4c02b1d29656ceddff8a1aa68957
+2026-08-26-llm-cursor-models-array-catalog.zh.md: 634c80c5e128d3a8d0fc19db70b110333a667609

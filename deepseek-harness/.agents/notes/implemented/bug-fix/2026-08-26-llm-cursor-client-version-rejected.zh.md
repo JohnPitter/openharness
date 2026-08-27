@@ -16,7 +16,7 @@ native Cursor adapter 发送编译期的 `x-cursor-client-version` 钉扎。Curs
 
 `decodeTrailer` 仍把配额类 `resource_exhausted` 映射为 `RATE_LIMIT`。当合并后的消息包含 `no longer supported` 或 `cursor.com/downloads` 时，代码为 `PROVIDER_ERROR`，循环不会把被拒绝的钉扎当作配额。
 
-咨询用 `models` 数组仍是 Composer 2.5。实时 `GetUsableModels` 才是 Grok 及其他 Cursor id 的目录。
+咨询用 `models` 数组仍是 Composer 2.5。实时 `GetUsableModels` 在一元响应被解码后才是 Grok 及其他 Cursor id 的目录（[列举解码](2026-08-27-llm-cursor-usable-models-connect-frames.zh.md)）。
 
 ## 考虑过的替代方案
 

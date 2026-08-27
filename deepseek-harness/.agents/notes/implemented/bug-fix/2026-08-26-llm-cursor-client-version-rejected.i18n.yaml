@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-26-llm-cursor-client-version-rejected.md
-2026-08-26-llm-cursor-client-version-rejected.md: 1b9a2f5c3fcbddccb0d3c7d9932d31e05256b850
-2026-08-26-llm-cursor-client-version-rejected.zh.md: d9444ff8a97ccdc827244db8e6d02ce1256bdbaf
+2026-08-26-llm-cursor-client-version-rejected.md: 4b3e38c1430e707ac1499bf261f4bf09cde036f8
+2026-08-26-llm-cursor-client-version-rejected.zh.md: 8c1f7509d3c6831b4f2d6eac0f42280964c8897e

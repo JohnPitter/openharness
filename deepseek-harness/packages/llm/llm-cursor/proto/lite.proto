@@ -984,6 +984,7 @@ message AvailableModelsResponse { // .aiserver.v1.AvailableModelsResponse
 		optional string server_model_name = 18;
 		optional bool is_recommended_for_background_composer = 21;
 	}
+	repeated string model_names = 1;
 	repeated AvailableModel models = 2;
 }
 message GetFilteredUsageEventsRequest { // .aiserver.v1.GetFilteredUsageEventsRequest

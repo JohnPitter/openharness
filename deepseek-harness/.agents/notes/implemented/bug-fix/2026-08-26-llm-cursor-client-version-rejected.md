@@ -16,7 +16,7 @@ Grok and the rest of the Cursor catalog never appear until live listing succeeds
 
 `decodeTrailer` still maps quota `resource_exhausted` to `RATE_LIMIT`. When the combined message contains `no longer supported` or `cursor.com/downloads`, the code is `PROVIDER_ERROR` so the loop does not treat a rejected pin as quota.
 
-The advisory `models` array stays Composer 2.5. Live `GetUsableModels` is the catalog of Grok and the other Cursor ids.
+The advisory `models` array stays Composer 2.5. Live `GetUsableModels` is the catalog of Grok and the other Cursor ids once the unary body is decoded ([listing decode](2026-08-27-llm-cursor-usable-models-connect-frames.md)).
 
 ## Alternatives considered
 
