@@ -28,7 +28,7 @@ composer 上的 J-space 开关关闭时，只清空了 `jspace:protocol` 系统�
 
 ## 影响
 
-已有会话在关闭后（或包含本变更的运行时之后）的下一步会生效。工人不再收到父级“加载 j-space”的指示。用户 `/j-space` 仍会注入正文。
+已有会话在关闭后（或包含本变更的运行时之后）的下一步会生效。工人不再收到父级“加载 j-space”的指示。Workflow 规划者即使在 On 时也不收到协议；该前缀削减由[无法使用的构建上下文 note](../simplification/2026-08-27-workflow-planner-omits-unusable-context.zh.md)负责。用户 `/j-space` 仍会注入正文。
 
 ## 测试
 

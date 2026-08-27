@@ -430,7 +430,9 @@ export function applyWebFetchTool(ctx: Context, timeoutMs: number, maxOutputChar
   ctx.systemPrompt.section({
     name: 'tool:web_fetch',
     order: 111,
-    text: 'Use the web_fetch tool to retrieve the content of a specific HTTP(S) URL (for example a result from web_search). It returns the page content decoded to text. Cite the URL as a markdown link when you use its content.',
+    text: context => ctx.tools.get('web_fetch', context.scope) === undefined
+      ? ''
+      : 'Use the web_fetch tool to retrieve the content of a specific HTTP(S) URL (for example a result from web_search). It returns the page content decoded to text. Cite the URL as a markdown link when you use its content.',
   })
 
   ctx.tools.register(defineTool({

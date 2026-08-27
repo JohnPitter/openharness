@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-22-workflow-orchestrator-thinks-workers-execute.md
-2026-08-22-workflow-orchestrator-thinks-workers-execute.md: af5c396ae13f4fe75819d8ba63cf5767e18cb3d8
-2026-08-22-workflow-orchestrator-thinks-workers-execute.zh.md: 12a3fd2378744d169fff2916e8325cc7ae7877c8
+2026-08-22-workflow-orchestrator-thinks-workers-execute.md: 6f0e9c726985451d554b1286cc123b42170aec1e
+2026-08-22-workflow-orchestrator-thinks-workers-execute.zh.md: 884ebaf98f8fabf0bd144666d75ac0b0cf31ee69

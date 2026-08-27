@@ -298,11 +298,12 @@ export function applyGlobTool(ctx: Context, caps: GlobToolCaps): void {
   const overCapGuidance = caps.sampleOverCapGlobResults
     ? 'while a larger one is sampled across top-level entries, so it spans the tree instead of one subtree.'
     : 'while a larger one keeps the modification-time-ordered head.'
+  const globGuidance = 'Use the glob tool — not shell find — to discover files by path pattern. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. '
+    + `Results are files only, never directories, and include hidden and ignored files: a result that fits comes back in modification-time order, ${overCapGuidance}`
   ctx.systemPrompt.section({
     name: 'tool:glob',
     order: 103,
-    text: 'Use the glob tool — not shell find — to discover files by path pattern. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. '
-      + `Results are files only, never directories, and include hidden and ignored files: a result that fits comes back in modification-time order, ${overCapGuidance}`,
+    text: context => ctx.tools.get('glob', context.scope) === undefined ? '' : globGuidance,
   })
 
   const overCapDescription = caps.sampleOverCapGlobResults

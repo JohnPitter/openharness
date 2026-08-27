@@ -8,10 +8,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-skill'
-import type {} from '@deepseek-ai/dsh-system-prompt'
+import type { AssembleContext } from '@deepseek-ai/dsh-system-prompt'
 import {
   JSPACE_DEFAULT_ENABLED, JSPACE_SETTINGS_NAMESPACE, JSPACE_SKILL_NAME, JspaceSettingsSchema,
-  jspaceProtocolText, type JspaceSettings,
+  jspaceProtocolForAssembly, type JspaceSettings,
 } from './jspace-settings.ts'
 
 export {
@@ -36,6 +36,28 @@ function readEnabled(ctx: Context): boolean {
   return section.enabled
 }
 
+function composedPresetOf(context: AssembleContext): string | undefined {
+  const agent = (context as AssembleContext & {
+    agent?: { ctx?: { get: (name: string) => unknown } }
+  }).agent
+  const ctx = agent?.ctx
+  if (ctx === undefined) return undefined
+  const presets = ctx.get('agentPresets') as {
+    composedPreset?: (inner: typeof ctx) => string | undefined
+  } | undefined
+  return presets?.composedPreset?.(ctx)
+}
+
+function delegationDepthOf(context: AssembleContext): number {
+  const agent = (context as AssembleContext & {
+    agent?: {
+      session?: { header?: { delegationDepth?: number } }
+      options?: { subagentDepth?: number }
+    }
+  }).agent
+  return Math.max(agent?.session?.header?.delegationDepth ?? 0, agent?.options?.subagentDepth ?? 0)
+}
+
 /**
  * Register the settings namespace and the gated prompt section.
  * @param ctx - Host context carrying systemPrompt (and optionally settings).
@@ -47,7 +69,11 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.systemPrompt.section({
     name: JSPACE_SECTION,
     order: 1,
-    text: () => jspaceProtocolText(readEnabled(ctx)),
+    text: (context) => jspaceProtocolForAssembly(
+      readEnabled(ctx),
+      composedPresetOf(context),
+      delegationDepthOf(context),
+    ),
   }), 'jspace.section()')
   ctx.inject(['skills', 'settings'], (gateCtx) => {
     let hide: (() => void) | undefined

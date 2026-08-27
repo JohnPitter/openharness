@@ -84,4 +84,22 @@ describe('ui-model-selection host J-space', () => {
     expect((await ctx.skills.list()).find(skill => skill.name === JSPACE_SKILL_NAME)?.invocation.modelInvocable)
       .toBe(true)
   })
+
+  it('omits the protocol on a Workflow planner and keeps it on a worker', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt).await()
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    const planner = {
+      ctx: { get: (name: string) => name === 'agentPresets' ? { composedPreset: () => 'workflow' } : undefined },
+      session: { header: { delegationDepth: 0 } },
+      options: {},
+    }
+    const worker = {
+      ctx: { get: (name: string) => name === 'agentPresets' ? { composedPreset: () => 'workflow' } : undefined },
+      session: { header: { delegationDepth: 1 } },
+      options: { subagentDepth: 1 },
+    }
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ agent: planner } as never))).not.toContain('J-Space')
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ agent: worker } as never))).toContain(JSPACE_PROTOCOL)
+  })
 })

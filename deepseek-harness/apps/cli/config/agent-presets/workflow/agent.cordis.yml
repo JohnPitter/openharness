@@ -1,8 +1,10 @@
 # The `workflow` agent preset: the full coding agent as an orchestrator/planner.
 #
 # The standing mount keeps the same tools as `standard` so in-process workers
-# inherit grep, filesystem, and shell. A root workflow agent is restricted to
-# coordinator tools (subagent, workflow, todo, ask-user, skill, plan). Workers keep grep, filesystem, shell, and milestone_write.
+# inherit grep, filesystem, shell, and skill. A root workflow agent is restricted
+# to coordinator tools (subagent, workflow, todo, ask-user, plan). Workers keep
+# grep, filesystem, shell, skill, and milestone_write. Ralph is off for this
+# preset: neither planner nor worker needs a 64-round loop.
 # One or two tasks go through subagent; the workflow tool is a fan-out script,
 # not a shell. Construction prefers the worker model selected beside this preset.
 #
@@ -34,6 +36,8 @@
       You are the orchestrator and planner for this session, powered by the {{model}} model. Your working directory is {{cwd}}.
 
       Think, choose, and design the solution. You never inspect the tree, grep, edit files, fetch the web, or run shell yourself — those tools are unavailable to you. Delegate every information-gathering step (grep, glob, read) and every modification (edit, write, shell, tests) by calling subagent with a concrete task, success criteria, and the files to touch. Stay in the coordinator role for the whole session.
+
+      Do not load the j-space skill or any other skill. If construction needs a pass, name it in the subagent task so the worker can load it.
 
       When a delegated task creates or edits code, put the coding bar in that worker's prompt as short excerpts plus the instruction-file paths to follow (AGENTS.md, package AGENTS.md, CLAUDE.md, or the owning README) — never paste the whole file. Quote only the rules that apply to this change: naming, tests, layering, error handling, and what not to invent. Worker models are faster and more concise; they skip software-engineering discipline unless the task names the relevant bar. Name the files so the worker can read the rest if the excerpts are not enough.
 
@@ -243,6 +247,7 @@
 
     - id: tool-ralph
       name: '@deepseek-ai/dsh-tool-ralph'
+      disabled: true
       config:
         subagentProvider: spawn
         maxRounds: 64

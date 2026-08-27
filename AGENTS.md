@@ -180,14 +180,15 @@ go vet ./...  # lint
   enquanto o PC estiver ligado e o OpenHarness aberto. Quem tiver o link tem o
   mesmo poder que o desktop. Precisa de internet no PC; a primeira vez baixa
   `cloudflared` para `%LOCALAPPDATA%\openharness\cloudflared`.
-- **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell); uma
-  ou duas tarefas vão só por `subagent` — a ferramenta `workflow` não é shell.
-  O Trabalhador recolhe informação e aplica as modificações, no modelo escolhido
-  no chip da direita. Em criação/edição de código, o planejador põe no prompt
-  do trabalhador trechos dos padrões (AGENTS.md etc.), não o arquivo inteiro.
-  Planejador cobrado por request sem trabalhador no chip **não herda** a rota
-  do pai: a delegação falha e o composer bloqueia até haver trabalhador. Trocar
-  o preset recompõe a sessão e compacta antes do próximo prompt comum.
+- **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell, sem
+  skill/ralph/fork); uma ou duas tarefas vão só por `subagent` — a ferramenta
+  `workflow` não é shell. Não carrega J-space. O Trabalhador recolhe informação
+  e aplica as modificações, no modelo escolhido no chip da direita. Em
+  criação/edição de código, o planejador põe no prompt do trabalhador trechos
+  dos padrões (AGENTS.md etc.), não o arquivo inteiro. Planejador cobrado por
+  request sem trabalhador no chip **não herda** a rota do pai: a delegação
+  falha e o composer bloqueia até haver trabalhador. Trocar o preset recompõe
+  a sessão e compacta antes do próximo prompt comum.
 - **Marcos:** o modelo que fecha o trabalho grava `milestone_write` (título +
   corpo). O transcript não é índice: o trilho à esquerda empilha ticks do topo
   em ritmo de 8px e rola quando a pilha passa da coluna; compactação
@@ -205,11 +206,12 @@ go vet ./...  # lint
 - **Busca na web:** padrão é DuckDuckGo (HTML, sem chave). A busca nativa
   DeepSeek fica desativada; ela cobra saldo DeepSeek mesmo se o chat for Kimi.
 - **J-Space:** skill empacotada em `apps/cli/config/skills/j-space`, nos presets
-  Standard, Code e Workflow. Protocolo de construção (fast/full/loop); se a
-  tarefa admite duas leituras com ações diferentes, carrega `problem-model`.
-  Desligado esconde `j-space` do catálogo e da ferramenta `skill` (o `/j-space`
-  do usuário continua). A skill carrega no máximo uma vez; módulos seguintes
-  são Read no resource base, não outro `skill`.
+  Standard, Code e Workflow. Protocolo de construção (fast/full/loop) no
+  Standard/Code e no trabalhador Workflow; o planejador Workflow não recebe o
+  protocolo. Se a tarefa admite duas leituras com ações diferentes, carrega
+  `problem-model`. Desligado esconde `j-space` do catálogo e da ferramenta
+  `skill` (o `/j-space` do usuário continua). A skill carrega no máximo uma
+  vez; módulos seguintes são Read no resource base, não outro `skill`.
 - **Perguntas de subagente:** `ask_user_question` no filho não espera o composer
   do pai. Escolhe a opção `(Recommended)` (senão a primeira). Sem opções, falha
   com `DELEGATED_CALLER` em vez de travar.

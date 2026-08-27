@@ -236,7 +236,9 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.systemPrompt.section({
     name: 'tool:bash',
     order: 105,
-    text: 'Check the [exit code: N] marker on every bash result; investigate failures before moving on.',
+    text: context => ctx.tools.get('bash', context.scope) === undefined
+      ? ''
+      : 'Check the [exit code: N] marker on every bash result; investigate failures before moving on.',
   })
 
   ctx.tools.register(defineTool({

@@ -244,7 +244,7 @@ function ModelPicker(
     void (selectOverride ?? select)(selection).then(settleSelection)
   }
 
-  const showJspace = jspace !== undefined && role !== 'worker'
+  const showJspace = jspace !== undefined && role === undefined
   const jspaceLabel = showJspace
     ? (jspaceEnabled ? t('jspace.on') : t('jspace.off'))
     : undefined

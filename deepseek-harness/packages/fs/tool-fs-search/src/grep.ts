@@ -276,7 +276,9 @@ export function applyGrepTool(ctx: Context, caps: GrepToolCaps): void {
   ctx.systemPrompt.section({
     name: 'tool:grep',
     order: 104,
-    text: 'Use the grep tool — not shell grep or rg — to search file contents. Use read on a matched file when you need surrounding context.',
+    text: context => ctx.tools.get('grep', context.scope) === undefined
+      ? ''
+      : 'Use the grep tool — not shell grep or rg — to search file contents. Use read on a matched file when you need surrounding context.',
   })
 
   const tool = defineTool({

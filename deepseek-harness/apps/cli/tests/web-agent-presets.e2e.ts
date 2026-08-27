@@ -252,10 +252,11 @@ describe('the shipped Web composition', () => {
       setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'workflow').then(() => undefined),
     })
     try {
-      const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+      const assembly = await ctx.systemPrompt.assemble({ agent: handle.agent, scope: handle.agent })
       const persona = assembly.sections.find(section => section.name === 'deployment:persona')?.text ?? ''
       expect(persona).toContain('call subagent only')
       expect(persona).toContain('not a shell')
+      expect(persona).toContain('Do not load the j-space skill')
       expect(persona).not.toMatch(/to a subagent or the workflow tool/)
       const guidance = assembly.sections.find(section => section.name === 'tool:workflow')?.text ?? ''
       expect(guidance).toContain('not a shell')
@@ -265,6 +266,11 @@ describe('the shipped Web composition', () => {
       expect(names).toContain('workflow')
       expect(names).not.toContain('edit')
       expect(names).not.toContain('read')
+      expect(names).not.toContain('skill')
+      expect(names).not.toContain('ralph')
+      expect(names).not.toContain('subagent_fork')
+      expect(assembly.sections.find(section => section.name === 'jspace:protocol')?.text ?? '').toBe('')
+      expect(assembly.sections.find(section => section.name === 'tool:read')?.text ?? '').toBe('')
     } finally {
       await handle.dispose()
     }
@@ -408,7 +414,7 @@ describe('the shipped Web composition', () => {
         const scoped = (await ctx.skills.list({ scope: handle.agent })).map(skill => skill.name)
         expect(scoped).toContain('j-space')
         expect((await ctx.skills.list()).map(skill => skill.name)).not.toContain('j-space')
-        if (id === 'code') continue
+        if (id === 'code' || id === 'workflow') continue
         const loaded = await ctx.tools.execute({
           callId: CallId(`preset-jspace-load-${id}-${randomUUID()}`),
           name: 'skill',

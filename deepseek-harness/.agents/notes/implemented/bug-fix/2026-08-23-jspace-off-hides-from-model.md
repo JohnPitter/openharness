@@ -28,7 +28,7 @@ The bundled `j-space` description no longer matches ordinary one-glance edits, a
 
 ## Consequences
 
-Existing sessions pick up the hide on the next step after Off (or after a runtime that includes this change). Workers no longer get a parent instruction to load `j-space`. User `/j-space` still injects the body.
+Existing sessions pick up the hide on the next step after Off (or after a runtime that includes this change). Workers no longer get a parent instruction to load `j-space`. A Workflow planner omits the protocol even while On; that prefix cut is owned by the [unusable-context note](../simplification/2026-08-27-workflow-planner-omits-unusable-context.md). User `/j-space` still injects the body.
 
 ## Testing
 

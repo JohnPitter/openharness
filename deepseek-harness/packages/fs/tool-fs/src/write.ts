@@ -63,7 +63,9 @@ export function applyWriteTool(ctx: Context, sandbox: FsSandboxController): void
   ctx.systemPrompt.section({
     name: 'tool:write',
     order: 101,
-    text: 'Use the write tool to create files or completely replace file contents. Existing files are overwritten, so read an existing file first (the default fs-observation-policy requires it) and prefer edit for targeted changes.',
+    text: context => ctx.tools.get('write', context.scope) === undefined
+      ? ''
+      : 'Use the write tool to create files or completely replace file contents. Existing files are overwritten, so read an existing file first (the default fs-observation-policy requires it) and prefer edit for targeted changes.',
   })
 
   ctx.tools.register(defineTool({

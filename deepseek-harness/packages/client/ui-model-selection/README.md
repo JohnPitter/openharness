@@ -12,7 +12,7 @@ Directories are per-session, resolved lazily through `ctx.modelDirectories.direc
 
 Every resident directory refetches directly on forwarded `llm/adapters-updated` and `settings/document-updated` owner events. Provider topology, provider catalogs, and the default selection therefore converge without the Host or client runtime deriving a separate model-change alias.
 
-The Host half also owns the J-space toggle (`ui-jspace.enabled`). Off omits the construction-protocol prompt section and calls `ctx.skills.hideFromModel('j-space')`, so the model catalog and `skill` tool no longer expose that name; `/j-space` stays user-invocable. On injects the protocol and restores model invocation. Toggling republishes the skill catalog on the next step.
+The Host half also owns the J-space toggle (`ui-jspace.enabled`). Off omits the construction-protocol prompt section and calls `ctx.skills.hideFromModel('j-space')`, so the model catalog and `skill` tool no longer expose that name; `/j-space` stays user-invocable. On injects the protocol and restores model invocation, except on a Workflow planner (depth 0), which never receives the protocol because it cannot Read skill modules. Workflow composer pickers hide the J-space row; Standard and Code keep it. Toggling republishes the skill catalog on the next step.
 
 Settings → Usages (`id: usages`) is the usage panel: Host-local daily request and token history from `usage.panel`, ranked models, and coding-plan quota cards from `llm.accountUsage`. The sidebar usage chip still opens this section.
 

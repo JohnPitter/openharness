@@ -231,7 +231,7 @@ describe('ModelSelect J-space toggle', () => {
     })
   })
 
-  it('hides the J-space row on the workflow worker picker', () => {
+  it('hides the J-space row on both Workflow pickers', () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state())
     const worker = createSnapshotStore({ current: null, status: 'ready' as const, error: null })
     const sessionId = 'wf' as SessionId
@@ -270,7 +270,7 @@ describe('ModelSelect J-space toggle', () => {
     />)
 
     fireEvent.click(screen.getByRole('button', { name: /选择规划/ }))
-    expect(screen.getByRole('menuitem', { name: /J-space/ })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /J-space/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /选择规划/ }))
 
     fireEvent.click(screen.getByRole('button', { name: /选择工人/ }))

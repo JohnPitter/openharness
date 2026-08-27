@@ -26,4 +26,4 @@ workflow 的 standing mount 仍注册与 `standard` 相同的工具，使同进�
 
 ## 后果
 
-workflow 根会话即使忽略人设也不能调用 grep、edit 或 shell。工人仍可以。start 请求自带的 persona 会替换工人默认人设。进程外的产品 provider 不变。规划者仍能看见 `workflow` 工具；靠指导而不是目录限制，把一两项任务导向 `subagent`。创建代码的工人只会收到规划者放进任务里的摘录，再加上 standing mount 已经贡献的 `agent-instructions`。
+workflow 根会话即使忽略人设也不能调用 grep、edit 或 shell。工人仍可以。start 请求自带的 persona 会替换工人默认人设。进程外的产品 provider 不变。规划者仍能看见 `workflow` 工具；靠指导而不是目录限制，把一两项任务导向 `subagent`。创建代码的工人只会收到规划者放进任务里的摘录，再加上 standing mount 已经贡献的 `agent-instructions`。省略 `skill`、Ralph、fork、规划者 J-space 协议以及已拒绝工具指导的前缀削减由[无法使用的构建上下文 note](../simplification/2026-08-27-workflow-planner-omits-unusable-context.zh.md)负责。

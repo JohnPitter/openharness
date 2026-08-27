@@ -245,8 +245,10 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.systemPrompt.section({
     name: 'tool:pwsh',
     order: 105,
-    text: 'Non-zero exits are reported as `[exit code: N]` markers; investigate failures before moving on. '
-      + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure.',
+    text: context => ctx.tools.get('pwsh', context.scope) === undefined
+      ? ''
+      : 'Non-zero exits are reported as `[exit code: N]` markers; investigate failures before moving on. '
+        + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure.',
   })
 
   ctx.tools.register(defineTool({

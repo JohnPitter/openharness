@@ -46,3 +46,22 @@ export const JSPACE_PROTOCOL = [
 export function jspaceProtocolText(enabled: boolean): string {
   return enabled ? JSPACE_PROTOCOL : ''
 }
+
+/**
+ * Resolve the J-space system-prompt body for one assembly.
+ * A Workflow planner (depth 0) never receives the protocol: it cannot Read
+ * skill modules, and the text would instruct a wasted `skill` load.
+ * Workers and every other preset follow the toggle.
+ * @param enabled - whether J-space is on.
+ * @param composedPreset - the assembling agent's preset id, when known.
+ * @param delegationDepth - the assembling agent's delegation depth.
+ * @returns protocol prose, or empty to omit the section.
+ */
+export function jspaceProtocolForAssembly(
+  enabled: boolean,
+  composedPreset: string | undefined,
+  delegationDepth: number,
+): string {
+  if (composedPreset === 'workflow' && delegationDepth === 0) return ''
+  return jspaceProtocolText(enabled)
+}

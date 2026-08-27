@@ -32,7 +32,7 @@ O app consulta as GitHub Releases públicas. Quando há uma tag mais nova, a tit
 | **Painel de uso** | Settings → Painel: histórico local por dia, tokens e modelos mais usados, além das cotas dos planos. |
 | **Busca na web** | DuckDuckGo por padrão, sem chave extra. A busca nativa DeepSeek fica desligada (ela cobra saldo DeepSeek mesmo se o chat for outro). |
 | **Remote** | Opt-in na sidebar. Túnel HTTPS + QR; o celular usa o harness completo enquanto o PC está ligado. |
-| **J-Space** | Protocolo de construção nos modos Standard, Code e Workflow: classifica o trabalho e carrega só o que a tarefa precisa. |
+| **J-Space** | Protocolo de construção nos modos Standard e Code, e no trabalhador Workflow. O planejador Workflow não carrega a skill. |
 
 ## Provedores
 
@@ -67,7 +67,7 @@ Opt-in. O exe publica um HTTPS público a partir de `127.0.0.1` (túnel Cloudfla
 ```powershell
 wails generate module
 Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
-wails build -ldflags "-X openharness/internal/update.Version=0.1.37"
+wails build -ldflags "-X openharness/internal/update.Version=0.1.38"
 go test ./...
 ```
 
@@ -91,9 +91,9 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | [Release](.github/workflows/release.yml) | tag `v*.*.*` | cria a GitHub Release |
 
 ```powershell
-git tag v0.1.37
-git push origin v0.1.37
-gh release upload v0.1.37 build/bin/openharness.exe
+git tag v0.1.38
+git push origin v0.1.38
+gh release upload v0.1.38 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.

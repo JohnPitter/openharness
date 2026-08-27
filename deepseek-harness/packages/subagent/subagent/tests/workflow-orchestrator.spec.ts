@@ -53,12 +53,15 @@ function tool(name: string): ToolDefinition {
 }
 
 describe('workflow orchestrator tool restriction', () => {
-  it('hides grep and edit from a root workflow agent and leaves a sibling child catalog intact', async () => {
+  it('hides work, skill, ralph, and fork tools from a root workflow agent and leaves a sibling child catalog intact', async () => {
     const ctx = await mount()
     ctx.tools.register(tool('grep'))
     ctx.tools.register(tool('edit'))
     ctx.tools.register(tool('milestone_write'))
     ctx.tools.register(tool('subagent'))
+    ctx.tools.register(tool('skill'))
+    ctx.tools.register(tool('ralph'))
+    ctx.tools.register(tool('subagent_fork'))
     const parent = await mint(ctx, 'parent')
     const child = await mint(ctx, 'child')
     Object.assign(child, { options: { subagentDepth: 1 }, session: { header: { delegationDepth: 1 } } })
@@ -67,7 +70,9 @@ describe('workflow orchestrator tool restriction', () => {
     restrictWorkflowOrchestrator(child)
 
     expect(ctx.tools.schemas(parent).map(schema => schema.name).sort()).toEqual(['subagent'])
-    expect(ctx.tools.schemas(child).map(schema => schema.name).sort()).toEqual(['edit', 'grep', 'milestone_write', 'subagent'])
+    expect(ctx.tools.schemas(child).map(schema => schema.name).sort()).toEqual([
+      'edit', 'grep', 'milestone_write', 'ralph', 'skill', 'subagent', 'subagent_fork',
+    ])
   })
 
   it('does not restrict a non-workflow agent', async () => {

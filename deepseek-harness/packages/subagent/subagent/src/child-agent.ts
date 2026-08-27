@@ -247,10 +247,14 @@ export const WORKFLOW_ORCHESTRATOR_WORK_TOOLS = [
   'job_list',
   'job_kill',
   'milestone_write',
+  'skill',
+  'ralph',
+  'subagent_fork',
 ] as const
 
 /**
- * Hide information-gathering and mutation tools from a root workflow agent.
+ * Hide information-gathering, mutation, skill, Ralph, and fork tools from a
+ * root workflow agent.
  * Children join the same standing mount as siblings rather than nesting under
  * this agent's scope, so they keep the full catalog. No-ops when the agent is
  * not a depth-0 workflow session or those tools are not registered.
