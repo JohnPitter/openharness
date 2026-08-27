@@ -148,6 +148,28 @@ function promptInput(text: string): SummarizationInput {
   })] }
 }
 
+/** Ordered checkpoint body that satisfies `compactionCheckpointComplete`. */
+function completeCheckpointText(): string {
+  return [
+    '## Primary Request and Intent',
+    '- ship the MU client',
+    '## Key Technical Concepts',
+    '- C# packet handlers',
+    '## Files and Code',
+    '- src/Server.cs: listen loop',
+    '## Errors and Fixes',
+    '- (none)',
+    '## Pending Jobs',
+    '- (none)',
+    '## Current Work',
+    '- compact the planner log',
+    '## Next Step',
+    '- resume the worker',
+    '## Critical Context',
+    '- keep exact packet ids',
+  ].join('\n')
+}
+
 /** Closed two-message turns followed by one open turn for durable compaction events. */
 function conversation(turns = 4, text = 'fixture '.repeat(40).trim()): Session {
   const session = Session.create(SessionId(`conversation-${turns}`))
@@ -1578,6 +1600,37 @@ describe('default one-shot summarizer', () => {
       expect((thrown as Error & { code?: string }).code).toBe(code)
     },
   )
+
+  it('accepts a max-tokens finish whose checkpoint headings all landed in order', async () => {
+    const { compact } = await summarizerHarness(
+      [{ type: 'text', text: completeCheckpointText() }],
+      { kind: 'max-tokens' },
+    )
+    await expect(compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL)))
+      .resolves.toMatchObject({
+        summary: [{ type: 'text', text: completeCheckpointText() }],
+      })
+  })
+
+  it('accepts a max-tokens finish whose complete checkpoint lived only in reasoning', async () => {
+    const { compact } = await summarizerHarness(
+      [{ type: 'reasoning', text: completeCheckpointText() }],
+      { kind: 'max-tokens' },
+    )
+    await expect(compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL)))
+      .resolves.toMatchObject({
+        summary: [{ type: 'text', text: completeCheckpointText() }],
+      })
+  })
+
+  it('still rejects a max-tokens finish that never reached Next Step', async () => {
+    const { compact } = await summarizerHarness(
+      [{ type: 'text', text: '## Primary Request and Intent\n- ship\n## Key Technical Concepts\n- C#' }],
+      { kind: 'max-tokens' },
+    )
+    await expect(compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL)))
+      .rejects.toMatchObject({ code: 'MAX_TOKENS' })
+  })
 
   it('rejects empty successful output', async () => {
     const { compact } = await summarizerHarness([])

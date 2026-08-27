@@ -12,7 +12,7 @@ v0.1.23 still failed compaction on a real 272K Codex (`gpt-5.6-sol`) session: ev
 
 The shared LLM error classifier and pi-ai stream mapping map the pi-ai `detected context overflow` error to the canonical `CONTEXT_WINDOW_EXCEEDED` code.
 
-Compaction retries adaptively within one transaction: it makes up to three attempts under one compaction start/end bracket and the same `compactionId`. After each `CONTEXT_WINDOW_EXCEEDED`, it halves the span budget and reselects balanced ranges. It does not mutate the surface between attempts; cancellation and non-context errors are not retried.
+Compaction retries adaptively within one transaction: it makes up to three attempts under one compaction start/end bracket and the same `compactionId`. After each `CONTEXT_WINDOW_EXCEEDED` or `MAX_TOKENS`, it halves the span budget and reselects balanced ranges. It does not mutate the surface between attempts; cancellation and other errors are not retried. A `max-tokens` finish that already contains every checkpoint heading is accepted without retry; see [output-cap compaction](2026-08-27-compaction-max-tokens-retry.md).
 
 The window resolver uses the recorded `requestContext` window. An undefined window uses the explicit 128K safety fallback (`SUMMARIZER_CONTEXT_WINDOW_FALLBACK`); a null or invalid window fails closed with a zero budget and no LLM call. Pressure forwards the same envelope-aware cap when it is positive; a zero envelope-aware budget leaves pressure uncapped. A positive result is then bounded by `SUMMARIZER_SPAN_CEILING` ([span ceiling](../feature/2026-08-25-compaction-span-ceiling-and-progress.md)). `compactNow` prunes oversized tool results before selecting the span.
 

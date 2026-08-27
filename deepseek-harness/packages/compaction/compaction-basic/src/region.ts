@@ -21,7 +21,7 @@ import type { Message, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { TokenMeasurement, TokenMeter } from '@deepseek-ai/dsh-token-meter'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { frameSummary } from './summarizer.ts'
+import { frameSummary, MAX_TOKENS_CODE } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
 
 interface RegionDependencies {
@@ -84,7 +84,7 @@ interface CompactionTransactionOptions {
   readonly flush?: () => Promise<void>
   /** Manual command that initiated this transaction, when present. */
   readonly sourceCommandId?: CommandId
-  /** Initial safe span budget; context overflow retries halve this value. */
+  /** Initial safe span budget; overflow and output-cap retries halve this value. */
   readonly maxSpanTokens?: number
 }
 
@@ -321,7 +321,7 @@ export async function compactSurfaceRegion(
         result = completeCompaction(pending, endEvent)
         break
       } catch (error: unknown) {
-        if (errorCode(error) !== CONTEXT_WINDOW_EXCEEDED_CODE || attempt >= 2) throw error
+        if (!isSpanRetryable(error) || attempt >= 2) throw error
         if (options.owner === null && deadline.signal.reason !== deadline.timeoutError) deadline.signal.throwIfAborted()
         // Validate the original snapshot before selecting a smaller paired span.
         assertStable(dependencies, session, prepared)
@@ -434,6 +434,12 @@ function createCompactionDeadline(callerSignal: AbortSignal | undefined): Compac
       callerSignal?.removeEventListener('abort', abortCaller)
     },
   }
+}
+
+/** Context overflow and output-cap truncation shrink the span; other failures do not. */
+function isSpanRetryable(error: unknown): boolean {
+  const code = errorCode(error)
+  return code === CONTEXT_WINDOW_EXCEEDED_CODE || code === MAX_TOKENS_CODE
 }
 
 /** Read a stable provider code through a local cause chain. */

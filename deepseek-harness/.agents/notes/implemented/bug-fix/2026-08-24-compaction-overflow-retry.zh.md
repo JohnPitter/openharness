@@ -12,7 +12,7 @@ v0.1.23 在真实的 272K Codex（`gpt-5.6-sol`）会话上仍会压缩失败：
 
 共享 LLM 错误分类器和 pi-ai 流映射会把 pi-ai 的 `detected context overflow` 错误映射为规范的 `CONTEXT_WINDOW_EXCEEDED` 代码。
 
-压缩在一个事务内自适应重试：在一个压缩 start/end 括号和同一个 `compactionId` 下最多执行三次尝试。每次 `CONTEXT_WINDOW_EXCEEDED` 后，跨度预算减半并重新选择平衡区间。尝试之间不会修改表层；取消和非上下文错误不会重试。
+压缩在一个事务内自适应重试：在一个压缩 start/end 括号和同一个 `compactionId` 下最多执行三次尝试。每次 `CONTEXT_WINDOW_EXCEEDED` 或 `MAX_TOKENS` 后，跨度预算减半并重新选择平衡区间。尝试之间不会修改表层；取消和其他错误不会重试。已经包含全部检查点标题的 `max-tokens` 结束会被直接接受，不进入重试；见 [输出上限压缩](2026-08-27-compaction-max-tokens-retry.zh.md)。
 
 窗口解析器使用记录下来的 `requestContext` 窗口。未定义的窗口使用明确的 128K 安全回退（`SUMMARIZER_CONTEXT_WINDOW_FALLBACK`）；null 或无效窗口以零预算 fail-closed，且不调用 LLM。压力在 envelope 感知上限为正时转发该上限；该预算为零时不设上限。正结果再受 `SUMMARIZER_SPAN_CEILING` 约束（[区间上限](../feature/2026-08-25-compaction-span-ceiling-and-progress.zh.md)）。`compactNow` 在选择区间前会剪枝超大工具结果。
 

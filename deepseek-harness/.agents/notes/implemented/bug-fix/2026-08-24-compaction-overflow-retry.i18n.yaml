@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-24-compaction-overflow-retry.md
-2026-08-24-compaction-overflow-retry.md: 4fd452e96489254c492d69ab48cbb9fec353b6c8
-2026-08-24-compaction-overflow-retry.zh.md: 4ce0bd1b55347dc5eda4ebe43cb16025c9163b64
+2026-08-24-compaction-overflow-retry.md: 972ac6f242c8a85919fafc252faf58bb27c5d5d0
+2026-08-24-compaction-overflow-retry.zh.md: 182afd4d19582faafa01c9bffd790168f8158da8

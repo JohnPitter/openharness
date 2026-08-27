@@ -37,6 +37,7 @@ export {
   SUMMARIZER_ENVELOPE_RESERVE,
   SUMMARIZER_SPAN_CEILING,
 } from './region.ts'
+export { MAX_TOKENS_CODE } from './summarizer.ts'
 import { summarizeWithLlm } from './summarizer.ts'
 import type { SummarizationInput, SummaryResult } from './summarizer.ts'
 import type {

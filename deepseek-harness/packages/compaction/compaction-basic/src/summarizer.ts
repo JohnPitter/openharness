@@ -22,6 +22,25 @@ interface SummaryConfig {
 const SUMMARY_OPEN_TAG = '<compacted-summary>'
 const SUMMARY_CLOSE_TAG = '</compacted-summary>'
 
+/** Stable provider code when summarization stops at `GenerateOptions.maxTokens`. */
+export const MAX_TOKENS_CODE = 'MAX_TOKENS'
+
+/**
+ * Checkpoint headings the summarizer must emit, in order. A `max-tokens`
+ * finish that still contains every heading is a complete checkpoint whose
+ * last section may be terse, not an incomplete fragment.
+ */
+export const COMPACTION_CHECKPOINT_HEADINGS = [
+  '## Primary Request and Intent',
+  '## Key Technical Concepts',
+  '## Files and Code',
+  '## Errors and Fixes',
+  '## Pending Jobs',
+  '## Current Work',
+  '## Next Step',
+  '## Critical Context',
+] as const
+
 /**
  * The summarization directive, delivered as the FINAL user message after the
  * replayed conversation rather than as a distinct summarizer system prompt.
@@ -132,6 +151,8 @@ export type SummaryResult = {
  * @param agent - supplies routed-model history, fallback model, and session id.
  * @param signal - optional cancellation forwarded to the adapter.
  * @returns safe text-only summary blocks and the exact call envelope and output.
+ * A `max-tokens` finish still returns when every required checkpoint heading
+ * is present in order; an incomplete truncated body throws `MAX_TOKENS`.
  */
 export async function summarizeWithLlm(
   ctx: Context,
@@ -176,22 +197,41 @@ export async function summarizeWithLlm(
     ...signal === undefined ? {} : { signal },
   }
   for await (const chunk of ctx.llm.stream(options)) assembler.push(chunk)
-  const error = finishError(assembler.finish)
-  if (error !== undefined) throw error
-
   const rawOutput = assembler.blocks()
+  const error = finishError(assembler.finish)
+  if (error !== undefined) {
+    if (error.code === MAX_TOKENS_CODE) {
+      const truncated = summaryText(rawOutput)
+      if (compactionCheckpointComplete(truncated)) {
+        return summaryResult(truncated, rawOutput, options, config.maxTokens, assembler.usage)
+      }
+    }
+    throw error
+  }
+
   const summary = summaryText(rawOutput)
   if (!summary.some(block => block.text.trim().length > 0)) {
     throw new Error('summarization produced no text summary content')
   }
+  return summaryResult(summary, rawOutput, options, config.maxTokens, assembler.usage)
+}
+
+/** Assemble the marked local-stream summarizer result. */
+function summaryResult(
+  summary: Array<Extract<ContentBlock, { type: 'text' }>>,
+  rawOutput: ContentBlock[],
+  options: GenerateOptions,
+  maxTokens: number,
+  usage: TokenUsage | undefined,
+): SummaryResult {
   return {
     summary,
     rawOutput,
     llmStreamCall: true,
     provider: options.provider,
     model: options.model,
-    maxTokens: config.maxTokens,
-    ...(assembler.usage === undefined ? {} : { usage: assembler.usage }),
+    maxTokens,
+    ...(usage === undefined ? {} : { usage }),
   }
 }
 
@@ -209,7 +249,7 @@ export function frameSummary(summary: readonly ContentBlock[]): ContentBlock[] {
 }
 
 /** Map a terminal summarization finish to its fail-closed error. */
-function finishError(finish: FinishReason): Error | undefined {
+function finishError(finish: FinishReason): (Error & { code?: string }) | undefined {
   switch (finish.kind) {
     case 'error':
     case 'aborted': {
@@ -219,12 +259,35 @@ function finishError(finish: FinishReason): Error | undefined {
     }
     case 'max-tokens': {
       const error = new Error('summarization truncated at the token cap (incomplete checkpoint)') as Error & { code?: string }
-      error.code = 'MAX_TOKENS'
+      error.code = MAX_TOKENS_CODE
       return error
     }
     default:
       return undefined
   }
+}
+
+/**
+ * Whether text-only summary blocks contain every required checkpoint heading
+ * in order. Used to accept a `max-tokens` finish whose last section was cut
+ * short after the structure landed.
+ * @param blocks - projected text (or reasoning-as-text) summary blocks.
+ * @returns `true` when every required heading appears in order.
+ */
+export function compactionCheckpointComplete(
+  blocks: readonly ContentBlock[],
+): boolean {
+  const text = blocks
+    .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+    .map(block => block.text)
+    .join('\n')
+  let from = 0
+  for (const heading of COMPACTION_CHECKPOINT_HEADINGS) {
+    const at = text.indexOf(heading, from)
+    if (at < 0) return false
+    from = at + heading.length
+  }
+  return true
 }
 
 /**

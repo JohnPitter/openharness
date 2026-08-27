@@ -886,6 +886,24 @@ describe('compactNow transaction and failure classification', () => {
     expect(released).toBe(1)
   })
 
+  it('retries MAX_TOKENS by shrinking the span inside one start/end bracket', async () => {
+    const { compact } = detachedService()
+    const session = closedConversation(4)
+    const agent = fakeAgent(session, () => () => undefined)
+    const truncated = Object.assign(
+      new Error('summarization truncated at the token cap (incomplete checkpoint)'),
+      { code: 'MAX_TOKENS' },
+    )
+    compact.summaryErrors = [truncated]
+
+    const result = await compact.compactNow(agent, SIGNAL)
+    expect(result).not.toBeNull()
+    expect(compact.calls).toHaveLength(2)
+    expect(compactEvents(session).map(event => event.type))
+      .toEqual(['compaction/start', 'compaction/summary', 'compaction/end'])
+    expect(session.events.find(event => event.type === 'compaction/end')?.data.error).toBeUndefined()
+  })
+
   it('uses one overall deadline across context-overflow retries instead of resetting per attempt', async () => {
     vi.useFakeTimers()
     try {
