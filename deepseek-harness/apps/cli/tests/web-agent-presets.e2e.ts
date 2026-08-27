@@ -257,10 +257,19 @@ describe('the shipped Web composition', () => {
       expect(persona).toContain('call subagent only')
       expect(persona).toContain('not a shell')
       expect(persona).toContain('Do not load the j-space skill')
+      expect(persona).toContain('Each subagent call returns immediately')
+      expect(persona).toContain('Never wait for a worker')
       expect(persona).not.toMatch(/to a subagent or the workflow tool/)
       const guidance = assembly.sections.find(section => section.name === 'tool:workflow')?.text ?? ''
       expect(guidance).toContain('not a shell')
       expect(guidance).toContain('call subagent only')
+      const subagentGuidance = assembly.sections.find(section => section.name === 'tool:subagent')?.text ?? ''
+      expect(subagentGuidance).toContain('without waiting')
+      expect(subagentGuidance).not.toContain('run_in_background: false')
+      const subagent = assembly.tools.find(tool => tool.name === 'subagent')
+      const subagentProps = (subagent?.parameters as { properties?: Record<string, unknown> } | undefined)
+        ?.properties ?? {}
+      expect(Object.keys(subagentProps).sort()).toEqual(['description', 'prompt'])
       const names = toolNames(ctx, handle.agent)
       expect(names).toContain('subagent')
       expect(names).toContain('workflow')

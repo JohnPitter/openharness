@@ -47,6 +47,13 @@ export interface Config {
    */
   backgroundMode?: 'one-shot' | 'continuable'
   /**
+   * Whether this instance may wait in the foreground (default `allowed`).
+   * `never` omits `run_in_background`, always takes the background route, and
+   * rejects an explicit `false`. Requires background execution
+   * (`enableRunInBackground` is not false).
+   */
+  foregroundWait?: 'allowed' | 'never'
+  /**
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */
   agentOptions?: AgentOptions
@@ -83,6 +90,7 @@ export const Config: z<Config> = z.object({
   toolName: z.string().default('subagent'),
   enableRunInBackground: z.boolean().default(true),
   backgroundMode: z.union(['one-shot', 'continuable'] as const).default('one-shot'),
+  foregroundWait: z.union(['allowed', 'never'] as const).default('allowed'),
   // Prevent Schemastery from materializing omitted agentOptions as `{}`.
   agentOptions: z.object({
     provider: z.string(),
@@ -255,7 +263,11 @@ interface DelegationRunSpec {
 /** Resolve the model's optional scheduling request into one execution route. */
 function resolveDelegationRun(
   request: DelegationRunRequest,
-  options: { readonly backgroundEnabled: boolean; readonly continuable: boolean },
+  options: {
+    readonly backgroundEnabled: boolean
+    readonly continuable: boolean
+    readonly forbidForeground: boolean
+  },
 ): DelegationRunSpec {
   if (!options.backgroundEnabled) {
     // The validator permits undeclared keys, so schema omission also needs
@@ -265,12 +277,44 @@ function resolveDelegationRun(
     }
     return { runInBackground: false }
   }
+  if (options.forbidForeground) {
+    if (request.run_in_background === false) {
+      throw new Error('this tool instance never waits in the foreground (foregroundWait: never)')
+    }
+    return { runInBackground: true }
+  }
   return {
     // Continuable work is independently scheduled unless the caller explicitly
     // needs the result before its next action. One-shot policy keeps its existing
     // foreground default because its background result requires Task collection.
     runInBackground: request.run_in_background ?? options.continuable,
   }
+}
+
+/** Model-facing description suffix for the selected background policy. */
+function backgroundDescription(options: {
+  readonly backgroundEnabled: boolean
+  readonly continuable: boolean
+  readonly forbidForeground: boolean
+}): string {
+  if (!options.backgroundEnabled) {
+    return ' This call waits for the subagent and returns its result.'
+  }
+  if (options.forbidForeground) {
+    return options.continuable
+      ? ' This tool always runs in the background, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. This instance never waits for the child.'
+      : ' This tool always runs as a background job and returns a job id; collect with `job_output` and stop with `job_kill`. This instance never waits for the child.'
+  }
+  return options.continuable
+    ? ' This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result.'
+    : ' This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.'
+}
+
+/** Continuable scheduling guidance while the tool remains visible. */
+function continuableGuidance(toolName: string, forbidForeground: boolean): string {
+  return forbidForeground
+    ? `Use ${toolName} without waiting. Start independent delegations together in one assistant message, then continue useful work and remain ready for further user instructions. Worker results arrive as notices when each run settles.`
+    : `Use ${toolName} in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set \`run_in_background: false\` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.`
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -283,6 +327,12 @@ export function apply(ctx: Context, config: Config): void {
   }
   const backgroundEnabled = config.enableRunInBackground !== false
   const continuable = (config.backgroundMode ?? 'one-shot') === 'continuable'
+  const forbidForeground = (config.foregroundWait ?? 'allowed') === 'never'
+  if (forbidForeground && !backgroundEnabled) {
+    throw new Error(
+      'tool-subagent: `foregroundWait: never` requires background execution — enableRunInBackground is false',
+    )
+  }
   const toolName = config.toolName ?? 'subagent'
   // Mirror provider lifecycle because sibling load order and HMR replacement
   // can change provider availability while this fiber remains active.
@@ -305,14 +355,9 @@ export function apply(ctx: Context, config: Config): void {
     }
     disposeTool = ctx.tools.register(defineTool({
       name: toolName,
-      description: wording.description + (backgroundEnabled
-        // The completion notice is the continuation service's own behavior, not
-        // a separately installed capability, so this promise holds whenever the
-        // continuable background path is reachable at all.
-        ? continuable
-          ? ' This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result.'
-          : ' This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.'
-        : ' This call waits for the subagent and returns its result.'),
+      description: wording.description + backgroundDescription({
+        backgroundEnabled, continuable, forbidForeground,
+      }),
       parameters: {
         description: {
           type: 'string',
@@ -324,7 +369,7 @@ export function apply(ctx: Context, config: Config): void {
           required: true,
           description: wording.promptDescription,
         },
-        ...backgroundEnabled ? {
+        ...backgroundEnabled && !forbidForeground ? {
           run_in_background: {
             type: 'boolean' as const,
             description: continuable
@@ -393,7 +438,7 @@ export function apply(ctx: Context, config: Config): void {
           ...maxDepth !== undefined ? { maxDepth } : {},
         }
 
-        const runSpec = resolveDelegationRun(args, { backgroundEnabled, continuable })
+        const runSpec = resolveDelegationRun(args, { backgroundEnabled, continuable, forbidForeground })
         if (runSpec.runInBackground) {
           if (continuable) {
             // Resolves at inbox acceptance: the child owns its own turns from
@@ -470,7 +515,7 @@ export function apply(ctx: Context, config: Config): void {
       order: SUBAGENT_SECTION_ORDER,
       text: context => disposeTool === undefined || ctx.tools.get(toolName, context.scope) === undefined
         ? ''
-        : `Use ${toolName} in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set \`run_in_background: false\` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.`,
+        : continuableGuidance(toolName, forbidForeground),
     })
   }
 }

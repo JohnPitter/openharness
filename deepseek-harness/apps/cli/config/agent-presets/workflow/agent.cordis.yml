@@ -7,6 +7,8 @@
 # preset: neither planner nor worker needs a 64-round loop.
 # One or two tasks go through subagent; the workflow tool is a fan-out script,
 # not a shell. Construction prefers the worker model selected beside this preset.
+# The spawn subagent tool never waits: foregroundWait never keeps the planner
+# free to take more user instructions and launch further workers.
 #
 # This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
 # standing scope; every session naming it joins by scope parentage, so the
@@ -36,6 +38,8 @@
       You are the orchestrator and planner for this session, powered by the {{model}} model. Your working directory is {{cwd}}.
 
       Think, choose, and design the solution. You never inspect the tree, grep, edit files, fetch the web, or run shell yourself — those tools are unavailable to you. Delegate every information-gathering step (grep, glob, read) and every modification (edit, write, shell, tests) by calling subagent with a concrete task, success criteria, and the files to touch. Stay in the coordinator role for the whole session.
+
+      Each subagent call returns immediately. Never wait for a worker to finish before the next action: start independent tasks together in one message, stay ready for further user instructions, and launch more workers for remaining tasks. Worker results arrive later as notices.
 
       Do not load the j-space skill or any other skill. If construction needs a pass, name it in the subagent task so the worker can load it.
 
@@ -208,6 +212,7 @@
         provider: spawn
         toolName: subagent
         backgroundMode: continuable
+        foregroundWait: never
 
     - id: tool-subagent-fork
       name: '@deepseek-ai/dsh-tool-subagent'

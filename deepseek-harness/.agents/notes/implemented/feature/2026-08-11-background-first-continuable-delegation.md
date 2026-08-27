@@ -12,7 +12,7 @@ The child-scoped `report` prompt requires a self-contained final report, while [
 
 ## Decision
 
-`tool-subagent` resolves an omitted `run_in_background` from the selected lifecycle policy. `backgroundMode: continuable` resolves omission to background and returns the durable child id immediately; explicit `false` selects foreground and waits for the result. `backgroundMode: one-shot` keeps its foreground default because background output still requires Task collection. `enableRunInBackground: false` continues to omit the parameter, reject forced `true`, and run in the foreground. No second default-selection config is added.
+`tool-subagent` resolves an omitted `run_in_background` from the selected lifecycle policy. `backgroundMode: continuable` resolves omission to background and returns the durable child id immediately; explicit `false` selects foreground and waits for the result. `backgroundMode: one-shot` keeps its foreground default because background output still requires Task collection. `enableRunInBackground: false` continues to omit the parameter, reject forced `true`, and run in the foreground. `foregroundWait: never` is not a second omitted-argument default: it removes the foreground route, omits `run_in_background`, and rejects `false`. The [Workflow never-wait note](2026-08-27-workflow-planner-never-waits-on-workers.md) owns that instance.
 
 The model-facing text divides responsibility by location:
 
@@ -28,7 +28,7 @@ The keyless headless `subagent-settlement` scenario omits `run_in_background`, r
 
 **Replace the field with `run_in_foreground`.** Reversing the boolean makes the common case read positively, but creates a second vocabulary for the same scheduling choice and forces every existing caller and provider-facing transcript to change. Keeping `run_in_background` preserves one field and makes foreground the explicit exception.
 
-**Add a configurable background default.** A separate default can disagree with `backgroundMode`, the schema wording, and the installed prompt. The lifecycle policy already distinguishes a continuable activation from a one-shot Task, which is the distinction that determines whether background completion is delivered automatically.
+**Add a configurable background default.** A separate omitted-argument default can disagree with `backgroundMode`, the schema wording, and the installed prompt. The lifecycle policy already distinguishes a continuable activation from a one-shot Task, which is the distinction that determines whether background completion is delivered automatically. `foregroundWait: never` is a later forbid of the foreground route, not a second default; see the [Workflow never-wait note](2026-08-27-workflow-planner-never-waits-on-workers.md).
 
 **Change only the prompt.** Prompt preference without runtime resolution still turns an omitted argument into foreground. The model must be able to rely on the advertised default rather than reproduce it perfectly on every tool call.
 

@@ -12,7 +12,7 @@ child 作用域的 `report` 提示词要求发送自包含的最终报告，而[
 
 ## 决策
 
-`tool-subagent` 根据选定的生命周期策略解析省略的 `run_in_background`。`backgroundMode: continuable` 会把省略解析为后台并立即返回持久化 child id；显式传入 `false` 会选择前台并等待结果。`backgroundMode: one-shot` 保留前台默认行为，因为它的后台输出仍需通过 Task 收集。`enableRunInBackground: false` 仍会省略该参数、拒绝强制传入的 `true` 并在前台运行。系统不增加第二个默认选择配置。
+`tool-subagent` 根据选定的生命周期策略解析省略的 `run_in_background`。`backgroundMode: continuable` 会把省略解析为后台并立即返回持久化 child id；显式传入 `false` 会选择前台并等待结果。`backgroundMode: one-shot` 保留前台默认行为，因为它的后台输出仍需通过 Task 收集。`enableRunInBackground: false` 仍会省略该参数、拒绝强制传入的 `true` 并在前台运行。`foregroundWait: never` 不是第二套省略参数默认值：它去掉前台路由、省略 `run_in_background`，并拒绝 `false`。该实例由 [Workflow 从不等待 note](2026-08-27-workflow-planner-never-waits-on-workers.zh.md) 负责。
 
 面向模型的文本按位置划分职责：
 
@@ -28,7 +28,7 @@ child 作用域的 `report` 提示词要求发送自包含的最终报告，而[
 
 **把字段替换为 `run_in_foreground`。** 反转布尔值会让常见情形以肯定形式表达，却会为同一项调度选择创造第二套词汇，并迫使所有现有调用方与面向提供方的 transcript（文本记录）一起改变。保留 `run_in_background` 可以维持单一字段，并把前台作为显式例外。
 
-**增加可配置的后台默认值。** 独立默认值可能与 `backgroundMode`、schema 措辞和已安装提示词不一致。生命周期策略已经区分可继续 Activation 与一次性 Task，而这个区别正好决定了后台完成是否会自动投递。
+**增加可配置的后台默认值。** 独立的省略参数默认值可能与 `backgroundMode`、schema 措辞和已安装提示词不一致。生命周期策略已经区分可继续 Activation 与一次性 Task，而这个区别正好决定了后台完成是否会自动投递。`foregroundWait: never` 是后来禁止前台路由的配置，不是第二套默认值；见 [Workflow 从不等待 note](2026-08-27-workflow-planner-never-waits-on-workers.zh.md)。
 
 **只修改提示词。** 如果运行时解析不变，提示词偏好仍会让省略参数的调用进入前台。模型必须能够依赖公布的默认值，而不是在每次工具调用中完美复述它。
 

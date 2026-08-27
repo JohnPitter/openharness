@@ -182,8 +182,10 @@ go vet ./...  # lint
   `cloudflared` para `%LOCALAPPDATA%\openharness\cloudflared`.
 - **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell, sem
   skill/ralph/fork); uma ou duas tarefas vão só por `subagent` — a ferramenta
-  `workflow` não é shell. Não carrega J-space. O Trabalhador recolhe informação
-  e aplica as modificações, no modelo escolhido no chip da direita. Em
+  `workflow` não é shell. O despacho não espera o trabalhador: o planejador
+  segue recebendo instruções e sobe outros workers. Não carrega J-space. O
+  Trabalhador recolhe informação e aplica as modificações, no modelo escolhido
+  no chip da direita. Em
   criação/edição de código, o planejador põe no prompt do trabalhador trechos
   dos padrões (AGENTS.md etc.), não o arquivo inteiro. Planejador cobrado por
   request sem trabalhador no chip **não herda** a rota do pai: a delegação

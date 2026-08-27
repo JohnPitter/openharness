@@ -83,6 +83,14 @@ describe('dsh-tool-subagent', () => {
     )
   })
 
+  it('rejects foregroundWait never when background execution is disabled', async () => {
+    await expect(setup({
+      provider: 'mock',
+      enableRunInBackground: false,
+      foregroundWait: 'never',
+    })).rejects.toThrow(/foregroundWait: never` requires background execution/)
+  })
+
   it('registers a `subagent` tool that delegates to the configured provider and returns its output', async () => {
     const ctx = await setup({ provider: 'mock' }, { reply: 'child says hi' })
     const result = await callSubagent(ctx, {
@@ -1081,7 +1089,7 @@ describe('dsh-tool-subagent continuable background mode', () => {
   })
 
   /** Boot the real continuable stack without any model-facing follow-up adapter. */
-  async function continuableSetup() {
+  async function continuableSetup(toolConfig: Partial<tool.Config> = {}) {
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)
     const root = mkdtempSync(path.join(tmpdir(), 'dsh-tool-subagent-continuable-'))
@@ -1092,7 +1100,7 @@ describe('dsh-tool-subagent continuable background mode', () => {
     await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
     await ctx.plugin(LocalJobRegistry)
     await ctx.plugin(ToolTasks, {})
-    await ctx.plugin(tool, { provider: 'spawn', backgroundMode: 'continuable' })
+    await ctx.plugin(tool, { provider: 'spawn', backgroundMode: 'continuable', ...toolConfig })
     ctx.llm.registerAdapter(['mock'], new MockAdapter([
       textResponse('continuable answer'),
     ]))
@@ -1170,6 +1178,37 @@ describe('dsh-tool-subagent continuable background mode', () => {
     expect(result.value).toMatchObject({ kind: 'foreground' })
     expect(text(result)).toBe('continuable answer')
     expect(ctx.jobs.list(parent)).toEqual([])
+  })
+
+  it('omits run_in_background and never waits when foregroundWait is never', async () => {
+    const { ctx, parent } = await continuableSetup({ foregroundWait: 'never' })
+    const schema = ctx.tools.schemas().find(s => s.name === 'subagent')!
+    const properties = (schema.parameters as { properties?: Record<string, unknown> }).properties ?? {}
+    expect(Object.keys(properties).sort()).toEqual(['description', 'prompt'])
+    expect(schema.description).toContain('always runs in the background')
+    expect(schema.description).toContain('never waits for the child')
+    expect(schema.description).not.toContain('run_in_background: false')
+    const assembly = await ctx.systemPrompt.assemble(assembleContextFor(parent))
+    const guidance = assembly.sections.find(section => section.name === 'tool:subagent')
+    expect(guidance?.text).toContain('without waiting')
+    expect(guidance?.text).toContain('remain ready for further user instructions')
+    expect(guidance?.text).not.toContain('run_in_background: false')
+
+    const started = await callSubagent(
+      ctx,
+      { description: 'independent work', prompt: 'dig in' },
+      { agent: parent },
+    )
+    expect(started.isError).toBe(false)
+    expect(text(started)).toMatch(/^started subagent \S+$/)
+
+    const forcedWait = await callSubagent(
+      ctx,
+      { description: 'blocking work', prompt: 'dig in', run_in_background: false },
+      { agent: parent },
+    )
+    expect(forcedWait.isError).toBe(true)
+    expect(text(forcedWait)).toContain('never waits in the foreground')
   })
 
   it('isolates a cancelled continuable preparation from a concurrent sibling', async () => {
