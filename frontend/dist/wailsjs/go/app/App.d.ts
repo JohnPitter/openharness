@@ -18,3 +18,5 @@ export function HarnessState():Promise<Record<string, string>>;
 export function RestartHarness():Promise<void>;
 
 export function WindowIsForeground():Promise<boolean>;
+
+export function NotifyTaskComplete(title:string):Promise<void>;

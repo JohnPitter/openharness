@@ -33,6 +33,7 @@ func New() (*App, error) {
 // HarnessURL até receber a URL.
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.initNotifications()
 	go func() {
 		url, err := a.manager.Start(ctx)
 		if err != nil {
