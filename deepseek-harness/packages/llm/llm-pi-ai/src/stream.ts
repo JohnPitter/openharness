@@ -37,6 +37,12 @@ export function mapUsage(usage: PiUsage): TokenUsage {
 // If pi-ai ever forwards the original Error (or a fetch/dispatcher hook that lets
 // us capture the cause ourselves), classify on `code`/`cause` instead of text.
 function classifyPiAiError(message: string): string {
+  // OpenCode Zen answers unknown model ids with HTTP 401 + ModelError text.
+  // Classify before the status-code AUTH branch so the UI does not claim the
+  // credential itself is wrong.
+  if (/\bmodel\b.+\bis not supported\b/i.test(message) || /\bModelError\b/.test(message)) {
+    return 'UNKNOWN_MODEL'
+  }
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isContextWindowExceededError(message)) return CONTEXT_WINDOW_EXCEEDED_CODE
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE

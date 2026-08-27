@@ -178,10 +178,6 @@
                 name: Big Pickle
                 contextWindow: 262144
                 maxTokens: 32768
-              - id: x-preview-f-free
-                name: Ox Alpha Free
-                contextWindow: 262144
-                maxTokens: 32768
               - id: mimo-v2.5-free
                 name: MiMo V2.5 Free
                 contextWindow: 262144

@@ -53,6 +53,9 @@ func (a *App) initNotifications() {
 		slog.Warn("notificações", "err", err)
 		return
 	}
+	// Wails stamps AppUserModelId = basename(exe) and DisplayName the same;
+	// replace DisplayName so Action Center shows "OpenHarness", not ".exe".
+	fixToastDisplayName()
 	wailsRuntime.OnNotificationResponse(a.ctx, func(wailsRuntime.NotificationResult) {
 		if a.ctx == nil {
 			return

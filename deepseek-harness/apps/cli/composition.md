@@ -46,8 +46,6 @@ flowchart LR
   cfg --> plugin_dsh_base_glm_5_3
   plugin_dsh_base_big_pickle["big-pickle<br/>Big Pickle"]
   cfg --> plugin_dsh_base_big_pickle
-  plugin_dsh_base_x_preview_f_free["x-preview-f-free<br/>Ox Alpha Free"]
-  cfg --> plugin_dsh_base_x_preview_f_free
   plugin_dsh_base_mimo_v2_5_free["mimo-v2.5-free<br/>MiMo V2.5 Free"]
   cfg --> plugin_dsh_base_mimo_v2_5_free
   plugin_dsh_base_hy3_free["hy3-free<br/>Hy3 Free"]
@@ -227,7 +225,6 @@ flowchart LR
 | `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
 | `glm-5.3` | `GLM-5.3` |
 | `big-pickle` | `Big Pickle` |
-| `x-preview-f-free` | `Ox Alpha Free` |
 | `mimo-v2.5-free` | `MiMo V2.5 Free` |
 | `hy3-free` | `Hy3 Free` |
 | `nemotron-3-ultra-free` | `Nemotron 3 Ultra Free` |

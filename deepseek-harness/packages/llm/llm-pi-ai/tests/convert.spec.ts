@@ -786,6 +786,11 @@ describe('mapStopReason / mapUsage', () => {
   it('maps routable HTTP-ish error messages to stable codes', () => {
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 401: bad key' })))
       .toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    // Zen returns 401 for an unsupported model id; do not mislabel as AUTH.
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: 'HTTP 401: Model x-preview-f-free is not supported',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'UNKNOWN_MODEL' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 429: rate limit' })))
       .toMatchObject({ kind: 'error', failure: { code: 'RATE_LIMIT' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 429: insufficient_quota' })))
