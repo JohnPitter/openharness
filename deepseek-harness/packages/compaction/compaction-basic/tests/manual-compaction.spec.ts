@@ -14,12 +14,16 @@ import type { BasicCompactionConfig } from '@deepseek-ai/dsh-compaction-basic'
 import { CompactionId, isCompactCheckpointSource, ManualCompactionError } from '@deepseek-ai/dsh-compaction'
 import type { CompactionResult } from '@deepseek-ai/dsh-compaction'
 import {
+  CallId,
   CONTEXT_WINDOW_EXCEEDED_CODE,
   createAssistantMessage,
+  createMessage,
+  createToolResultMessage,
   createUserMessage,
   LlmAdapter,
   LlmError,
 } from '@deepseek-ai/dsh-llm'
+import ToolResultPruner from '@deepseek-ai/dsh-compaction-tool-result-pruner'
 import type {
   ContentBlock,
   LlmResolvedModelInfo,
@@ -388,6 +392,70 @@ describe('compactNow through the real loop', () => {
 })
 
 describe('compactNow transaction and failure classification', () => {
+  it('prunes oversized tool results on a closed idle session under real invariants', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(InvariantRegistry)
+    await ctx.plugin(SessionInvariant)
+    void new LlmRuntime(ctx)
+    void new TokenMeter(ctx)
+    void new ToolResultPruner(ctx, { thresholdChars: 100, headChars: 20, tailChars: 10 })
+    ctx.llm.registerAdapter([MODEL], new TextAdapter())
+    vi.spyOn(ctx.sessions, 'flush').mockResolvedValue(false)
+    const compact = new GatedCompactionEngine(ctx, { auto: false })
+    const session = ctx.sessions.create(SessionId('idle-prune'))
+    const callId = CallId('subagent')
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: PROMPT }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('step/start', { turn: 1, step: 1 })
+    session.append('request/header', {
+      header: { config: { provider: MODEL, model: MODEL } },
+      reason: 'initial',
+    })
+    session.append('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'tool-call', id: callId, name: 'subagent', arguments: '{}' }],
+        source: {
+          kind: 'model',
+          ...{ provider: MODEL, model: MODEL },
+        },
+      }),
+    }, { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 1, callId, name: 'subagent', arguments: '{}' })
+    session.append('tool/result', {
+      turn: 1,
+      step: 1,
+      message: createToolResultMessage({
+        callId,
+        content: [{ type: 'text', text: 'X'.repeat(400) }],
+        isError: false,
+      }),
+    }, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const agent = fakeAgent(session, () => () => undefined)
+
+    const result = await compact.compactNow(agent, SIGNAL)
+
+    expect(result).not.toBeNull()
+    expect(session.events.some(event => event.type === 'compaction/prune')).toBe(true)
+    const replacement = session.events.findLast(event => event.type === 'tool/result')
+    const prunedText = replacement?.type === 'tool/result'
+      ? replacement.data.message.content[0]?.content
+        .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+        .map(block => block.text)
+        .join('')
+      : ''
+    expect(prunedText).toContain('tool result middle pruned')
+    expect(prunedText.length).toBeLessThan(400)
+  })
+
   it('returns null without writing a bracket for history that cannot be compacted', async () => {
     const { compact } = detachedService()
     const session = Session.create(SessionId('empty'))

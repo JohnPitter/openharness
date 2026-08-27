@@ -8,7 +8,7 @@
 
 ## 服务 API
 
-`pruneSession(session)` 会扫描当前表层的一个稳定快照。每个超出预算的工具结果都会被一个新追加的 `tool/result` 替换，其携带 `{ surfaceOp: { op: 'replace', start: originalSeq, end: originalSeq }, sourceEventSeqs: [originalSeq] }`。替换会展开完整原始数据，只更改 `content`，保留 `turn`、`step`、`callId`、错误字段、`meta` 以及以后新增的数据字段。原始事件仍可用于持久化、回放和精确日志检查。
+`pruneSession(session)` 会扫描当前表层的一个稳定快照。每个超出预算的工具结果都会被一个新追加的 `tool/result` 替换，其携带 `{ surfaceOp: { op: 'replace', start: originalSeq, end: originalSeq }, sourceEventSeqs: [originalSeq] }`。替换会展开完整原始数据，只更改 `content`，保留 `turn`、`step`、`callId`、错误字段、`meta` 以及以后新增的数据字段。原始事件仍可用于持久化、回放和精确日志检查。替换可以在没有开放轮次时落地，以便空闲的 `compactNow` / `/compact` 在打开独立压缩括号之前完成剪枝。
 
 当会话拒绝替换时，该方法会同步抛出异常。本次扫描中先前已提交的替换仍会保留。
 

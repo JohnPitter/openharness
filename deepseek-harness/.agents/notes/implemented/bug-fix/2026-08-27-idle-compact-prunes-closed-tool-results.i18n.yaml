@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-27-idle-compact-prunes-closed-tool-results.md
+2026-08-27-idle-compact-prunes-closed-tool-results.md: e83cd7a127af058a542161cc6b77ea2a2bbabefc
+2026-08-27-idle-compact-prunes-closed-tool-results.zh.md: 801f77eb189e04625c1d0418bd4d25fe1959a2db

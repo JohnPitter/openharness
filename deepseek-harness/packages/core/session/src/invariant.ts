@@ -125,12 +125,11 @@ function validateEvent(
       break
     }
     case 'tool/result': {
-      // Session has already validated a content rewrite that cites its replaced event.
-      // It is durable turn work, not a second execution of the original call.
+      // A content rewrite that cites its replaced event is not a second
+      // execution of the original call. Idle `compactNow` prunes before it
+      // opens a standalone compaction bracket, so replacements may land with
+      // no open turn, matching checkpoint `user/message` replacements.
       if (event.surfaceOp !== 'append') {
-        if (trace.openTurn === null) {
-          fail('tool/result surface replacement appended outside any open turn')
-        }
         break
       }
       requireOpenStep(trace, 'tool/result', event.data.turn, event.data.step, fail)

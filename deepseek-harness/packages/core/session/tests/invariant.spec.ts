@@ -285,7 +285,7 @@ describe('session-log invariants', () => {
     })).not.toThrow()
   })
 
-  it('rejects a tool-result replacement outside a turn', async () => {
+  it('allows a tool-result replacement after the last turn closes', async () => {
     const { ctx } = await setup()
     const session = ctx.sessions.create()
     session.append('turn/start', { turn: 1 })
@@ -321,7 +321,7 @@ describe('session-log invariants', () => {
     }, {
       surfaceOp: { op: 'replace', start: original.seq, end: original.seq },
       sourceEventSeqs: [original.seq],
-    })).toThrow(/outside any open turn/)
+    })).not.toThrow()
   })
 
   it('allows not-started repair results and unresolved calls at step end', async () => {

@@ -255,19 +255,21 @@ describe('ToolResultPruner session transaction', () => {
     expect(replay.surface.replaceGeneration).toBe(session.surface.replaceGeneration)
   })
 
-  it('runs under real invariants between closed steps but not outside a turn', async () => {
+  it('runs under real invariants after the last turn closes and between closed steps', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(InvariantRegistry)
     await ctx.plugin(SessionInvariant)
     await ctx.plugin(TokenMeter)
     const prune = new ToolResultPruner(ctx, SMALL)
-    const session = ctx.sessions.create(SessionId('invariants'))
-    appendToolStep(session, 1, 'a', [{ type: 'text', text: 'A'.repeat(100) }])
-    expect(() => prune.pruneSession(session)).toThrow(/outside any open turn/)
-    session.append('turn/start', {
+    const closed = ctx.sessions.create(SessionId('invariants-closed'))
+    appendToolStep(closed, 1, 'a', [{ type: 'text', text: 'A'.repeat(100) }])
+    expect(() => prune.pruneSession(closed)).not.toThrow()
+    const open = ctx.sessions.create(SessionId('invariants-open'))
+    appendToolStep(open, 1, 'b', [{ type: 'text', text: 'B'.repeat(100) }])
+    open.append('turn/start', {
       turn: 2,
     })
-    expect(() => prune.pruneSession(session)).not.toThrow()
+    expect(() => prune.pruneSession(open)).not.toThrow()
   })
 })

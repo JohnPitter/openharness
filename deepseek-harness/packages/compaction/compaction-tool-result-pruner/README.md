@@ -8,7 +8,7 @@ This is a concrete companion to [`dsh-compaction-basic`](../compaction-basic/REA
 
 ## Service API
 
-`pruneSession(session)` scans one stable snapshot of the current surface. Every over-budget tool result is replaced by one newly appended `tool/result` carrying `{ surfaceOp: { op: 'replace', start: originalSeq, end: originalSeq }, sourceEventSeqs: [originalSeq] }`. The replacement spreads the complete original data and changes only `content`, preserving `turn`, `step`, `callId`, error fields, `meta`, and later data additions. The original event remains available for persistence, replay, and exact-log inspection.
+`pruneSession(session)` scans one stable snapshot of the current surface. Every over-budget tool result is replaced by one newly appended `tool/result` carrying `{ surfaceOp: { op: 'replace', start: originalSeq, end: originalSeq }, sourceEventSeqs: [originalSeq] }`. The replacement spreads the complete original data and changes only `content`, preserving `turn`, `step`, `callId`, error fields, `meta`, and later data additions. The original event remains available for persistence, replay, and exact-log inspection. Replacements may land with no open turn so idle `compactNow` / `/compact` can prune before opening a standalone compaction bracket.
 
 The method throws synchronously when the session rejects a replacement. Replacements committed earlier in the pass remain durable.
 
