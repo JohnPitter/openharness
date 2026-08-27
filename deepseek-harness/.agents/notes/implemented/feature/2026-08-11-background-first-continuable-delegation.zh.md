@@ -12,7 +12,7 @@ child 作用域的 `report` 提示词要求发送自包含的最终报告，而[
 
 ## 决策
 
-`tool-subagent` 根据选定的生命周期策略解析省略的 `run_in_background`。`backgroundMode: continuable` 会把省略解析为后台并立即返回持久化 child id；显式传入 `false` 会选择前台并等待结果。`backgroundMode: one-shot` 保留前台默认行为，因为它的后台输出仍需通过 Task 收集。`enableRunInBackground: false` 仍会省略该参数、拒绝强制传入的 `true` 并在前台运行。`foregroundWait: never` 不是第二套省略参数默认值：它去掉前台路由、省略 `run_in_background`，并拒绝 `false`。该实例由 [Workflow 从不等待 note](2026-08-27-workflow-planner-never-waits-on-workers.zh.md) 负责。
+`tool-subagent` 根据选定的生命周期策略解析省略的 `run_in_background`。`backgroundMode: continuable` 会把省略解析为后台并立即返回持久化 child id；显式传入 `false` 会选择前台并等待结果。`backgroundMode: one-shot` 保留前台默认行为，因为它的后台输出仍需通过 Task 收集。`enableRunInBackground: false` 仍会省略该参数、拒绝强制传入的 `true` 并在前台运行。`foregroundWait: never` 不是第二套省略参数默认值：它去掉前台路由、省略 `run_in_background`，并忽略多余的 `false`。该实例由 [Workflow 从不等待 note](2026-08-27-workflow-planner-never-waits-on-workers.zh.md) 负责。
 
 面向模型的文本按位置划分职责：
 

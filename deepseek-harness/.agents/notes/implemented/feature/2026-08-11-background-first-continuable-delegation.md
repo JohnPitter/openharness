@@ -12,7 +12,7 @@ The child-scoped `report` prompt requires a self-contained final report, while [
 
 ## Decision
 
-`tool-subagent` resolves an omitted `run_in_background` from the selected lifecycle policy. `backgroundMode: continuable` resolves omission to background and returns the durable child id immediately; explicit `false` selects foreground and waits for the result. `backgroundMode: one-shot` keeps its foreground default because background output still requires Task collection. `enableRunInBackground: false` continues to omit the parameter, reject forced `true`, and run in the foreground. `foregroundWait: never` is not a second omitted-argument default: it removes the foreground route, omits `run_in_background`, and rejects `false`. The [Workflow never-wait note](2026-08-27-workflow-planner-never-waits-on-workers.md) owns that instance.
+`tool-subagent` resolves an omitted `run_in_background` from the selected lifecycle policy. `backgroundMode: continuable` resolves omission to background and returns the durable child id immediately; explicit `false` selects foreground and waits for the result. `backgroundMode: one-shot` keeps its foreground default because background output still requires Task collection. `enableRunInBackground: false` continues to omit the parameter, reject forced `true`, and run in the foreground. `foregroundWait: never` is not a second omitted-argument default: it removes the foreground route, omits `run_in_background`, and ignores extra `false`. The [Workflow never-wait note](2026-08-27-workflow-planner-never-waits-on-workers.md) owns that instance.
 
 The model-facing text divides responsibility by location:
 

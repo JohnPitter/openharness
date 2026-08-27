@@ -2812,8 +2812,8 @@ export interface Config {
   backgroundMode?: 'one-shot' | 'continuable'
   /**
    * Whether this instance may wait in the foreground (default `allowed`).
-   * `never` omits `run_in_background`, always takes the background route, and
-   * rejects an explicit `false`. Requires background execution
+   * `never` omits `run_in_background` and always takes the background route,
+   * including when the model still passes `false`. Requires background execution
    * (`enableRunInBackground` is not false).
    */
   foregroundWait?: 'allowed' | 'never'

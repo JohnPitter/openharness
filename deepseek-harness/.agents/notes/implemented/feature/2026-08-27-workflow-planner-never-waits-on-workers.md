@@ -14,7 +14,7 @@ The [orchestrator/worker split](../architecture/2026-08-22-workflow-orchestrator
 
 ## Decision
 
-`dsh-tool-subagent` accepts `foregroundWait: 'allowed' | 'never'` (default `allowed`). `never` omits `run_in_background` from the schema, always takes the background route, and rejects an explicit `false` at execute. Schema and capability stay aligned: the model cannot request a wait this instance will not honor. `never` plus `enableRunInBackground: false` fails at apply.
+`dsh-tool-subagent` accepts `foregroundWait: 'allowed' | 'never'` (default `allowed`). `never` omits `run_in_background` from the schema and always takes the background route, including when the model still passes `false`. Schema and execute stay aligned: wait is not offered and is not performed. `never` plus `enableRunInBackground: false` fails at apply.
 
 The Workflow preset's spawn `subagent` row sets `foregroundWait: never` with `backgroundMode: continuable`. The orchestrator persona states that each call returns immediately, independent tasks start together, the planner stays ready for further user instructions, and remaining work launches further workers. Worker outcomes still arrive as [manager-owned settlement notices](2026-08-06-manager-owned-subagent-settlement-delivery.md).
 
@@ -30,6 +30,8 @@ Other presets keep `foregroundWait: allowed`. Fork, Codex, and Claude Code tool 
 
 **Add a second omitted-argument default.** [Background-first](2026-08-11-background-first-continuable-delegation.md) already rejected a default that can disagree with `backgroundMode`. `foregroundWait: never` removes the foreground route; it does not pick a new omitted-argument default.
 
+**Fail the call when the model still passes `false`.** That keeps extra keys loud, but the worker never starts and the planner retries. The instance already omitted the parameter; undeclared `false` cannot restore a removed wait.
+
 ## Consequences
 
-A Workflow planner dispatch returns `{ kind: 'continuable', subagentId }` and releases the parent turn. The user can send further instructions while workers run, and the planner can start more children in the same or later turns. A model that still passes `run_in_background: false` receives an errored tool result naming `foregroundWait: never`. Standard, Code, and Cordis presets still wait when the model asks. Package tests pin schema omission, the rejected `false`, and apply-time conflict with disabled background; `web-agent-presets.e2e.ts` pins the Workflow persona, `tool:subagent` guidance, and omitted parameter.
+A Workflow planner dispatch returns `{ kind: 'continuable', subagentId }` and releases the parent turn. The user can send further instructions while workers run, and the planner can start more children in the same or later turns. A model that still passes `run_in_background: false` still starts the worker in the background; the extra field does not wait and does not fail the call. Standard, Code, and Cordis presets still wait when the model asks. Package tests pin schema omission, extra `false` as background, and apply-time conflict with disabled background; `web-agent-presets.e2e.ts` pins the Workflow persona, `tool:subagent` guidance, and omitted parameter.

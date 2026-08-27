@@ -48,8 +48,8 @@ export interface Config {
   backgroundMode?: 'one-shot' | 'continuable'
   /**
    * Whether this instance may wait in the foreground (default `allowed`).
-   * `never` omits `run_in_background`, always takes the background route, and
-   * rejects an explicit `false`. Requires background execution
+   * `never` omits `run_in_background` and always takes the background route,
+   * including when the model still passes `false`. Requires background execution
    * (`enableRunInBackground` is not false).
    */
   foregroundWait?: 'allowed' | 'never'
@@ -278,9 +278,7 @@ function resolveDelegationRun(
     return { runInBackground: false }
   }
   if (options.forbidForeground) {
-    if (request.run_in_background === false) {
-      throw new Error('this tool instance never waits in the foreground (foregroundWait: never)')
-    }
+    // Schema omits the field; extra `false` cannot reopen the wait route.
     return { runInBackground: true }
   }
   return {

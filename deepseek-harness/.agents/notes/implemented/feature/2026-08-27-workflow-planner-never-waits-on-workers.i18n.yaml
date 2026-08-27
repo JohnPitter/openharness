@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-workflow-planner-never-waits-on-workers.md
-2026-08-27-workflow-planner-never-waits-on-workers.md: 5e22cf291ad67a6ad58f7561c0de74eedecba380
-2026-08-27-workflow-planner-never-waits-on-workers.zh.md: 3bf8bd6b6d8eee60775ca376961b39dff1ea661f
+2026-08-27-workflow-planner-never-waits-on-workers.md: c547b3489dbc63ccec6fca351c7a4464449dd3cc
+2026-08-27-workflow-planner-never-waits-on-workers.zh.md: ddfe280997e6c5c6b8fb057c0b0b00d9822fa4a2

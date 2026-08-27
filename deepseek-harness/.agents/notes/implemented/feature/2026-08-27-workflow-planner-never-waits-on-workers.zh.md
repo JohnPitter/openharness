@@ -14,7 +14,7 @@ Workflow 规划者若在前台等待一次 `subagent` 调用，其轮次会一�
 
 ## 决策
 
-`dsh-tool-subagent` 接受 `foregroundWait: 'allowed' | 'never'`（默认 `allowed`）。`never` 从 schema 中省略 `run_in_background`，始终走后台路由，并在执行时拒绝显式的 `false`。schema 与能力保持一致：模型不能请求这个实例不会兑现的等待。`never` 加上 `enableRunInBackground: false` 会在 apply 时失败。
+`dsh-tool-subagent` 接受 `foregroundWait: 'allowed' | 'never'`（默认 `allowed`）。`never` 从 schema 中省略 `run_in_background`，并始终走后台路由，即使模型仍传入 `false`。schema 与执行保持一致：不等待既不出现在参数里，也不会被执行。`never` 加上 `enableRunInBackground: false` 会在 apply 时失败。
 
 Workflow preset 的 spawn `subagent` 行把 `foregroundWait: never` 与 `backgroundMode: continuable` 一起设置。编排者人设写明每次调用立即返回、独立任务在同一条消息里一起启动、规划者保持准备接收后续用户指令，并且剩余工作继续拉起工人。工人结果仍以[由服务投递的结算通知](2026-08-06-manager-owned-subagent-settlement-delivery.zh.md)到达。
 
@@ -30,6 +30,8 @@ Workflow preset 的 spawn `subagent` 行把 `foregroundWait: never` 与 `backgro
 
 **再加一套省略参数的默认值。** [后台优先](2026-08-11-background-first-continuable-delegation.zh.md) 已经否决了可能与 `backgroundMode` 冲突的第二套默认。`foregroundWait: never` 去掉前台路由，并不另选省略参数的默认值。
 
+**模型仍传入 `false` 时让调用失败。** 未声明字段会立刻报错，但工人不会启动，规划者只能重试。该实例已经省略该参数；未声明的 `false` 不能恢复已去掉的等待路由。
+
 ## 后果
 
-Workflow 规划者的一次委派返回 `{ kind: 'continuable', subagentId }` 并释放父级轮次。工人运行期间用户可以继续发指令，规划者也可以在同一轮或后续轮次再启动 child。仍传入 `run_in_background: false` 的模型会收到标明 `foregroundWait: never` 的出错工具结果。Standard、Code 和 Cordis preset 在模型要求时仍会等待。包测试钉住 schema 省略、被拒绝的 `false`，以及与禁用后台在 apply 时的冲突；`web-agent-presets.e2e.ts` 钉住 Workflow 人设、`tool:subagent` 指引和被省略的参数。
+Workflow 规划者的一次委派返回 `{ kind: 'continuable', subagentId }` 并释放父级轮次。工人运行期间用户可以继续发指令，规划者也可以在同一轮或后续轮次再启动 child。仍传入 `run_in_background: false` 的模型仍会在后台启动工人；该多余字段既不等待，也不会让调用失败。Standard、Code 和 Cordis preset 在模型要求时仍会等待。包测试钉住 schema 省略、多余 `false` 走后台，以及与禁用后台在 apply 时的冲突；`web-agent-presets.e2e.ts` 钉住 Workflow 人设、`tool:subagent` 指引和被省略的参数。

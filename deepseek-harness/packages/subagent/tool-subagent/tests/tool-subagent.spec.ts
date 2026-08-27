@@ -1207,8 +1207,8 @@ describe('dsh-tool-subagent continuable background mode', () => {
       { description: 'blocking work', prompt: 'dig in', run_in_background: false },
       { agent: parent },
     )
-    expect(forcedWait.isError).toBe(true)
-    expect(text(forcedWait)).toContain('never waits in the foreground')
+    expect(forcedWait.isError).toBe(false)
+    expect(text(forcedWait)).toMatch(/^started subagent \S+$/)
   })
 
   it('isolates a cancelled continuable preparation from a concurrent sibling', async () => {
