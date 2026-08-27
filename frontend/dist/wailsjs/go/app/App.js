@@ -26,8 +26,12 @@ export function WindowIsForeground() {
   return window['go']['app']['App']['WindowIsForeground']();
 }
 
-export function NotifyTaskComplete(arg1) {
-  return window['go']['app']['App']['NotifyTaskComplete'](arg1);
+export function NotifyTaskComplete(arg1, arg2) {
+  return window['go']['app']['App']['NotifyTaskComplete'](arg1, arg2);
+}
+
+export function PreviewTaskCompleteSound(arg1) {
+  return window['go']['app']['App']['PreviewTaskCompleteSound'](arg1);
 }
 
 export function EnableRemote() {

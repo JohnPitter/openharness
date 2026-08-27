@@ -15,7 +15,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { assertNever } from '@deepseek-ai/dsh-llm'
 import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
 import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
-import type { SubagentRun } from '@deepseek-ai/dsh-subagent'
+import { spawnPromptWithParentImages, type SubagentRun } from '@deepseek-ai/dsh-subagent'
 import type { WorkflowAgentEndInfo, WorkflowAgentInfo, WorkflowMeta, WorkflowResult, WorkflowRun, WorkflowRunId } from '@deepseek-ai/dsh-workflow'
 import { renderThrown } from './realm.ts'
 import type { ExecutionObserver } from './runtime.ts'
@@ -350,7 +350,7 @@ export class WorkerRun implements WorkflowRun {
     let run: SubagentRun
     try {
       run = await this.subagents.start(this.provider, {
-        prompt: [{ type: 'text', text: request.prompt }],
+        prompt: spawnPromptWithParentImages(request.prompt, this.parent),
         parent: this.parent,
         signal: this.controller.signal,
         ...request.schema !== undefined ? { outputSchema: request.schema } : {},

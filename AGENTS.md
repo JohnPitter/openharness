@@ -180,12 +180,17 @@ go vet ./...  # lint
   enquanto o PC estiver ligado e o OpenHarness aberto. Quem tiver o link tem o
   mesmo poder que o desktop. Precisa de internet no PC; a primeira vez baixa
   `cloudflared` para `%LOCALAPPDATA%\openharness\cloudflared`.
+- **Som ao concluir:** Configurações → Geral (só no exe). Catálogo de WAVs em
+  `%WINDIR%\Media` (`ui-conversation.taskCompleteSound`; padrão `notify-email`).
+  Botão de ouvir manda `openharness:preview-sound`; a conclusão inclui o id no
+  `openharness:task-complete`.
 - **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell, sem
   skill/ralph/fork); uma ou duas tarefas vão só por `subagent` — a ferramenta
   `workflow` não é shell. O despacho não espera o trabalhador: o planejador
   segue recebendo instruções e sobe outros workers. Não carrega J-space. O
   Trabalhador recolhe informação e aplica as modificações, no modelo escolhido
-  no chip da direita. Em
+  no chip da direita. Se o planejador não tem visão e o trabalhador tem, a
+  imagem do usuário é aceita e encaminhada no prompt de cada worker. Em
   criação/edição de código, o planejador põe no prompt do trabalhador trechos
   dos padrões (AGENTS.md etc.), não o arquivo inteiro. Planejador cobrado por
   request sem trabalhador no chip **não herda** a rota do pai: a delegação

@@ -77,7 +77,7 @@
   import { WindowMinimise, WindowToggleMaximise, Quit } from '/wailsjs/runtime/runtime.js'
   import {
     HarnessState, RestartHarness, AppVersion, CheckForUpdate, ApplyUpdate,
-    EnableRemote, DisableRemote, NotifyTaskComplete,
+    EnableRemote, DisableRemote, NotifyTaskComplete, PreviewTaskCompleteSound,
   } from '/wailsjs/go/app/App.js'
 
   document.getElementById('btn-min').onclick = () => WindowMinimise()
@@ -116,7 +116,14 @@
       return
     }
     if (e.data?.type === 'openharness:task-complete') {
-      void NotifyTaskComplete(typeof e.data.title === 'string' ? e.data.title : '')
+      void NotifyTaskComplete(
+        typeof e.data.title === 'string' ? e.data.title : '',
+        typeof e.data.sound === 'string' ? e.data.sound : '',
+      )
+      return
+    }
+    if (e.data?.type === 'openharness:preview-sound') {
+      void PreviewTaskCompleteSound(typeof e.data.sound === 'string' ? e.data.sound : '')
     }
   })
 

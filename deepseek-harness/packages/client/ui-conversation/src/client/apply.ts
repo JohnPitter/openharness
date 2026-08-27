@@ -32,12 +32,15 @@ import {
 } from './settings/CompactionSettingsRows.tsx'
 import type { CompactionSettingsInjected } from './settings/CompactionSettingsRows.tsx'
 import { CompactionSettingsPolicy } from './settings/compaction-policy.ts'
+import { TaskCompleteSoundRow } from './settings/TaskCompleteSoundRow.tsx'
+import type { TaskCompleteSoundRowInjected } from './settings/TaskCompleteSoundRow.tsx'
+import { TaskCompleteSoundPolicy } from './settings/sound-policy.ts'
 import { ChatView } from './chat/ChatView.tsx'
 import { StatsLine } from './chat/StatsLine.tsx'
 import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { queueDockEntry } from './queue/QueueDock.tsx'
-import { watchDesktopTaskComplete } from './desktop-complete.ts'
+import { postDesktopTaskComplete, watchDesktopTaskComplete } from './desktop-complete.ts'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
@@ -131,10 +134,6 @@ export function apply(ctx: Context): void {
   registerChatNodeRenderers(ctx)
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en, pt, es }), 'ui-conversation: dictionaries')
-  ctx.effect(
-    () => watchDesktopTaskComplete(sessions.list),
-    'ui-conversation: desktop task-complete',
-  )
 
   // Registration-time text (the view tab label) reads through the bound
   // translate as a thunk, so it follows the active locale without
@@ -143,11 +142,21 @@ export function apply(ctx: Context): void {
 
   // Apply-time construction keeps store identity bound to this fiber.
   const chatStore = createChatStore()
-  const submissionPolicy = new ComposerSubmissionPolicy(
-    ctx.settingsScope.bind<ConversationSettings>({ namespace: CONVERSATION_SETTINGS_NAMESPACE }),
-  )
+  const conversationSettings = ctx.settingsScope.bind<ConversationSettings>({
+    namespace: CONVERSATION_SETTINGS_NAMESPACE,
+  })
+  const submissionPolicy = new ComposerSubmissionPolicy(conversationSettings)
+  const soundPolicy = new TaskCompleteSoundPolicy(conversationSettings)
   const compactionPolicy = new CompactionSettingsPolicy(
     ctx.settingsScope.bind<CompactionUserSettings>({ namespace: COMPACTION_SETTINGS_NAMESPACE }),
+  )
+  ctx.effect(
+    () => watchDesktopTaskComplete(
+      sessions.list,
+      postDesktopTaskComplete,
+      () => soundPolicy.sound.getSnapshot(),
+    ),
+    'ui-conversation: desktop task-complete',
   )
   const compactionInjected = (): CompactionSettingsInjected => ({
     hooks: {
@@ -168,6 +177,17 @@ export function apply(ctx: Context): void {
       setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
     }),
   }, EnterBehaviorRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'task-complete-sound',
+    order: 19,
+    locale: NS,
+    inject: (): TaskCompleteSoundRowInjected => ({
+      hooks: { taskCompleteSound: soundPolicy.sound },
+      setTaskCompleteSound: (sound) => { soundPolicy.setSound(sound) },
+    }),
+  }, TaskCompleteSoundRow))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',

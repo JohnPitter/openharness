@@ -8,8 +8,10 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import {
   applyChildComposition,
+  parentTurnImages,
   resolveChildAgentOptions,
   restrictWorkflowOrchestrator,
+  spawnPromptWithParentImages,
   WorkflowWorkerRequiredError,
   WORKFLOW_WORKER_PERSONA,
 } from '../src/child-agent.ts'
@@ -88,7 +90,52 @@ describe('workflow orchestrator tool restriction', () => {
     expect(WORKFLOW_WORKER_PERSONA).toMatch(/edit/)
     expect(WORKFLOW_WORKER_PERSONA).toMatch(/coding-standard excerpts/)
     expect(WORKFLOW_WORKER_PERSONA).toMatch(/milestone_write/)
+    expect(WORKFLOW_WORKER_PERSONA).toMatch(/image attachments/)
     expect(WORKFLOW_WORKER_PERSONA).not.toMatch(/orchestrator/i)
+  })
+
+  it('forwards the latest user images on a workflow parent into the spawn prompt', async () => {
+    const ctx = await mount()
+    const parent = await mint(ctx, 'parent')
+    const attachment = {
+      attachmentId: 'sha256:abcdef12deadbeef',
+      mediaType: 'image/png' as const,
+      bytes: 4,
+      width: 2,
+      height: 2,
+    }
+    Object.assign(parent, {
+      session: {
+        header: {},
+        events: [
+          {
+            type: 'user/message',
+            seq: 1,
+            time: 1,
+            data: {
+              source: { kind: 'user' },
+              content: [
+                { type: 'text', text: 'look' },
+                { type: 'image', attachment },
+              ],
+            },
+          },
+        ],
+      },
+    })
+    expect(parentTurnImages(parent)).toEqual([{ type: 'image', attachment }])
+    expect(spawnPromptWithParentImages('inspect the UI', parent)).toEqual([
+      { type: 'text', text: 'inspect the UI' },
+      { type: 'image', attachment },
+    ])
+
+    const standard = await mount('standard')
+    const other = await mint(standard, 'other')
+    Object.assign(other, { session: parent.session })
+    expect(parentTurnImages(other)).toEqual([])
+    expect(spawnPromptWithParentImages('inspect the UI', other)).toEqual([
+      { type: 'text', text: 'inspect the UI' },
+    ])
   })
 
   it('shadows the orchestrator persona on a workflow child unless the request names one', async () => {

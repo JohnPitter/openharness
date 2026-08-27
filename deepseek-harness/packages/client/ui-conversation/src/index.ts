@@ -6,7 +6,9 @@ import { CONVERSATION_SETTINGS_NAMESPACE, ConversationSettingsSchema } from './s
 
 export {
   BUSY_ENTER_BEHAVIORS, BUSY_ENTER_FIELD, CONVERSATION_SETTINGS_NAMESPACE,
-  DEFAULT_BUSY_ENTER_BEHAVIOR, type BusyEnterBehavior, type ConversationSettings,
+  DEFAULT_BUSY_ENTER_BEHAVIOR, DEFAULT_TASK_COMPLETE_SOUND, TASK_COMPLETE_SOUND_FIELD,
+  TASK_COMPLETE_SOUNDS, type BusyEnterBehavior, type ConversationSettings,
+  type TaskCompleteSound,
 } from './submission-settings.ts'
 
 /**

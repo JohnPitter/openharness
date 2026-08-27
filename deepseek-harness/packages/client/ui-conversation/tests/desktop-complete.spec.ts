@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionId, SessionListState, SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
 import {
+  DESKTOP_PREVIEW_SOUND,
   DESKTOP_TASK_COMPLETE,
   isRootTaskSession,
+  postDesktopPreviewSound,
   postDesktopTaskComplete,
   rootTaskCompletions,
   watchDesktopTaskComplete,
@@ -33,7 +35,7 @@ describe('desktop-complete', () => {
   it('does not chime on first observation of an already-idle session', () => {
     const { next, completed } = rootTaskCompletions(new Map(), {
       [sid('a')]: row('a', false, { title: 'Ship the client' }),
-    })
+    }, 'ding')
     expect(completed).toEqual([])
     expect(next.get(sid('a'))).toBe(false)
   })
@@ -43,8 +45,10 @@ describe('desktop-complete', () => {
     const { completed } = rootTaskCompletions(prev, {
       [sid('a')]: row('a', false, { title: 'Ship the client', displayTitle: 'a' }),
       [sid('child')]: row('child', false, { parentId: sid('a'), displayTitle: 'worker' }),
-    })
-    expect(completed).toEqual([{ sessionId: sid('a'), title: 'Ship the client' }])
+    }, 'chimes')
+    expect(completed).toEqual([{
+      sessionId: sid('a'), title: 'Ship the client', sound: 'chimes',
+    }])
   })
 
   it('falls back to the list label when no durable title exists', () => {
@@ -52,7 +56,9 @@ describe('desktop-complete', () => {
     const { completed } = rootTaskCompletions(prev, {
       [sid('a')]: row('a', false, { displayTitle: 'openharness' }),
     })
-    expect(completed).toEqual([{ sessionId: sid('a'), title: 'openharness' }])
+    expect(completed).toEqual([{
+      sessionId: sid('a'), title: 'openharness', sound: 'notify-email',
+    }])
   })
 
   it('does not emit a still-running root or a child going idle', () => {
@@ -75,15 +81,19 @@ describe('desktop-complete', () => {
       },
     }
     const posted: string[] = []
-    const stop = watchDesktopTaskComplete(list, (event) => { posted.push(event.title) })
+    const stop = watchDesktopTaskComplete(
+      list,
+      (event) => { posted.push(`${event.title}:${event.sound}`) },
+      () => 'tada',
+    )
     expect(posted).toEqual([])
 
     snapshot = { byId: { [sid('a')]: row('a', false, { title: 'Done' }) } }
     for (const fn of listeners) fn()
-    expect(posted).toEqual(['Done'])
+    expect(posted).toEqual(['Done:tada'])
 
     for (const fn of listeners) fn()
-    expect(posted).toEqual(['Done'])
+    expect(posted).toEqual(['Done:tada'])
     stop()
     expect(listeners.size).toBe(0)
   })
@@ -102,10 +112,10 @@ describe('desktop-complete', () => {
         return () => { listeners.delete(fn) }
       },
     }
-    const stop = watchDesktopTaskComplete(list)
+    const stop = watchDesktopTaskComplete(list, undefined, () => 'ding')
     snapshot = { byId: { [sid('a')]: row('a', false, { title: 'Done' }) } }
     for (const fn of listeners) fn()
-    expect(posted).toEqual([{ type: DESKTOP_TASK_COMPLETE, title: 'Done' }])
+    expect(posted).toEqual([{ type: DESKTOP_TASK_COMPLETE, title: 'Done', sound: 'ding' }])
     stop()
     vi.unstubAllGlobals()
   })
@@ -113,7 +123,9 @@ describe('desktop-complete', () => {
 
 describe('postDesktopTaskComplete', () => {
   it('is a no-op without a window', () => {
-    expect(() => postDesktopTaskComplete({ sessionId: sid('a'), title: 'Done' })).not.toThrow()
+    expect(() => postDesktopTaskComplete({
+      sessionId: sid('a'), title: 'Done', sound: 'ding',
+    })).not.toThrow()
   })
 
   it('posts to a distinct parent window', () => {
@@ -121,8 +133,10 @@ describe('postDesktopTaskComplete', () => {
     vi.stubGlobal('window', {
       parent: { postMessage: (data: unknown, origin: string) => { posted.push([data, origin]) } },
     })
-    postDesktopTaskComplete({ sessionId: sid('a'), title: 'Done' })
-    expect(posted).toEqual([[{ type: DESKTOP_TASK_COMPLETE, title: 'Done' }, '*']])
+    postDesktopTaskComplete({ sessionId: sid('a'), title: 'Done', sound: 'chord' })
+    expect(posted).toEqual([[{
+      type: DESKTOP_TASK_COMPLETE, title: 'Done', sound: 'chord',
+    }, '*']])
     vi.unstubAllGlobals()
   })
 
@@ -133,8 +147,20 @@ describe('postDesktopTaskComplete', () => {
     }
     w.parent = w
     vi.stubGlobal('window', w)
-    postDesktopTaskComplete({ sessionId: sid('a'), title: 'Done' })
+    postDesktopTaskComplete({ sessionId: sid('a'), title: 'Done', sound: 'ding' })
     expect(posted).toEqual([])
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('postDesktopPreviewSound', () => {
+  it('posts a preview request to the parent shell', () => {
+    const posted: unknown[] = []
+    vi.stubGlobal('window', {
+      parent: { postMessage: (data: unknown) => { posted.push(data) } },
+    })
+    postDesktopPreviewSound('chimes')
+    expect(posted).toEqual([{ type: DESKTOP_PREVIEW_SOUND, sound: 'chimes' }])
     vi.unstubAllGlobals()
   })
 })

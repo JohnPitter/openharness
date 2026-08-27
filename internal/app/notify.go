@@ -9,21 +9,28 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// NotifyTaskComplete plays the completion sound and, when the window is not
-// the OS foreground, a Windows toast. The iframe cannot do either reliably:
+// NotifyTaskComplete plays the chosen completion sound and, when the window is
+// not the OS foreground, a Windows toast. The iframe cannot do either reliably:
 // WebView2 suspends AudioContext without a gesture, and its HWND belongs to
 // msedgewebview2.exe, so a PID-only focus check always looked "away".
-func (a *App) NotifyTaskComplete(title string) {
-	playTaskSound()
+// sound is a preference id from General settings (empty → default chime).
+func (a *App) NotifyTaskComplete(title string, sound string) {
+	playTaskSound(sound)
 	away := !windowIsForeground()
 	if a.ctx != nil && wailsRuntime.WindowIsMinimised(a.ctx) {
 		away = true
 	}
-	slog.Info("task complete", "title", title, "away", away)
+	slog.Info("task complete", "title", title, "sound", sound, "away", away)
 	if !away {
 		return
 	}
 	a.pushTaskToast(title)
+}
+
+// PreviewTaskCompleteSound plays one catalog entry so General settings can
+// audition the choice without finishing a task.
+func (a *App) PreviewTaskCompleteSound(sound string) {
+	playTaskSound(sound)
 }
 
 func (a *App) pushTaskToast(title string) {

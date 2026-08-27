@@ -2,7 +2,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
-  CONVERSATION_SETTINGS_NAMESPACE, DEFAULT_BUSY_ENTER_BEHAVIOR, apply,
+  CONVERSATION_SETTINGS_NAMESPACE, DEFAULT_BUSY_ENTER_BEHAVIOR,
+  DEFAULT_TASK_COMPLETE_SOUND, apply,
 } from '@deepseek-ai/dsh-client-ui-conversation'
 
 class MemorySettings extends SettingsProvider {
@@ -14,16 +15,28 @@ class MemorySettings extends SettingsProvider {
 }
 
 describe('ui-conversation host', () => {
-  it('registers, validates, and disposes the durable busy-Enter preference', async () => {
+  it('registers, validates, and disposes the durable conversation preferences', async () => {
     const ctx = new Context()
     await ctx.plugin(MemorySettings).await()
     const fiber = ctx.plugin({ apply })
     await fiber.await()
     const ns = settingsNamespace(CONVERSATION_SETTINGS_NAMESPACE)
-    expect(ctx.settings.get(ns)).toEqual({ busyEnter: DEFAULT_BUSY_ENTER_BEHAVIOR })
+    expect(ctx.settings.get(ns)).toEqual({
+      busyEnter: DEFAULT_BUSY_ENTER_BEHAVIOR,
+      taskCompleteSound: DEFAULT_TASK_COMPLETE_SOUND,
+    })
     await ctx.settings.update(ns, { busyEnter: 'steer' })
-    expect(ctx.settings.get(ns)).toEqual({ busyEnter: 'steer' })
+    expect(ctx.settings.get(ns)).toEqual({
+      busyEnter: 'steer',
+      taskCompleteSound: DEFAULT_TASK_COMPLETE_SOUND,
+    })
+    await ctx.settings.update(ns, { taskCompleteSound: 'ding' })
+    expect(ctx.settings.get(ns)).toEqual({
+      busyEnter: 'steer',
+      taskCompleteSound: 'ding',
+    })
     await expect(ctx.settings.update(ns, { busyEnter: 'invalid' })).rejects.toThrow()
+    await expect(ctx.settings.update(ns, { taskCompleteSound: 'nope' })).rejects.toThrow()
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)
   })

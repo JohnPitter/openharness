@@ -10,6 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentOptions, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
+import type { ContentBlock, ImageBlock } from '@deepseek-ai/dsh-llm'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
@@ -229,7 +230,42 @@ export const WORKFLOW_WORKER_PERSONA
     + 'Honor coding-standard excerpts and named instruction files in the task; read those files when '
     + 'you need the rest. Do not invent a conflicting architecture or skip tests the task named. '
     + 'When a finding, decision, or fix closes, call milestone_write in the same tool step with a '
-    + 'one-line title and the recorded fact — do not open a new turn only to write the milestone.'
+    + 'one-line title and the recorded fact — do not open a new turn only to write the milestone. '
+    + 'When the task prompt includes image attachments, inspect them directly — the planner '
+    + 'forwarded the user\'s images because it cannot see them.'
+
+/**
+ * Durable image blocks from the latest real user message on a Workflow parent.
+ * Spawn children start with an empty log; without this, a text-only planner
+ * cannot pass pixels to a vision worker. Non-workflow parents and plugin-sourced
+ * user messages yield nothing.
+ * @param parent - the delegating Workflow orchestrator.
+ * @returns shallow copies of the image blocks, newest user turn only.
+ */
+export function parentTurnImages(parent: Agent): ImageBlock[] {
+  if (parent.ctx.get('agentPresets')?.composedPreset(parent.ctx) !== 'workflow') return []
+  const events = parent.session.events
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i]
+    if (event === undefined || event.type !== 'user/message') continue
+    if (event.data.source.kind !== 'user') continue
+    const images = event.data.content.filter((block): block is ImageBlock => block.type === 'image')
+    if (images.length === 0) continue
+    return images.map(block => ({ type: 'image' as const, attachment: block.attachment }))
+  }
+  return []
+}
+
+/**
+ * Build the child prompt for a Workflow (or ordinary) spawn: the model text,
+ * then any user images the Workflow parent must forward.
+ * @param text - the standalone task text from the tool or workflow script.
+ * @param parent - the delegating parent agent.
+ * @returns content blocks for {@link SubagentStartRequest.prompt}.
+ */
+export function spawnPromptWithParentImages(text: string, parent: Agent): ContentBlock[] {
+  return [{ type: 'text', text }, ...parentTurnImages(parent)]
+}
 
 /** Tools a workflow orchestrator must not see or call; workers keep them through the standing mount. */
 export const WORKFLOW_ORCHESTRATOR_WORK_TOOLS = [

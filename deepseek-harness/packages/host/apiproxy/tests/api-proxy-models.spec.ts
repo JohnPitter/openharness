@@ -233,6 +233,83 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('admits images for a text-only Workflow planner when the worker route accepts images', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    registerTextOnly(ctx)
+    ctx.llm.registerAdapter(['vision'], new class extends CatalogAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({
+          provider, id: model, name: model, inputModalities: ['text', 'image'],
+        })
+      }
+    }('Vision', []))
+    ctx.provide('agentPresets', { composedPreset: () => 'workflow' })
+    let worker: { provider: string; model: string } | undefined = { provider: 'vision', model: 'seeing' }
+    ctx.provide('agentDefaultModel', {
+      currentWorkerSelection: () => worker,
+    })
+    const validateImage = vi.fn(() => Promise.resolve())
+    const saveImage = vi.fn((input: { data: Uint8Array; mediaType: 'image/png' }) => Promise.resolve({
+      attachmentId: 'att-workflow',
+      mediaType: input.mediaType,
+      bytes: input.data.byteLength,
+      width: 1,
+      height: 1,
+    }))
+    ctx.provide('attachments', Object.setPrototypeOf({
+      imageLimits: {
+        maxImageBytes: 4,
+        maxImagesPerMessage: 2,
+        maxMessageImageBytes: 4,
+        maxImagePixels: 4,
+        maxImageDimension: 2000,
+        mediaTypes: ['image/png'],
+      },
+      validateImage,
+      saveImage,
+    }, AttachmentStore.prototype) as never)
+    const followup = vi.fn()
+    Object.assign(agent, { followup })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'text-only', model: 'plain' }),
+      cwd: '/tmp',
+    })
+
+    const admitted = await api.sessions.prompt(request({
+      sessionId,
+      mode: 'queue' as const,
+      content: [
+        { type: 'image' as const, mediaType: 'image/png' as const, data: 'AQ==' },
+        { type: 'text' as const, text: 'describe this' },
+      ],
+    }))
+    expect(admitted.result.ok).toBe(true)
+    expect(saveImage).toHaveBeenCalledOnce()
+    expect((followup.mock.calls[0]?.[0] as UserMessage).content).toEqual([
+      {
+        type: 'image',
+        attachment: {
+          attachmentId: 'att-workflow', mediaType: 'image/png', bytes: 1, width: 1, height: 1,
+        },
+      },
+      { type: 'text', text: 'describe this' },
+    ])
+
+    worker = undefined
+    const denied = await api.sessions.prompt(request({
+      sessionId,
+      mode: 'queue' as const,
+      content: [
+        { type: 'image' as const, mediaType: 'image/png' as const, data: 'AQ==' },
+      ],
+    }))
+    expect(denied.result).toMatchObject({
+      ok: false,
+      error: { code: 'attachment-error', details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' } },
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('authorizes attachment bytes only when the session event stream references the id', async () => {
     const { ctx, agent, sessionId } = await harness()
     const ref = {

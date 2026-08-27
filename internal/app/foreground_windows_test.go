@@ -24,7 +24,10 @@ func TestWindowIsForegroundDoesNotPanic(t *testing.T) {
 }
 
 func TestPlayTaskSoundDoesNotPanic(t *testing.T) {
-	playTaskSound()
+	playTaskSound("")
+	playTaskSound("silent")
+	playTaskSound("notify-email")
+	playTaskSound("no-such-sound")
 }
 
 func TestFixToastDisplayNameSetsOpenHarness(t *testing.T) {
@@ -65,5 +68,6 @@ func TestFixToastDisplayNameSetsOpenHarness(t *testing.T) {
 
 func TestNotifyTaskCompleteWithoutCtx(t *testing.T) {
 	a := &App{}
-	a.NotifyTaskComplete("teste")
+	a.NotifyTaskComplete("teste", "ding")
+	a.PreviewTaskCompleteSound("chimes")
 }

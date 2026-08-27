@@ -14,7 +14,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
-import { assertSubagentMaxDepth, settleRun } from '@deepseek-ai/dsh-subagent'
+import { assertSubagentMaxDepth, settleRun, spawnPromptWithParentImages } from '@deepseek-ai/dsh-subagent'
 import type { SubagentProvider, SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
 import type { JobOutcome } from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -428,7 +428,7 @@ export function apply(ctx: Context, config: Config): void {
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
         const request = {
           label: args.description,
-          prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
+          prompt: spawnPromptWithParentImages(args.prompt, parent),
           parent,
           ...config.agentOptions !== undefined ? { agentOptions: config.agentOptions } : {},
           ...config.persona !== undefined ? { persona: config.persona } : {},

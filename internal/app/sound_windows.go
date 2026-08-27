@@ -26,30 +26,57 @@ const (
 	mbIconAsterisk = 0x00000040
 )
 
-// Built-in Windows Media chimes preferred over PlaySound aliases: user sound
-// schemes often mute or remap Notification.* while these WAVs still play.
-var taskSoundWavs = []string{
-	"Windows Notify System Generic.wav",
-	"Windows Notify.wav",
-	"Notify.wav",
+// taskSoundFiles maps preference ids to Windows\Media wav basenames.
+// Keep in sync with deepseek-harness ui-conversation desktop-sound-settings.
+var taskSoundFiles = map[string]string{
+	"notify":           "Windows Notify.wav",
+	"notify-email":     "Windows Notify Email.wav",
+	"notify-messaging": "Windows Notify Messaging.wav",
+	"notify-calendar":  "Windows Notify Calendar.wav",
+	"ding":             "Windows Ding.wav",
+	"chimes":           "chimes.wav",
+	"chord":            "chord.wav",
+	"tada":             "tada.wav",
+	"nudge":            "Windows Message Nudge.wav",
+	"default":          "Windows Default.wav",
+	"print":            "Windows Print complete.wav",
+	"generic":          "Windows Notify System Generic.wav",
 }
 
-func playTaskSound() {
-	media := filepath.Join(os.Getenv("SystemRoot"), "Media")
-	if media == filepath.Join("", "Media") {
-		media = filepath.Join(`C:\Windows`, "Media")
+// DefaultTaskCompleteSound is used when the iframe omits or sends an unknown id.
+const DefaultTaskCompleteSound = "notify-email"
+
+func playTaskSound(id string) {
+	if id == "silent" {
+		return
 	}
-	for _, name := range taskSoundWavs {
+	if id == "" {
+		id = DefaultTaskCompleteSound
+	}
+	root := os.Getenv("SystemRoot")
+	if root == "" {
+		root = `C:\Windows`
+	}
+	media := filepath.Join(root, "Media")
+	if file, ok := taskSoundFiles[id]; ok {
+		if playSoundPath(filepath.Join(media, file)) {
+			return
+		}
+	}
+	// Fall through to a short curated list, then aliases.
+	for _, name := range []string{
+		taskSoundFiles[DefaultTaskCompleteSound],
+		"Windows Notify.wav",
+		"Notify.wav",
+	} {
+		if name == "" {
+			continue
+		}
 		if playSoundPath(filepath.Join(media, name)) {
 			return
 		}
 	}
-	// SND_SYSTEM targets the Windows notification/system bus; drop
-	// SND_NODEFAULT so a missing alias still falls through cleanly.
 	if playSoundAlias("Notification.Default", sndAlias|sndSystem|sndAsync) {
-		return
-	}
-	if playSoundAlias("SystemNotification", sndAlias|sndAsync) {
 		return
 	}
 	if playSoundAlias("SystemAsterisk", sndAlias|sndAsync) {

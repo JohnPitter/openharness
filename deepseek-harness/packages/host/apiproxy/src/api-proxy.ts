@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentHandle, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
+import type {} from '@deepseek-ai/dsh-agent-default-model'
 import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, freezeMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
@@ -137,6 +138,20 @@ async function durablePromptContent(ctx: Context, content: readonly PromptConten
     ? { type: 'text', text: part.text }
     // admitEncodedImages returns one reference per image part in order.
     : { type: 'image', attachment: refs[next++] as ImageAttachmentRef })
+}
+
+/**
+ * True when a Workflow session's selected worker route accepts image input.
+ * Used so a text-only planner can still admit user images that workers will see.
+ * @param ctx - host context carrying agentDefaultModel and agentPresets.
+ * @param agent - the session agent whose preset is checked.
+ */
+async function workflowWorkerAcceptsImages(ctx: Context, agent: Agent): Promise<boolean> {
+  if (ctx.get('agentPresets')?.composedPreset(agent.ctx) !== 'workflow') return false
+  const worker = ctx.get('agentDefaultModel')?.currentWorkerSelection()
+  if (worker === undefined) return false
+  const modelInfo = await ctx.llm.resolveModelInfo(worker.provider, worker.model)
+  return modelInfo.inputModalities === undefined || modelInfo.inputModalities.includes('image')
 }
 
 /** Search durable content for an image reference, including nested tool results. */
@@ -2682,12 +2697,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             if (hasImage) {
               const current = selectionFor(agent).current
               const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
-              if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
-                return err(request, {
-                  code: 'attachment-error',
-                  message: `Model "${current.model}" does not support image input.`,
-                  details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
-                })
+              const plannerSeesImages = modelInfo.inputModalities === undefined
+                || modelInfo.inputModalities.includes('image')
+              if (!plannerSeesImages) {
+                const workerMaySee = await workflowWorkerAcceptsImages(ctx, agent)
+                if (!workerMaySee) {
+                  return err(request, {
+                    code: 'attachment-error',
+                    message: `Model "${current.model}" does not support image input.`,
+                    details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
+                  })
+                }
               }
             }
             const durable = await durablePromptContent(ctx, content)
