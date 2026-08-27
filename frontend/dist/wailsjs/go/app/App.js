@@ -22,6 +22,10 @@ export function RestartHarness() {
   return window['go']['app']['App']['RestartHarness']();
 }
 
+export function WindowIsForeground() {
+  return window['go']['app']['App']['WindowIsForeground']();
+}
+
 export function EnableRemote() {
   return window['go']['app']['App']['EnableRemote']();
 }

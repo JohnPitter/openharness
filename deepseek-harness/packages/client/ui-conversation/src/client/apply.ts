@@ -37,6 +37,7 @@ import { StatsLine } from './chat/StatsLine.tsx'
 import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { queueDockEntry } from './queue/QueueDock.tsx'
+import { watchDesktopTaskComplete } from './desktop-complete.ts'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
@@ -130,6 +131,10 @@ export function apply(ctx: Context): void {
   registerChatNodeRenderers(ctx)
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en, pt, es }), 'ui-conversation: dictionaries')
+  ctx.effect(
+    () => watchDesktopTaskComplete(sessions.list),
+    'ui-conversation: desktop task-complete',
+  )
 
   // Registration-time text (the view tab label) reads through the bound
   // translate as a thunk, so it follows the active locale without

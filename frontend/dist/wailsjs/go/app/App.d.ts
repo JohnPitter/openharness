@@ -16,3 +16,5 @@ export function EnableRemote():Promise<remote.Access>;
 export function HarnessState():Promise<Record<string, string>>;
 
 export function RestartHarness():Promise<void>;
+
+export function WindowIsForeground():Promise<boolean>;

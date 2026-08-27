@@ -117,3 +117,11 @@ func (a *App) EnableRemote() (remote.Access, error) {
 func (a *App) DisableRemote() {
 	a.remote.Stop()
 }
+
+// WindowIsForeground is true when this process owns the OS foreground window
+// (the Wails frame or its WebView2 child). An iframe click still counts —
+// the user is in OpenHarness. Another app in front, or a minimized window,
+// does not.
+func (a *App) WindowIsForeground() bool {
+	return windowIsForeground()
+}
