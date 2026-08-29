@@ -20,6 +20,9 @@ export interface ActivityGroup {
   readonly nodes: readonly ChatNode[]
   readonly counts: ActivityCounts
   readonly running: boolean
+  /** Sum of `counts`; zero means every node in the run was transparent
+   *  (e.g. reasoning-only), so the group carries no header to show. */
+  readonly total: number
 }
 
 export type GroupedChatItem = ChatNode | ActivityGroup
@@ -38,7 +41,17 @@ function toolCategory(name: string): ActivityCategory {
   return 'other'
 }
 
-function activityOf(node: ChatNode): { category: ActivityCategory; running: boolean } | null {
+/**
+ * Classifies a node for activity grouping.
+ *
+ * `category: null` marks a *transparent* activity node: it stays inside the
+ * run (so it does not split one turn's work into several summary rows) and
+ * renders in its original position when the group expands, but contributes
+ * no count to the header. A reasoning-only Assistant step (no `text`, no
+ * `tool-call` block) is the motivating case — Think summaries interleaved
+ * between tool calls must not break the run into separate collapsed rows.
+ */
+function activityOf(node: ChatNode): { category: ActivityCategory | null; running: boolean } | null {
   if (node.kind === 'tool-call') {
     const root = node.data.root
     const name = isRunningTool(root) ? root.name : (root.call?.name ?? '')
@@ -49,8 +62,11 @@ function activityOf(node: ChatNode): { category: ActivityCategory; running: bool
   }
   if (node.kind === 'assistant-step') {
     const blocks = node.data.blocks
-    if (blocks.length === 0 || blocks.some(block => block.kind !== 'tool-call')) return null
-    return { category: 'other', running: node.data.status === 'running' }
+    // A visible text block is the assistant's final reply for the step: it
+    // anchors like a normal message and must break the run.
+    if (blocks.length === 0 || blocks.some(block => block.kind === 'text')) return null
+    const hasToolCall = blocks.some(block => block.kind === 'tool-call')
+    return { category: hasToolCall ? 'other' : null, running: node.data.status === 'running' }
   }
   return null
 }
@@ -58,10 +74,14 @@ function activityOf(node: ChatNode): { category: ActivityCategory; running: bool
 function makeGroup(nodes: readonly ChatNode[]): ActivityGroup {
   const counts = emptyCounts()
   let running = false
+  let total = 0
   for (const node of nodes) {
     const activity = activityOf(node)
     if (activity === null) continue
-    counts[activity.category] += 1
+    if (activity.category !== null) {
+      counts[activity.category] += 1
+      total += 1
+    }
     running ||= activity.running
   }
   return {
@@ -70,16 +90,29 @@ function makeGroup(nodes: readonly ChatNode[]): ActivityGroup {
     nodes,
     counts: { ...counts },
     running,
+    total,
   }
 }
 
-/** Group consecutive root activity rows, retaining anchors and singleton rows. */
+/**
+ * Group consecutive root activity rows, retaining anchors and singleton rows.
+ *
+ * A run that reduces to zero category counts (every node in it was
+ * transparent, e.g. back-to-back reasoning-only steps with no tool call
+ * between them) renders its nodes individually instead of a header-less
+ * summary row.
+ */
 export function groupActivityNodes(nodes: readonly ChatNode[]): readonly GroupedChatItem[] {
   const result: GroupedChatItem[] = []
   let run: ChatNode[] = []
   const flush = (): void => {
-    if (run.length >= 2) result.push(makeGroup(run))
-    else if (run.length === 1) result.push(run[0] as ChatNode)
+    if (run.length >= 2) {
+      const group = makeGroup(run)
+      if (group.total > 0) result.push(group)
+      else result.push(...run)
+    } else if (run.length === 1) {
+      result.push(run[0] as ChatNode)
+    }
     run = []
   }
   for (const node of nodes) {

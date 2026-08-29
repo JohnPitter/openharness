@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-分组是纯视图层折叠。`packages/client/ui-conversation/src/client/chat/activity-groups.ts` 中的 `groupActivityNodes()` 对根聊天节点列表做一次扫描，把每一段两个及以上连续活动节点（tool call、command 以及纯 tool 的 assistant step）折叠为一个 `ActivityGroup`：按原顺序携带原始节点、按类别计数（`explored`、`edits`、`searches`、`commands`、`web`、`subagents`、`other`），以及由成员状态派生的 running 标志。任何锚点节点——用户或助手文本、压缩卡、milestone、轮次收尾／重试／max-tokens、上下文注入——都会打断该段并正常渲染；单个活动节点也正常渲染。凡无法精确还原的内容都不会被折叠。
+分组是纯视图层折叠。`packages/client/ui-conversation/src/client/chat/activity-groups.ts` 中的 `groupActivityNodes()` 对根聊天节点列表做一次扫描，把每一段两个及以上连续活动节点折叠为一个 `ActivityGroup`：按原顺序携带原始节点、按类别计数（`explored`、`edits`、`searches`、`commands`、`web`、`subagents`、`other`），以及由成员状态派生的 running 标志。活动节点包括 tool call、command，以及块内容仅为 tool-call 和／或 reasoning 的 assistant step；带有可见 text 块的 assistant step 是该轮次的回复，会像用户消息一样打断分组。纯 reasoning 的 assistant step（即 Think 摘要）是透明成员：它会加入该段并在展开时按原位置渲染，但不计入任何类别计数，因此穿插的推理内容不会把同一轮次的工作拆成多条摘要行。若一段内的所有成员都是透明节点（总计数为零），则按单个节点逐一渲染，而不是显示一个没有标题的分组。其他锚点节点——用户或助手文本、压缩卡、milestone、轮次收尾／重试／max-tokens、上下文注入——都会打断该段并正常渲染；单个活动节点也正常渲染。凡无法精确还原的内容都不会被折叠。
 
 `ChatView.tsx` 将分组渲染为 `ActivitySummaryRow.tsx`：一条 Cursor 风格的摘要行，带本地化的分类计数与进行中状态，以及一个 chevron 开关，可展开成员卡片（保持原顺序）并再次折叠。展开状态保存在声明的 chat store 中（按分组 key 记录的 `activityExpanded`，唯一变更入口是 `setActivityExpanded`），通过注册时的 store 工厂按会话创建。该条目标记为 `transient`：在会话内跨重挂载保留，整页重载后重置，绝不持久化或参与重放。
 
@@ -32,4 +32,4 @@ Status: implemented
 
 ## 验证
 
-没有子系统参考页拥有聊天活动表面，因此本笔记即决策记录；聊天 UI 表面未在 `docs/subsystems` 中记录。`packages/client/ui-conversation` 下的针对性组件与单元覆盖验证 `groupActivityNodes` 的段检测与锚点打断、单节点直通、分类计数、running 标志、chevron 展开／折叠顺序、跨重挂载的每会话 transient 展开状态，以及 zh/en/pt/es 摘要文案。
+没有子系统参考页拥有聊天活动表面，因此本笔记即决策记录；聊天 UI 表面未在 `docs/subsystems` 中记录。`packages/client/ui-conversation` 下的针对性组件与单元覆盖验证 `groupActivityNodes` 的段检测与锚点打断、单节点直通、分类计数、running 标志、chevron 展开／折叠顺序、跨重挂载的每会话 transient 展开状态、zh/en/pt/es 摘要文案，以及推理透明性的回归验证：一个 Think 步骤不再把一段拆成两条摘要行、透明步骤在展开顺序中保留但不计入任何类别、全部为透明步骤的一段会回退为逐个渲染，以及混合了 reasoning 与内联 tool-call 块的步骤计入 `other`。

@@ -12,6 +12,17 @@ function tool(key: string, name: string): ChatNode {
   })
 }
 
+function reasoning(key: string, status: 'running' | 'settled' = 'settled'): ChatNode {
+  return node(key, 'assistant-step', { status, blocks: [{ kind: 'reasoning', text: 'thinking…' }] })
+}
+
+function reasoningWithToolCall(key: string): ChatNode {
+  return node(key, 'assistant-step', {
+    status: 'settled',
+    blocks: [{ kind: 'reasoning', text: 'thinking…' }, { kind: 'tool-call', name: 'read' }],
+  })
+}
+
 const anchors: readonly [string, ChatNode][] = [
   ['user message', node('user', 'user', {})],
   ['assistant text', node('assistant', 'assistant-step', {
@@ -70,5 +81,43 @@ describe('groupActivityNodes', () => {
     const output = groupActivityNodes(input)
     expect(output).toEqual(input)
     output.forEach((item, index) => { expect(item).toBe(input[index]) })
+  })
+
+  it('does not split one run at a reasoning-only step (regression: Think interleaved with tool calls)', () => {
+    // Reproduces the reported transcript: 2 commands, a Think summary, 4 more commands —
+    // must condense into ONE summary row, not two.
+    const items = groupActivityNodes([
+      tool('c1', 'pwsh'), tool('c2', 'pwsh'),
+      reasoning('think-1'),
+      tool('c3', 'pwsh'), tool('c4', 'pwsh'), tool('c5', 'pwsh'), tool('c6', 'pwsh'),
+    ])
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'activity-group', counts: { commands: 6 } })
+    expect((items[0] as { nodes: readonly ChatNode[] }).nodes.map(n => n.key))
+      .toEqual(['c1', 'c2', 'think-1', 'c3', 'c4', 'c5', 'c6'])
+  })
+
+  it('keeps a reasoning-only step in expansion order without counting it in any category', () => {
+    const items = groupActivityNodes([tool('a', 'read'), reasoning('think'), tool('b', 'read')])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ counts: { explored: 2, other: 0 } })
+  })
+
+  it('marks the group running when an in-progress reasoning step is the only running node', () => {
+    const items = groupActivityNodes([tool('a', 'read'), reasoning('think', 'running')])
+    expect(items[0]).toMatchObject({ running: true })
+  })
+
+  it('counts a reasoning step that also carries an inline tool-call block as "other"', () => {
+    const items = groupActivityNodes([tool('a', 'read'), reasoningWithToolCall('mixed'), tool('b', 'read')])
+    expect(items[0]).toMatchObject({ counts: { explored: 2, other: 1 } })
+  })
+
+  it('renders an all-transparent run as individual nodes instead of an empty-header group', () => {
+    const first = reasoning('think-1')
+    const second = reasoning('think-2')
+    const items = groupActivityNodes([first, second])
+    expect(items).toEqual([first, second])
   })
 })
