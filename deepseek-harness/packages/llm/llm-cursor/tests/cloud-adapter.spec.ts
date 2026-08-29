@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
-import { LlmError } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, createToolResultMessage, createUserMessage, LlmError } from '@deepseek-ai/dsh-llm'
 
 const sdk = vi.hoisted(() => {
   const send = vi.fn()
   const close = vi.fn()
-  const create = vi.fn(async () => ({ send, close }))
+  const create = vi.fn(async (_options?: unknown) => ({ send, close }))
   const list = vi.fn()
   return { send, close, create, list }
 })
@@ -21,7 +21,11 @@ afterEach(() => { vi.useRealTimers() })
 const echoTool = { name: 'echo', description: 'Echo', parameters: { type: 'object' } }
 type MockTool = { execute: (args: Record<string, unknown>, context: { toolCallId?: string }) => Promise<unknown> }
 type MockSendOptions = { local: { customTools: Record<string, MockTool> }; onDelta: (x: { update: unknown }) => void }
-const toolResult = (id: string, value: string) => ({ role: 'tool' as const, content: [{ type: 'tool-result' as const, toolCallId: id as never, content: [{ type: 'text' as const, text: value }] }] })
+const toolResult = (id: string, value: string) => createToolResultMessage({
+  callId: id as never,
+  content: [{ type: 'text', text: value }],
+  isError: false,
+})
 
 const usage = { inputTokens: 3, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
@@ -65,8 +69,8 @@ describe('CursorCloudAdapter SDK transport', () => {
 
   it('serializes all conversation turns with role markers', () => {
     const prompt = serializeCloudPrompt({ ...base, system: 'rules', messages: [
-      { role: 'user', content: [{ type: 'text', text: 'one' }] },
-      { role: 'assistant', content: [{ type: 'text', text: 'two' }] },
+      createUserMessage({ content: [{ type: 'text', text: 'one' }], source: { kind: 'user' } }),
+      createAssistantMessage({ content: [{ type: 'text', text: 'two' }], source: { provider: 'cursor', model: 'composer-2.5' } }),
     ] })
     expect(prompt).toContain('[system]')
     expect(prompt).toContain('[user]')
@@ -103,16 +107,16 @@ describe('CursorCloudAdapter SDK transport', () => {
     let pending!: Promise<unknown>
     let settled = false
     send.mockImplementationOnce(async (_prompt: string, options: MockSendOptions) => {
-      pending = options.local.customTools.echo.execute({ msg: 'ping' }, { toolCallId: 'call-1' }).then(() => { settled = true; options.onDelta({ update: { type: 'text-delta', text: 'pong' } }) })
+      pending = options.local.customTools.echo!.execute({ msg: 'ping' }, { toolCallId: 'call-1' }).then(() => { settled = true; options.onDelta({ update: { type: 'text-delta', text: 'pong' } }) })
       return { wait: async () => { await pending; return { status: 'completed' } } }
     })
-    const first = adapter.stream({ ...base, sessionId: 'agent-1', tools: [echoTool] })[Symbol.asyncIterator]()
+    const first = adapter.stream({ ...base, sessionId: 'agent-1' as never, tools: [echoTool] })[Symbol.asyncIterator]()
     expect((await first.next()).value).toMatchObject({ type: 'block-start', blockType: 'tool-call' })
     expect((await first.next()).value).toMatchObject({ type: 'tool-call-delta', id: 'call-1' })
     expect((await first.next()).value).toMatchObject({ type: 'block-end', block: { type: 'tool-call', name: 'echo' } })
     expect((await first.next()).value).toEqual({ type: 'finish', reason: { kind: 'tool-calls' } })
     expect(settled).toBe(false)
-    const second = adapter.stream({ ...base, sessionId: 'agent-1', tools: [echoTool], messages: [toolResult('call-1', 'pong-echo')] })
+    const second = adapter.stream({ ...base, sessionId: 'agent-1' as never, tools: [echoTool], messages: [toolResult('call-1', 'pong-echo')] })
     const chunks = []
     for await (const chunk of second) chunks.push(chunk)
     expect(settled).toBe(true)
@@ -135,12 +139,12 @@ describe('CursorCloudAdapter SDK transport', () => {
     const cancel = vi.fn()
     send.mockResolvedValueOnce({ cancel, wait: () => new Promise(() => {}) })
     const adapter = new CursorCloudAdapter(async () => 'crsr_test', () => [])
-    const first = adapter.stream({ ...base, sessionId: 'ttl-1', tools: [echoTool] })[Symbol.asyncIterator]()
+    const first = adapter.stream({ ...base, sessionId: 'ttl-1' as never, tools: [echoTool] })[Symbol.asyncIterator]()
     void first.next().catch(() => undefined)
     await vi.waitFor(() => { expect(send).toHaveBeenCalled() })
     await vi.advanceTimersByTimeAsync(30 * 60 * 1000 + 1)
     send.mockResolvedValueOnce({ wait: async () => ({ status: 'completed' }) })
-    const second = adapter.stream({ ...base, sessionId: 'ttl-2', tools: [echoTool] })[Symbol.asyncIterator]()
+    const second = adapter.stream({ ...base, sessionId: 'ttl-2' as never, tools: [echoTool] })[Symbol.asyncIterator]()
     await expect(second.next()).resolves.toMatchObject({ value: { type: 'finish' } })
     expect(cancel).toHaveBeenCalledOnce()
     expect(close).toHaveBeenCalledOnce()
@@ -153,10 +157,10 @@ describe('CursorCloudAdapter SDK transport', () => {
     let execute!: (args: Record<string, unknown>, context: { toolCallId?: string }) => Promise<unknown>
     const cancel = vi.fn()
     send.mockImplementationOnce(async (_prompt: string, options: MockSendOptions) => {
-      execute = options.local.customTools.echo.execute
+      execute = options.local.customTools.echo!.execute
       return { cancel, wait: () => new Promise(() => {}) }
     })
-    const first = adapter.stream({ ...base, sessionId: 'abort-1', tools: [echoTool] })[Symbol.asyncIterator]()
+    const first = adapter.stream({ ...base, sessionId: 'abort-1' as never, tools: [echoTool] })[Symbol.asyncIterator]()
     const initial = first.next()
     await vi.waitFor(() => { expect(send).toHaveBeenCalled() })
     const pending = execute({}, { toolCallId: 'call-abort' })
@@ -164,7 +168,7 @@ describe('CursorCloudAdapter SDK transport', () => {
     await first.next()
     await first.next()
     await first.next()
-    const stream = adapter.stream({ ...base, sessionId: 'abort-1', tools: [echoTool], signal: controller.signal })[Symbol.asyncIterator]()
+    const stream = adapter.stream({ ...base, sessionId: 'abort-1' as never, tools: [echoTool], signal: controller.signal })[Symbol.asyncIterator]()
     const waiting = stream.next()
     controller.abort()
     await expect(waiting).rejects.toMatchObject({ code: 'ABORTED' })

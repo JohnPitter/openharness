@@ -3,7 +3,7 @@ import { createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm
 import { CursorCloudAdapter } from '../src/cloud-adapter.ts'
 
 const model = 'composer-2.5'
-const sessionId = `cursor-tools-${Date.now()}`
+const sessionId = `cursor-tools-${Date.now()}` as never
 const tools = [{
   name: 'echo',
   description: 'Echo the message',

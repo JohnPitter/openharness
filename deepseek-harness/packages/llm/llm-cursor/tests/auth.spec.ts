@@ -5,9 +5,9 @@ const http2 = vi.hoisted(() => {
   const state = { status: 200, body: JSON.stringify({ apiKey: 'crsr_test_key' }), close: vi.fn() }
   const connect = vi.fn(() => ({
     request: vi.fn(() => {
-      const callbacks = new Map<string, (...args: never[]) => void>()
+      const callbacks = new Map<string, (...args: unknown[]) => void>()
       return {
-        on(event: string, callback: (...args: never[]) => void) { callbacks.set(event, callback); return this },
+        on(event: string, callback: (...args: unknown[]) => void) { callbacks.set(event, callback); return this },
         end() {
           queueMicrotask(() => {
             callbacks.get('response')?.({ ':status': state.status } as never)

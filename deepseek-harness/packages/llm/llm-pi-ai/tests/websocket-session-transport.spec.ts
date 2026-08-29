@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Api, AssistantMessageEvent, Model } from '@earendil-works/pi-ai'
+import type { AssistantMessageEvent, Model } from '@earendil-works/pi-ai'
 import { PiAiAdapter } from '../src/adapter.ts'
 import { resolveProfiles } from '../src/config.ts'
 import type { ResolvedPiAiProviderProfile } from '../src/config.ts'
@@ -17,6 +17,7 @@ const WS_MODEL: Model<'openai-responses'> = {
   maxTokens: 1024,
   input: ['text'],
   reasoning: false,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 }
 
 const SSE_MODEL: Model<'openai-responses'> = {
@@ -29,12 +30,14 @@ const SSE_MODEL: Model<'openai-responses'> = {
   maxTokens: 1024,
   input: ['text'],
   reasoning: false,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 }
 
 function terminalEvents(): AsyncIterable<AssistantMessageEvent> {
   return (async function* () {
     yield {
       type: 'done',
+      reason: 'stop',
       message: {
         role: 'assistant',
         content: [{ type: 'text', text: 'ok' }],

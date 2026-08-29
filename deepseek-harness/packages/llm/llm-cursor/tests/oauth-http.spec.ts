@@ -41,7 +41,7 @@ function response(): ServerResponse & { statusCodeWritten: number, body: string 
   } as unknown as ServerResponse & { statusCodeWritten: number, body: string }
 }
 
-function store(access?: string): CursorOauthStore & { tokens?: CursorTokens, cleared: boolean } {
+function store(access?: string): CursorOauthStore & { tokens?: CursorTokens | undefined; cleared: boolean } {
   const state: { access: string | undefined, tokens?: CursorTokens, cleared: boolean } = {
     access,
     cleared: false,
