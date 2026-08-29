@@ -70,6 +70,37 @@ describe('desktop-complete', () => {
     expect(completed).toEqual([])
   })
 
+  it.each(['approval', 'plan-review', 'question'] as const)(
+    'does not chime when a root only stopped to block on a pending %s',
+    (pendingInteraction) => {
+      const prev = new Map<SessionId, boolean>([[sid('a'), true]])
+      const { next, completed } = rootTaskCompletions(prev, {
+        [sid('a')]: row('a', false, { title: 'Ship the client', pendingInteraction }),
+      }, 'ding')
+      expect(completed).toEqual([])
+      // The pause is still recorded, so a later real idle correctly diffs against it.
+      expect(next.get(sid('a'))).toBe(false)
+    },
+  )
+
+  it('chimes on the real idle once a pending interaction clears, not on the pause that preceded it', () => {
+    let prev = new Map<SessionId, boolean>()
+
+    // Task starts running.
+    prev = rootTaskCompletions(prev, { [sid('a')]: row('a', true, { title: 'Ship the client' }) }).next
+    // It pauses to ask the user something — no chime yet.
+    let result = rootTaskCompletions(prev, {
+      [sid('a')]: row('a', false, { title: 'Ship the client', pendingInteraction: 'question' }),
+    })
+    expect(result.completed).toEqual([])
+    prev = result.next
+    // The user answers and the agent resumes.
+    prev = rootTaskCompletions(prev, { [sid('a')]: row('a', true, { title: 'Ship the client' }) }).next
+    // The task actually finishes.
+    result = rootTaskCompletions(prev, { [sid('a')]: row('a', false, { title: 'Ship the client' }) }, 'chord')
+    expect(result.completed).toEqual([{ sessionId: sid('a'), title: 'Ship the client', sound: 'chord' }])
+  })
+
   it('watches the list store and posts each new idle edge once', () => {
     let snapshot: Pick<SessionListState, 'byId'> = { byId: { [sid('a')]: row('a', true) } }
     const listeners = new Set<() => void>()

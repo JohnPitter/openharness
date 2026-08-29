@@ -39,6 +39,10 @@ export function isRootTaskSession(row: Pick<SessionSummary, 'parentId' | 'origin
 /**
  * Diff running bits against the previous observation. First sight of a
  * session only records the bit — sessions already idle at bind do not chime.
+ * A root that stopped running because it is now blocking on the user
+ * (an approval, a plan review, or a question — the sidebar amber-dot state)
+ * has not finished its task, so that edge is not a completion either; the
+ * eventual real idle, once `pendingInteraction` clears, still fires.
  * @param prev - last observed running bit per session.
  * @param byId - current list rows.
  * @param sound - live preference id stamped onto each completion.
@@ -54,7 +58,7 @@ export function rootTaskCompletions(
   for (const [sessionId, row] of Object.entries(byId) as [SessionId, SessionSummary][]) {
     next.set(sessionId, row.running)
     if (!isRootTaskSession(row)) continue
-    if (prev.get(sessionId) === true && !row.running) {
+    if (prev.get(sessionId) === true && !row.running && row.pendingInteraction === undefined) {
       completed.push({ sessionId, title: row.title ?? row.displayTitle, sound })
     }
   }
