@@ -12,7 +12,7 @@ beforeEach(() => {
 describe('createChatStore', () => {
   it('init shape: empty selection/draft/view', () => {
     const store = createChatStore().create()
-    expect(store.store.getSnapshot()).toEqual({ selection: null, draft: '', view: null, inspect: null })
+    expect(store.store.getSnapshot()).toEqual({ selection: null, draft: '', view: null, inspect: null, activityExpanded: {} })
   })
 
   it('actions cover the declared write set', () => {
@@ -33,6 +33,19 @@ describe('createChatStore', () => {
     expect(store.store.getSnapshot().inspect).toEqual({ callId: 'c1' })
     store.actions.setInspect(null)
     expect(store.store.getSnapshot().inspect).toBeNull()
+    store.actions.setActivityExpanded('activity:a', true)
+    expect(store.store.getSnapshot().activityExpanded).toEqual({ 'activity:a': true })
+  })
+
+  it('does not persist activity expansion while retaining persisted chat state', () => {
+    const first = createChatStore().create('sess-transient')
+    first.actions.setDraft('kept')
+    first.actions.setActivityExpanded('activity:a', true)
+    const raw = localStorage.getItem(`${KEY}.sess-transient`)
+    expect(raw).not.toContain('activityExpanded')
+    const revived = createChatStore().create('sess-transient')
+    expect(revived.store.getSnapshot().draft).toBe('kept')
+    expect(revived.store.getSnapshot().activityExpanded).toEqual({})
   })
 
   it('persists per scope key and rehydrates a fresh instance', () => {

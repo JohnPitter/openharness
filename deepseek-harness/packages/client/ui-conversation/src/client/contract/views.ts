@@ -29,4 +29,6 @@ export interface ChatStoreState {
    * persisted snapshots from before this field rehydrate without it.
    */
   inspect: { callId: CallId } | null
+  /** Expanded activity-group keys; intentionally transient UI state. */
+  activityExpanded: Readonly<Record<string, boolean>>
 }

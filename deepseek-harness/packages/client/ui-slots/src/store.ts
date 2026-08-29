@@ -44,6 +44,8 @@ export type BakedActions<T, A extends ActionsDecl<T>> = {
 export interface StoreSpec<T, A extends ActionsDecl<T>> {
   init: () => T
   persist?: string
+  /** Top-level state fields omitted from persistence and rehydration. */
+  transient?: readonly string[]
   actions: A
 }
 

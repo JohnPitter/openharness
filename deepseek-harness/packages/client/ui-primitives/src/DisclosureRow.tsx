@@ -10,6 +10,8 @@ export interface DisclosureRowProps {
   open: boolean
   expandable: boolean
   onToggle: () => void
+  /** Accessible action label for the active disclosure target. */
+  ariaLabel?: string | undefined
   /** Makes the complete title row the disclosure target. */
   expandOnRowClick?: boolean | undefined
   /** Replaces the collapsed icon with a chevron while the row is hovered. */
@@ -36,6 +38,7 @@ export function DisclosureRow({
   open,
   expandable,
   onToggle,
+  ariaLabel,
   expandOnRowClick = false,
   previewChevron = expandable,
   keepContentWhenOpen = false,
@@ -78,6 +81,7 @@ export function DisclosureRow({
         role={rowExpands ? 'button' : undefined}
         tabIndex={rowExpands ? 0 : undefined}
         aria-expanded={rowExpands ? open : undefined}
+        aria-label={rowExpands ? ariaLabel : undefined}
         onClick={rowExpands ? onToggle : undefined}
         onKeyDown={rowExpands ? toggleFromKeyboard : undefined}
       >
@@ -86,6 +90,7 @@ export function DisclosureRow({
             type="button"
             className={clsx(css.leading, leadingClassName)}
             aria-expanded={open}
+            aria-label={ariaLabel}
             onClick={toggleFromLeading}
           >
             {leading}

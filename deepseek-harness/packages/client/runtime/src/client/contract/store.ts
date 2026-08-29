@@ -84,12 +84,12 @@ function rafBatch(notify: () => void): () => void {
  * @returns the store.
  */
 export function createSnapshotStore<T>(
-  init: T, opts?: { flush?: 'raf' | 'sync'; persist?: { name: string } }): SnapshotStore<T> {
+  init: T, opts?: { flush?: 'raf' | 'sync'; persist?: { name: string; transient?: readonly string[] } }): SnapshotStore<T> {
   // Immer enters through produce() in update() below (identical semantics to
   // the immer middleware without its setState-signature mutator generics).
   const withSelector = subscribeWithSelector(() => init)
   const api: StoreApi<T> = createStore<T>()(withSelector)
-  if (opts?.persist) attachPersistence(api, opts.persist.name)
+  if (opts?.persist) attachPersistence(api, opts.persist.name, opts.persist.transient)
 
   let subscribe = (fn: () => void) => api.subscribe(fn)
   if (opts?.flush === 'raf') {
@@ -124,7 +124,7 @@ export function createSnapshotStore<T>(
  * because the corruption happens before serialization. Storage failures
  * (quota, private mode) only disable persistence, never break the store.
  */
-function attachPersistence<T>(api: StoreApi<T>, name: string): void {
+function attachPersistence<T>(api: StoreApi<T>, name: string, transient: readonly string[] = []): void {
   // Non-browser runs (node e2e booting the client tree) have no localStorage:
   // persistence silently disables — same contract as a storage failure, minus
   // the per-store console noise a ReferenceError would produce.
@@ -132,14 +132,22 @@ function attachPersistence<T>(api: StoreApi<T>, name: string): void {
   try {
     const raw = localStorage.getItem(name)
     if (raw !== null) {
-      api.setState(devFreeze(JSON.parse(raw) as T), true)
+      const parsed = JSON.parse(raw) as T
+      if (typeof parsed === 'object' && parsed !== null && typeof api.getState() === 'object' && api.getState() !== null) {
+        api.setState(devFreeze({ ...api.getState(), ...parsed }), true)
+      } else {
+        api.setState(devFreeze(parsed), true)
+      }
     }
   } catch (error) {
     console.error(`snapshot store '${name}' rehydration failed:`, error)
   }
   api.subscribe((state) => {
     try {
-      localStorage.setItem(name, JSON.stringify(state))
+      const persisted = typeof state === 'object' && state !== null && transient.length > 0
+        ? Object.fromEntries(Object.entries(state).filter(([key]) => !transient.includes(key)))
+        : state
+      localStorage.setItem(name, JSON.stringify(persisted))
     } catch (error) {
       console.error(`snapshot store '${name}' persistence failed:`, error)
     }
@@ -214,7 +222,9 @@ export function defineStore<T, A extends ActionsDecl<T>>(
         : scopeKey === undefined ? decl.persist : `${decl.persist}.${scopeKey}`
       const store = createSnapshotStore<T>(
         decl.init(),
-        persistKey !== undefined ? { persist: { name: persistKey } } : undefined)
+        persistKey !== undefined
+          ? { persist: { name: persistKey, ...(decl.transient === undefined ? {} : { transient: decl.transient }) } }
+          : undefined)
       const actions = {} as Record<string, (...params: unknown[]) => void>
       for (const key of Object.keys(decl.actions)) {
         const mutate = decl.actions[key] as (draft: T, ...params: unknown[]) => void

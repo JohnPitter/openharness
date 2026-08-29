@@ -21,6 +21,8 @@ import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
+import { ActivitySummaryRow } from './ActivitySummaryRow.tsx'
+import { groupActivityNodes, type GroupedChatItem } from './activity-groups.ts'
 import { ChatRail } from './ChatRail.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
@@ -159,12 +161,17 @@ function TurnStatus({ startTime, t }: {
  * ordered business Node crosses the keyed renderer seat.
  */
 export function ChatView({
-  useSession, useSessions, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
+  useSession, useSessions, useStore, actions, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
   editMessage, continueTurn, fileMentions, t,
 }: ChatViewSlotProps) {
-  const order = useSession(s => s.chat.order)
-  const nodeStore = useSession(s => s.chat.nodes)
-  const timeline = useSession(s => s.chat.timeline)
+  const chat = useSession(s => s.chat)
+  const { order, nodes: nodeStore, timeline } = chat
+  const currentNodes = useMemo(() => order.flatMap((key) => {
+    const node = nodeStore.get(key)
+    return node === undefined ? [] : [node]
+  }) as import('../contract/chat-nodes.ts').ChatNode[], [chat, nodeStore, order])
+  const groupedItems = useMemo(() => groupActivityNodes(currentNodes), [currentNodes])
+  const activityExpanded = useStore(s => s.activityExpanded)
   const inbox = useSession(s => s.queue)
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
@@ -428,6 +435,29 @@ export function ChatView({
     if (!loadingOlder) anchorRef.current = null
   }, [loadingOlder])
 
+  const renderNode = useCallback((node: typeof currentNodes[number]) => (
+    <ChatNodeSeat
+      key={node.key}
+      nodeKey={node.key}
+      useSession={useSession}
+      selectedCallId={selectedCallId}
+      cwd={cwd}
+      openFile={requestOpenFile}
+      inspectCall={inspectCall}
+      forkAt={forkAt}
+      editMessage={userEdit}
+      editLatestUserSeq={latestUserSeq}
+      continueTurn={continueTurn}
+      renderMessageImages={renderMessageImages}
+      fileMentions={fileMentions}
+      renderSlot={renderSlot}
+      t={t}
+    />
+  ), [
+    useSession, selectedCallId, cwd, requestOpenFile, inspectCall, forkAt, userEdit,
+    latestUserSeq, continueTurn, renderMessageImages, fileMentions, renderSlot, t,
+  ])
+
   const loadOlderAnchored = (): void => {
     const local = listRef.current
     /* v8 ignore next -- ref-null guard: the paging button renders inside the list tree. */
@@ -464,25 +494,16 @@ export function ChatView({
               </button>
             </div>
           )}
-          {order.map(nodeKey => (
-            <ChatNodeSeat
-              key={nodeKey}
-              nodeKey={nodeKey}
-              useSession={useSession}
-              selectedCallId={selectedCallId}
-              cwd={cwd}
-              openFile={requestOpenFile}
-              inspectCall={inspectCall}
-              forkAt={forkAt}
-              editMessage={userEdit}
-              editLatestUserSeq={latestUserSeq}
-              continueTurn={continueTurn}
-              renderMessageImages={renderMessageImages}
-              fileMentions={fileMentions}
-              renderSlot={renderSlot}
+          {groupedItems.map((item: GroupedChatItem) => item.kind === 'activity-group' ? (
+            <ActivitySummaryRow
+              key={item.key}
+              group={item}
+              expanded={activityExpanded[item.key] === true}
+              onToggle={() => { actions.setActivityExpanded(item.key, activityExpanded[item.key] !== true) }}
               t={t}
+              renderNode={renderNode}
             />
-          ))}
+          ) : renderNode(item))}
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}

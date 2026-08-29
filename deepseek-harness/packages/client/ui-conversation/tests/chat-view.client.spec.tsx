@@ -431,24 +431,19 @@ describe('ChatView', () => {
     expect(scroller.scrollTop).toBe(590) // latest 90 + the anchored row's 500px prepend shift
   })
 
-  it('renders the fixture main line as independently keyed business nodes', () => {
+  it('expands and collapses grouped activity while preserving card order', () => {
     const h = makeHarness({
       nodes: [user(1, 'do the thing'), assistant(2, 'running tools'), toolResult(3, 'a'), toolResult(4, 'b')],
     })
     const view = render(<h.ChatView {...h.props} />)
     expect(view.getByText('do the thing')).toBeTruthy()
     expect(view.getByText('running tools')).toBeTruthy()
+    expect(view.queryByTestId('tool-seat-a')).toBeNull()
+
+    fireEvent.click(view.getByRole('button', { name: '展开活动' }))
+    expect(view.getByRole('button', { name: '收起活动' }).getAttribute('aria-expanded')).toBe('true')
     expect(view.getByTestId('tool-seat-a').textContent).toBe('bash:a')
     expect(view.getByTestId('tool-seat-b').textContent).toBe('bash:b')
-    expect([...view.container.querySelectorAll('[data-chat-flow-key]')].map(row => ({
-      key: row.getAttribute('data-chat-flow-key'),
-      kind: row.getAttribute('data-chat-flow-kind'),
-    }))).toEqual([
-      { key: 'fixture:user:1', kind: 'user' },
-      { key: 'fixture:assistant:2', kind: 'assistant-step' },
-      { key: 'fixture:tool:a', kind: 'tool-call' },
-      { key: 'fixture:tool:b', kind: 'tool-call' },
-    ])
     expect([...view.container.querySelectorAll('[data-chat-call-id]')].map(row => row.getAttribute('data-chat-call-id')))
       .toEqual(['a', 'b'])
     expect([...view.container.querySelectorAll('[data-chat-anchor-key]')].map(row => row.getAttribute('data-chat-anchor-key')))
@@ -456,6 +451,53 @@ describe('ChatView', () => {
         'fixture:user:1', 'fixture:assistant:2',
         'fixture:tool:a', 'call:a', 'fixture:tool:b', 'call:b',
       ])
+
+    fireEvent.click(view.getByRole('button', { name: '收起活动' }))
+    expect(view.getByRole('button', { name: '展开活动' }).getAttribute('aria-expanded')).toBe('false')
+    expect(view.queryByTestId('tool-seat-a')).toBeNull()
+    expect(view.queryByTestId('tool-seat-b')).toBeNull()
+    expect(view.container.querySelector('[data-activity-group="activity:fixture:tool:a"]')).toBeTruthy()
+  })
+
+  it('updates summary counts and progress state when a running turn settles', () => {
+    const h = makeHarness({
+      running: true,
+      runningCalls: [runningCall('read-now', 'read'), runningCall('edit-now', 'edit')],
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByText('探索了 1 个文件 · 编辑了 1 个文件')).toBeTruthy()
+    expect(view.getByText('活动进行中')).toBeTruthy()
+    expect(view.getByRole('button', { name: '展开活动' }).getAttribute('aria-expanded')).toBe('false')
+
+    act(() => {
+      h.set({
+        nodes: [toolResult(3, 'read-now', 'read'), toolResult(4, 'edit-now', 'edit')],
+        runningCalls: [],
+        running: false,
+      })
+    })
+
+    expect(view.getByText('探索了 1 个文件 · 编辑了 1 个文件')).toBeTruthy()
+    expect(view.queryByText('活动进行中')).toBeNull()
+    expect(view.container.querySelector('[data-running]')).toBeNull()
+  })
+
+  it('retains expansion across remounts of one store and starts collapsed with a fresh store', () => {
+    const nodes = [toolResult(3, 'a'), toolResult(4, 'b')]
+    const h = makeHarness({ nodes })
+    const view = render(<h.ChatView {...h.props} />)
+    fireEvent.click(view.getByRole('button', { name: '展开活动' }))
+    expect(view.getByTestId('tool-seat-a')).toBeTruthy()
+
+    view.rerender(<div />)
+    view.rerender(<h.ChatView {...h.props} />)
+    expect(view.getByRole('button', { name: '收起活动' }).getAttribute('aria-expanded')).toBe('true')
+    expect(view.getByTestId('tool-seat-a')).toBeTruthy()
+
+    const fresh = makeHarness({ nodes })
+    view.rerender(<fresh.ChatView {...fresh.props} />)
+    expect(view.getByRole('button', { name: '展开活动' }).getAttribute('aria-expanded')).toBe('false')
+    expect(view.queryByTestId('tool-seat-a')).toBeNull()
   })
 
   it('offers edit only on the latest user message, including a session-located tail', () => {
