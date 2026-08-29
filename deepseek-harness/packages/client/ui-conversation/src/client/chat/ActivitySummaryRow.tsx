@@ -13,7 +13,7 @@ interface ActivitySummaryRowProps {
   readonly renderNode: (node: ActivityGroup['nodes'][number]) => ReactNode
 }
 
-const order: readonly ActivityCategory[] = ['explored', 'edits', 'searches', 'commands', 'web', 'subagents', 'other']
+const order: readonly ActivityCategory[] = ['context', 'explored', 'edits', 'searches', 'commands', 'web', 'subagents', 'other']
 
 function categoryText(category: ActivityCategory, count: number, t: ChatViewSlotProps['t']): string {
   return t(`activity.${category}.${count === 1 ? 'one' : 'other'}`, { count })

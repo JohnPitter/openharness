@@ -2,9 +2,10 @@ import type { ChatNode } from '../contract/chat-nodes.ts'
 import { isRunningTool } from '../contract/chat-nodes.ts'
 
 export type ActivityCategory =
-  | 'explored' | 'edits' | 'searches' | 'commands' | 'web' | 'subagents' | 'other'
+  | 'context' | 'explored' | 'edits' | 'searches' | 'commands' | 'web' | 'subagents' | 'other'
 
 export interface ActivityCounts {
+  readonly context: number
   readonly explored: number
   readonly edits: number
   readonly searches: number
@@ -28,7 +29,7 @@ export interface ActivityGroup {
 export type GroupedChatItem = ChatNode | ActivityGroup
 
 function emptyCounts(): Record<ActivityCategory, number> {
-  return { explored: 0, edits: 0, searches: 0, commands: 0, web: 0, subagents: 0, other: 0 }
+  return { context: 0, explored: 0, edits: 0, searches: 0, commands: 0, web: 0, subagents: 0, other: 0 }
 }
 
 function toolCategory(name: string): ActivityCategory {
@@ -59,6 +60,13 @@ function activityOf(node: ChatNode): { category: ActivityCategory | null; runnin
   }
   if (node.kind === 'command') {
     return { category: 'commands', running: node.data.outcome === null }
+  }
+  if (node.kind === 'context') {
+    // Logged, already-resolved content (system prompt, skill catalog, a
+    // recalled session) — never running, but groupable like any other
+    // activity so consecutive injections condense into one row instead of
+    // each showing its own collapsed ContextInjectionRow.
+    return { category: 'context', running: false }
   }
   if (node.kind === 'assistant-step') {
     const blocks = node.data.blocks

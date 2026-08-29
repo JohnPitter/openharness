@@ -23,6 +23,10 @@ function reasoningWithToolCall(key: string): ChatNode {
   })
 }
 
+function context(key: string): ChatNode {
+  return node(key, 'context', {})
+}
+
 const anchors: readonly [string, ChatNode][] = [
   ['user message', node('user', 'user', {})],
   ['assistant text', node('assistant', 'assistant-step', {
@@ -31,7 +35,6 @@ const anchors: readonly [string, ChatNode][] = [
   ['compaction card', node('compaction', 'compaction', {})],
   ['milestone', node('milestone', 'milestone', {})],
   ['turn tail', node('tail', 'turn-tail', {})],
-  ['context injection', node('context', 'context', {})],
 ]
 
 describe('groupActivityNodes', () => {
@@ -119,5 +122,29 @@ describe('groupActivityNodes', () => {
     const second = reasoning('think-2')
     const items = groupActivityNodes([first, second])
     expect(items).toEqual([first, second])
+  })
+
+  it('groups consecutive context injections into one row', () => {
+    const items = groupActivityNodes([context('sys-prompt'), context('skill-catalog')])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'activity-group', counts: { context: 2 }, running: false })
+  })
+
+  it('condenses two context injections and a leading Think into one row (regression: turn-opening setup stayed visible)', () => {
+    // Reproduces the reported transcript: system-prompt injection, skill-catalog
+    // injection, then a Think summary before the assistant's visible reply —
+    // all three must condense into ONE row instead of three separate rows.
+    const items = groupActivityNodes([
+      context('sys-prompt'), context('skill-catalog'), reasoning('think-1'),
+    ])
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'activity-group', counts: { context: 2, other: 0 } })
+    expect((items[0] as { nodes: readonly ChatNode[] }).nodes.map(n => n.key))
+      .toEqual(['sys-prompt', 'skill-catalog', 'think-1'])
+  })
+
+  it('retains a singleton context injection ungrouped', () => {
+    const injection = context('sys-prompt')
+    expect(groupActivityNodes([injection])).toEqual([injection])
   })
 })
