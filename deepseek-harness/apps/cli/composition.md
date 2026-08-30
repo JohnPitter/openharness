@@ -44,6 +44,20 @@ flowchart LR
   cfg --> plugin_dsh_base_llm_pi_ai
   plugin_dsh_base_glm_5_3["glm-5.3<br/>GLM-5.3"]
   cfg --> plugin_dsh_base_glm_5_3
+  plugin_dsh_base_glm_5_3_flash["glm-5.3-flash<br/>GLM-5.3-Flash"]
+  cfg --> plugin_dsh_base_glm_5_3_flash
+  plugin_dsh_base_glm_5_2["glm-5.2<br/>GLM-5.2"]
+  cfg --> plugin_dsh_base_glm_5_2
+  plugin_dsh_base_glm_5_1["glm-5.1<br/>GLM-5.1"]
+  cfg --> plugin_dsh_base_glm_5_1
+  plugin_dsh_base_glm_5_turbo["glm-5-turbo<br/>GLM-5-Turbo"]
+  cfg --> plugin_dsh_base_glm_5_turbo
+  plugin_dsh_base_glm_5v_turbo["glm-5v-turbo<br/>GLM-5V-Turbo"]
+  cfg --> plugin_dsh_base_glm_5v_turbo
+  plugin_dsh_base_glm_4_7["glm-4.7<br/>GLM-4.7"]
+  cfg --> plugin_dsh_base_glm_4_7
+  plugin_dsh_base_glm_4_5_air["glm-4.5-air<br/>GLM-4.5-Air"]
+  cfg --> plugin_dsh_base_glm_4_5_air
   plugin_dsh_base_big_pickle["big-pickle<br/>Big Pickle"]
   cfg --> plugin_dsh_base_big_pickle
   plugin_dsh_base_mimo_v2_5_free["mimo-v2.5-free<br/>MiMo V2.5 Free"]
@@ -74,6 +88,32 @@ flowchart LR
   cfg --> plugin_dsh_base_deepseek_v4_pro
   plugin_dsh_base_deepseek_v4_flash["deepseek-v4-flash<br/>DeepSeek V4 Flash"]
   cfg --> plugin_dsh_base_deepseek_v4_flash
+  plugin_dsh_base_deepseek_v4_flash["deepseek-v4-flash<br/>DeepSeek V4 Flash Go"]
+  cfg --> plugin_dsh_base_deepseek_v4_flash
+  plugin_dsh_base_deepseek_v4_pro["deepseek-v4-pro<br/>DeepSeek V4 Pro Go"]
+  cfg --> plugin_dsh_base_deepseek_v4_pro
+  plugin_dsh_base_glm_5_1["glm-5.1<br/>GLM 5.1 Go"]
+  cfg --> plugin_dsh_base_glm_5_1
+  plugin_dsh_base_glm_5_2["glm-5.2<br/>GLM 5.2 Go"]
+  cfg --> plugin_dsh_base_glm_5_2
+  plugin_dsh_base_hy3["hy3<br/>Hy3"]
+  cfg --> plugin_dsh_base_hy3
+  plugin_dsh_base_kimi_k2_6["kimi-k2.6<br/>Kimi K2.6"]
+  cfg --> plugin_dsh_base_kimi_k2_6
+  plugin_dsh_base_kimi_k2_7_code["kimi-k2.7-code<br/>Kimi K2.7 Code Go"]
+  cfg --> plugin_dsh_base_kimi_k2_7_code
+  plugin_dsh_base_kimi_k3["kimi-k3<br/>Kimi K3 (2x usage)"]
+  cfg --> plugin_dsh_base_kimi_k3
+  plugin_dsh_base_mimo_v2_5["mimo-v2.5<br/>MiMo V2.5"]
+  cfg --> plugin_dsh_base_mimo_v2_5
+  plugin_dsh_base_mimo_v2_5_pro["mimo-v2.5-pro<br/>MiMo V2.5 Pro"]
+  cfg --> plugin_dsh_base_mimo_v2_5_pro
+  plugin_dsh_base_minimax_m2_7["minimax-m2.7<br/>MiniMax M2.7 Go"]
+  cfg --> plugin_dsh_base_minimax_m2_7
+  plugin_dsh_base_qwen3_6_plus["qwen3.6-plus<br/>Qwen3.6 Plus"]
+  cfg --> plugin_dsh_base_qwen3_6_plus
+  plugin_dsh_base_llm_cursor["llm-cursor<br/>@deepseek-ai/dsh-llm-cursor"]
+  cfg --> plugin_dsh_base_llm_cursor
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@deepseek-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_attachment_local["attachment-local<br/>@deepseek-ai/dsh-attachment-local"]
@@ -224,6 +264,13 @@ flowchart LR
 | `credentials` | `@deepseek-ai/dsh-credentials-local` |
 | `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
 | `glm-5.3` | `GLM-5.3` |
+| `glm-5.3-flash` | `GLM-5.3-Flash` |
+| `glm-5.2` | `GLM-5.2` |
+| `glm-5.1` | `GLM-5.1` |
+| `glm-5-turbo` | `GLM-5-Turbo` |
+| `glm-5v-turbo` | `GLM-5V-Turbo` |
+| `glm-4.7` | `GLM-4.7` |
+| `glm-4.5-air` | `GLM-4.5-Air` |
 | `big-pickle` | `Big Pickle` |
 | `mimo-v2.5-free` | `MiMo V2.5 Free` |
 | `hy3-free` | `Hy3 Free` |
@@ -239,6 +286,19 @@ flowchart LR
 | `minimax-m3` | `MiniMax M3` |
 | `deepseek-v4-pro` | `DeepSeek V4 Pro` |
 | `deepseek-v4-flash` | `DeepSeek V4 Flash` |
+| `deepseek-v4-flash` | `DeepSeek V4 Flash Go` |
+| `deepseek-v4-pro` | `DeepSeek V4 Pro Go` |
+| `glm-5.1` | `GLM 5.1 Go` |
+| `glm-5.2` | `GLM 5.2 Go` |
+| `hy3` | `Hy3` |
+| `kimi-k2.6` | `Kimi K2.6` |
+| `kimi-k2.7-code` | `Kimi K2.7 Code Go` |
+| `kimi-k3` | `Kimi K3 (2x usage)` |
+| `mimo-v2.5` | `MiMo V2.5` |
+| `mimo-v2.5-pro` | `MiMo V2.5 Pro` |
+| `minimax-m2.7` | `MiniMax M2.7 Go` |
+| `qwen3.6-plus` | `Qwen3.6 Plus` |
+| `llm-cursor` | `@deepseek-ai/dsh-llm-cursor` |
 | `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` |
 | `attachment-local` | `@deepseek-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@deepseek-ai/dsh-session-query-sqlite` |
