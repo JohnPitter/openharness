@@ -17,7 +17,7 @@ import (
 
 // Version is the build's semver without a leading v. Release builds also pass
 // -ldflags "-X openharness/internal/update.Version=…".
-var Version = "0.1.55"
+var Version = "0.1.56"
 
 // Repo is owner/name of the GitHub repository that publishes releases.
 var Repo = "JohnPitter/openharness"

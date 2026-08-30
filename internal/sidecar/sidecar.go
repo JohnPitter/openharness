@@ -414,6 +414,9 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("extração do runtime: %w", err)
 	}
+	if err := sanitizeRuntimeManifest(dir); err != nil {
+		return "", err
+	}
 	nodePath := filepath.Join(dir, "node.exe")
 	binPath := filepath.Join(dir, "dsh-runtime", "lib", "bin.js")
 

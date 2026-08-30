@@ -3,6 +3,7 @@ package sidecar
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -346,6 +347,53 @@ func TestWriteFileIfUnchanged(t *testing.T) {
 	}
 	if string(got) != "other-node" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSanitizeRuntimeManifestRepairsTrailingComma(t *testing.T) {
+	dir := t.TempDir()
+	pkgDir := filepath.Join(dir, "dsh-runtime")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	broken := []byte("{\n  \"name\": \"dsh\",\n  \"dependencies\": {\n    \"x\": \"1\"\n  },\n}\n")
+	path := filepath.Join(pkgDir, "package.json")
+	if err := os.WriteFile(path, broken, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := sanitizeRuntimeManifest(dir); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !json.Valid(got) {
+		t.Fatalf("still invalid: %s", got)
+	}
+	if err := sanitizeRuntimeManifest(dir); err != nil {
+		t.Fatal(err)
+	}
+	again, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again) != string(got) {
+		t.Fatal("second sanitize rewrote a valid manifest")
+	}
+}
+
+func TestSanitizeRuntimeManifestRejectsUnrepairableJSON(t *testing.T) {
+	dir := t.TempDir()
+	pkgDir := filepath.Join(dir, "dsh-runtime")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := sanitizeRuntimeManifest(dir); err == nil {
+		t.Fatal("expected error for unrepairable JSON")
 	}
 }
 

@@ -50,6 +50,9 @@ pnpm --filter @deepseek-ai/dsh deploy --legacy --prod `
 # dsh-runtime/node_modules/@deepseek-ai/<pkg>/lib. Recopie apps/web/dist
 # para dsh-web-frontend/dist. Confira RemoteChip (ou outra string nova) no
 # client.js de dsh-client-ui-model-selection no staging antes de zipar.
+# Confira JSON.parse em dsh-runtime/package.json antes de zipar: o
+# deploy --prod pode remover devDependencies e deixar vírgula residual
+# (Node recusa com ERR_INVALID_PACKAGE_CONFIG).
 # zipar dsh-runtime -> internal/sidecar/assets/dsh-runtime.zip
 # copiar node.exe -> internal/sidecar/assets/node.exe
 ```
