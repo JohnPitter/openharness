@@ -223,6 +223,13 @@ describe('PiAiAdapter provider routing', () => {
         baseURL: 'https://opencode.ai/zen/v1',
         models: [{ id: 'kimi-k2.7-code' }],
       },
+      'opencode-go': {
+        displayName: 'OpenCode Go',
+        apiKeyEnv: 'OPENCODE_API_KEY',
+        api: 'openai-completions',
+        baseURL: 'https://opencode.ai/zen/go/v1',
+        models: [{ id: 'kimi-k2.7-code' }],
+      },
       'acme-gateway': {
         displayName: 'Acme Gateway',
         api: 'openai-completions',
@@ -241,6 +248,9 @@ describe('PiAiAdapter provider routing', () => {
     })
     expect(adapter.providerInfo('opencode')).toEqual({
       id: 'opencode', name: 'OpenCode', metering: 'requests',
+    })
+    expect(adapter.providerInfo('opencode-go')).toEqual({
+      id: 'opencode-go', name: 'OpenCode Go', metering: 'requests',
     })
     expect(adapter.providerInfo('acme-gateway')).toEqual({ id: 'acme-gateway', name: 'Acme Gateway' })
   })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertServiceable, Config } from '../src/config.ts'
+import { assertServiceable, Config, resolveProfiles } from '../src/config.ts'
 
 /** Validate one hand-declared route, with the caller's fields layered onto it. */
 const routeWith = (profile: Record<string, unknown>): (() => unknown) =>
@@ -34,6 +34,30 @@ describe('reasoning schema boundary', () => {
 
   it('rejects a thinking format outside the offered set', () => {
     expect(configWith({ compat: { thinkingFormat: 'quantum' } })).toThrow(/expected/)
+  })
+})
+
+describe('model group label', () => {
+  it('passes a configured group through unchanged, alongside a serviceable route', () => {
+    type Materialized = { providers: Record<string, { models?: { group?: unknown }[] }> }
+    const withGroup = configWith({ group: 'Free' })() as Materialized
+    expect(withGroup.providers['acme-gateway']?.models?.[0]?.group).toBe('Free')
+    expect(() => { assertServiceable(configWith({ group: 'Free' })() as Config) }).not.toThrow()
+    const absent = configWith({})() as Materialized
+    expect(absent.providers['acme-gateway']?.models?.[0]?.group).toBeUndefined()
+  })
+
+  it('never reaches the pi-ai model a request dispatches through', () => {
+    const resolved = resolveProfiles({
+      'acme-gateway': {
+        api: 'openai-completions',
+        baseURL: 'https://acme.test',
+        models: [{ id: 'm', group: 'Free' }],
+      },
+    })
+    const model = resolved.get('acme-gateway')?.piProvider.getModels()[0]
+    expect(model?.id).toBe('m')
+    expect(model).not.toHaveProperty('group')
   })
 })
 

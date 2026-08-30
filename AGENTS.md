@@ -122,10 +122,16 @@ Composição em `packages/bundle/base/cordis.patch.yml` (`llm-pi-ai.config.provi
 | Claude Code | `claude-code` | `CLAUDE_CODE_OAUTH_TOKEN` | Plano Pro/Max (`claude setup-token`, `sk-ant-oat…`) |
 | Codex | `openai-codex` | `CODEX_ACCESS_TOKEN` | Plano ChatGPT Codex (JWT em `%USERPROFILE%\.codex\auth.json`) |
 | GLM Coding Plan | `zai` | `ZAI_API_KEY` | Coding Plan em `https://api.z.ai/api/coding/paas/v4` |
-| OpenCode | `opencode` | `OPENCODE_API_KEY` | Gateway Zen (`https://opencode.ai/zen/v1`, chat-completions) |
+| OpenCode | `opencode` | `OPENCODE_API_KEY` | Gateway Zen (`https://opencode.ai/zen/v1`, chat-completions; Free/Zen) |
+| OpenCode Go | `opencode-go` | `OPENCODE_API_KEY` | Gateway Zen Go, sub-path apartado (`https://opencode.ai/zen/go/v1`) |
 
 Claude Code: o pi-ai detecta `sk-ant-oat` e manda Bearer + identity de Claude Code.
 Codex: o token precisa ser JWT com `chatgpt_account_id`; `sk-` da Platform não serve nessa rota.
+OpenCode: os modelos de cada rota carregam `group: Free|Zen|Go` (campo apenas de
+exibição, ignorado na resolução) — Settings → Models agrupa a lista do card sob
+esses cabeçalhos. Go repete alguns ids da rota `opencode` com capacidade/preço
+diferentes servidos num `baseURL` distinto, por isso é uma rota (e card) separada
+em vez de entrar na mesma lista de modelos.
 
 ## Provider Cursor
 

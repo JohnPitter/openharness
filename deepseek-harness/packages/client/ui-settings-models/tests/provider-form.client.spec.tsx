@@ -390,6 +390,43 @@ describe('model list editing', () => {
       .toContainEqual({ op: 'unset', path: ['providers', 'openai', 'models'] })
   })
 
+  it('clusters rows carrying a group under that label, ungrouped rows first', async () => {
+    await mountSection({
+      providers: {
+        openai: {
+          baseURL: 'https://proxy.example/v1',
+          models: [
+            { id: 'free-a', group: 'Free' },
+            { id: 'plain' },
+            { id: 'zen-a', group: 'Zen' },
+            { id: 'free-b', group: 'Free' },
+          ],
+        },
+      },
+    })
+    openEditor('openai')
+
+    expect(screen.getByText('Free')).toBeTruthy()
+    expect(screen.getByText('Zen')).toBeTruthy()
+    // Position in the configured array, not visual row order, is what every
+    // other row action (remove, expand) is keyed by; grouping must not
+    // renumber it.
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelId} 1`).value).toBe('free-a')
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelId} 2`).value).toBe('plain')
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelId} 3`).value).toBe('zen-a')
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelId} 4`).value).toBe('free-b')
+  })
+
+  it('renders a flat list, with no group heading, when no row carries a group', async () => {
+    await mountSection({
+      providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'plain' }] } },
+    })
+    openEditor('openai')
+
+    expect(screen.queryByText('Free')).toBeNull()
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelId} 1`).value).toBe('plain')
+  })
+
 })
 
 describe('capacity spellings', () => {

@@ -14,7 +14,9 @@ import {
   asCompactionUserSettings,
   registerCompactionUserSettings,
 } from '@deepseek-ai/dsh-compaction-basic/src/user-settings.ts'
-import { selectCompactableRange, summarizerSpanBudget, pressureSummarizerSpanBudget } from '@deepseek-ai/dsh-compaction-basic/src/region.ts'
+import {
+  loggedSummarizerSpanBudget, pressureSummarizerSpanBudget, selectCompactableRange, summarizerSpanBudget,
+} from '@deepseek-ai/dsh-compaction-basic/src/region.ts'
 import type { SummarizationInput, SummaryResult } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { compactionInstruction } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import { CompactionId, toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
@@ -364,6 +366,8 @@ describe('compact configuration and defaults', () => {
       maxTokens: 8192,
       compactionRetries: 1,
       maxOverflowRetries: 1,
+      summarizerSpanCeiling: SUMMARIZER_SPAN_CEILING,
+      summarizerEnvelopeReserve: SUMMARIZER_ENVELOPE_RESERVE,
       modelPolicies: [],
       auto: true,
     })
@@ -387,6 +391,54 @@ describe('compact configuration and defaults', () => {
       retainTokens: 70,
     })
     expect(retentionOnly).not.toHaveProperty('retainRatio')
+  })
+
+  it('resolves summarizer span ceiling and envelope reserve with configurable defaults', () => {
+    const defaults = resolveConfig({})
+    expect(defaults.summarizerSpanCeiling).toBe(SUMMARIZER_SPAN_CEILING)
+    expect(defaults.summarizerEnvelopeReserve).toBe(SUMMARIZER_ENVELOPE_RESERVE)
+
+    const configured = resolveConfig({ summarizerSpanCeiling: 4_096, summarizerEnvelopeReserve: 512 })
+    expect(configured.summarizerSpanCeiling).toBe(4_096)
+    expect(configured.summarizerEnvelopeReserve).toBe(512)
+
+    const overridden = resolveTargetPolicy(resolveConfig({
+      summarizerSpanCeiling: 4_096,
+      summarizerEnvelopeReserve: 512,
+      modelPolicies: [{
+        provider: 'small-provider',
+        model: 'small-model',
+        summarizerSpanCeiling: 1_024,
+      }],
+    }), { provider: 'small-provider', model: 'small-model' })
+    // An override names only the field it changes; the sibling stays inherited.
+    expect(overridden.summarizerSpanCeiling).toBe(1_024)
+    expect(overridden.summarizerEnvelopeReserve).toBe(512)
+
+    const inherited = resolveTargetPolicy(resolveConfig({
+      summarizerSpanCeiling: 4_096,
+      summarizerEnvelopeReserve: 512,
+      modelPolicies: [{ provider: 'other-provider', model: 'other-model' }],
+    }), { provider: 'other-provider', model: 'other-model' })
+    expect(inherited.summarizerSpanCeiling).toBe(4_096)
+    expect(inherited.summarizerEnvelopeReserve).toBe(512)
+
+    // resolveCompactSpec passes both fields through unscaled, unlike thresholdRatio/retainRatio.
+    expect(resolveCompactSpec(overridden, 1_000_000)).toMatchObject({
+      summarizerSpanCeiling: 1_024,
+      summarizerEnvelopeReserve: 512,
+    })
+  })
+
+  it('rejects an invalid summarizer span ceiling or envelope reserve at either scope', () => {
+    expect(() => resolveConfig({ summarizerSpanCeiling: 0 })).toThrow(/summarizerSpanCeiling/)
+    expect(() => resolveConfig({ summarizerSpanCeiling: 1.5 })).toThrow(/summarizerSpanCeiling/)
+    expect(() => resolveConfig({ summarizerEnvelopeReserve: -1 })).toThrow(/summarizerEnvelopeReserve/)
+    expect(() => resolveConfig({
+      modelPolicies: [{ provider: 'p', model: 'm', summarizerSpanCeiling: 0 }],
+    })).toThrow(/summarizerSpanCeiling/)
+    // A zero envelope reserve is a valid (aggressive) choice.
+    expect(resolveConfig({ summarizerEnvelopeReserve: 0 }).summarizerEnvelopeReserve).toBe(0)
   })
 
   it('merges exact provider/model policy overrides and scales ratios per model', () => {
@@ -854,6 +906,25 @@ describe('pressure measurement and retention', () => {
     expect(summarizerSpanBudget(128, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)).toBe(0)
     expect(pressureSummarizerSpanBudget(128, maxTokens)).toBeUndefined()
     expect(pressureSummarizerSpanBudget(272_144, maxTokens)).toBe(SUMMARIZER_SPAN_CEILING)
+  })
+
+  it('honors a configured envelope reserve and span ceiling in place of the built-in constants', () => {
+    const maxTokens = 1_000
+    // A smaller ceiling than the envelope-aware result wins, same as the
+    // built-in constant does above the default ceiling.
+    expect(summarizerSpanBudget(1_000_000, maxTokens, 2_000, 4_096)).toBe(4_096)
+    // A larger ceiling than the envelope-aware result leaves that result
+    // uncapped, proving the ceiling argument — not the built-in default — is
+    // what is compared.
+    expect(summarizerSpanBudget(20_000, maxTokens, 2_000, 10_000)).toBe(7_000)
+    expect(pressureSummarizerSpanBudget(1_000_000, maxTokens, 2_000, 4_096)).toBe(4_096)
+    const session = conversation(1)
+    expect(loggedSummarizerSpanBudget(session, maxTokens, 2_000, 4_096)).toBe(4_096)
+    // A non-finite ceiling fails closed, alongside the existing non-finite guards.
+    expect(summarizerSpanBudget(1_000_000, maxTokens, 2_000, Number.NaN)).toBe(0)
+  })
+
+  it('selects no range when the safe span budget is zero', async () => {
     const ctx = createContext()
     const session = conversation(2)
     expect(selectCompactableRange(session, ctx.tokenMeter.measure(session), 0, 0)).toBeNull()

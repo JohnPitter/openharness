@@ -24,6 +24,19 @@ export interface CompactionPolicyConfig {
   compactionRetries?: number
   /** Maximum retries after canonical context overflow; `0` disables recovery. Defaults to `1`. */
   maxOverflowRetries?: number
+  /**
+   * Absolute latency-safe ceiling, in tokens, on the conversation prefix a
+   * summarization call replays. Defaults to `65536`; a deployment that wants a
+   * cheaper, shorter auxiliary call lowers it, trading some summary quality
+   * for less replayed input on every compaction.
+   */
+  summarizerSpanCeiling?: number
+  /**
+   * Reserve, in tokens, subtracted for the summarizer's own system prompt and
+   * compaction instruction before halving the routed model's context window.
+   * Defaults to `16384`.
+   */
+  summarizerEnvelopeReserve?: number
 }
 
 /** Exact provider/model override merged over the default compaction policy. */
@@ -55,6 +68,8 @@ interface ResolvedPolicyFields {
   readonly maxTokens: number
   readonly compactionRetries: number
   readonly maxOverflowRetries: number
+  readonly summarizerSpanCeiling: number
+  readonly summarizerEnvelopeReserve: number
 }
 
 /** Validated immutable config whose target-specific defaults remain unresolved. */

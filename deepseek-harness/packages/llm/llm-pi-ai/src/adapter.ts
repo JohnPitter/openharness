@@ -197,6 +197,7 @@ const REQUEST_METERED_ROUTES = new Set([
   'openai-codex',
   'zai',
   'opencode',
+  'opencode-go',
 ])
 
 function clampPromptCacheKey(key: string): string {

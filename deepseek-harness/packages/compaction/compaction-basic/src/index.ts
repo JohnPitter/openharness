@@ -105,6 +105,8 @@ const summarizationModelSchema = z.string()
 const maxTokensSchema = z.number().step(1).min(1)
 const compactionRetriesSchema = z.number().step(1).min(0)
 const maxOverflowRetriesSchema = z.number().step(1).min(0)
+const summarizerSpanCeilingSchema = z.number().step(1).min(1)
+const summarizerEnvelopeReserveSchema = z.number().step(1).min(0)
 
 const modelPolicy: z<ModelCompactPolicyConfig> = z.object({
   provider: z.string().required(),
@@ -117,6 +119,8 @@ const modelPolicy: z<ModelCompactPolicyConfig> = z.object({
   maxTokens: maxTokensSchema,
   compactionRetries: compactionRetriesSchema,
   maxOverflowRetries: maxOverflowRetriesSchema,
+  summarizerSpanCeiling: summarizerSpanCeilingSchema,
+  summarizerEnvelopeReserve: summarizerEnvelopeReserveSchema,
 })
 
 /**
@@ -139,6 +143,8 @@ export class BasicCompactionEngine extends CompactionEngine {
     maxTokens: maxTokensSchema,
     compactionRetries: compactionRetriesSchema,
     maxOverflowRetries: maxOverflowRetriesSchema,
+    summarizerSpanCeiling: summarizerSpanCeilingSchema,
+    summarizerEnvelopeReserve: summarizerEnvelopeReserveSchema,
     modelPolicies: z.array(modelPolicy),
     auto: z.boolean(),
   })
@@ -330,11 +336,14 @@ export class BasicCompactionEngine extends CompactionEngine {
         prune.pruneSession(agent.session)
         measurement = meter.measure(agent.session)
       }
+      const overflowSpanBudget = loggedSummarizerSpanBudget(
+        agent.session, policy.maxTokens, policy.summarizerEnvelopeReserve, policy.summarizerSpanCeiling,
+      )
       const range = selectCompactableRange(
         agent.session,
         measurement,
         0,
-        loggedSummarizerSpanBudget(agent.session, policy.maxTokens),
+        overflowSpanBudget,
       )
       if (range === null) return null
       return compactSurfaceRegion(
@@ -343,7 +352,7 @@ export class BasicCompactionEngine extends CompactionEngine {
         range.start,
         range.end,
         agent,
-        { owner: 'current-turn', stability: 'whole-surface', maxSpanTokens: loggedSummarizerSpanBudget(agent.session, policy.maxTokens) },
+        { owner: 'current-turn', stability: 'whole-surface', maxSpanTokens: overflowSpanBudget },
         signal,
       )
     }
@@ -372,7 +381,9 @@ export class BasicCompactionEngine extends CompactionEngine {
     }
     if (measurement.totalTokens < spec.thresholdTokens) return null
 
-    const spanBudget = pressureSummarizerSpanBudget(context.contextWindow, policy.maxTokens)
+    const spanBudget = pressureSummarizerSpanBudget(
+      context.contextWindow, policy.maxTokens, policy.summarizerEnvelopeReserve, policy.summarizerSpanCeiling,
+    )
     let result: CompactionResult | null = null
     for (let attempt = 0; attempt <= spec.compactionRetries; attempt += 1) {
       const range = selectCompactableRange(agent.session, measurement, spec.retainTokens, spanBudget)
@@ -447,10 +458,10 @@ export class BasicCompactionEngine extends CompactionEngine {
           const prune = this.ctx.get('toolResultPruner')
           if (prune !== undefined) prune.pruneSession(agent.session)
           const target = routedTarget(agent.session)
-          const maxTokens = target === undefined
-            ? this.config.maxTokens
-            : resolveTargetPolicy(this.config, target).maxTokens
-          const spanBudget = loggedSummarizerSpanBudget(agent.session, maxTokens)
+          const policy = target === undefined ? this.config : resolveTargetPolicy(this.config, target)
+          const spanBudget = loggedSummarizerSpanBudget(
+            agent.session, policy.maxTokens, policy.summarizerEnvelopeReserve, policy.summarizerSpanCeiling,
+          )
           const range = selectCompactableRange(
             agent.session,
             this.ctx.tokenMeter.measure(agent.session),

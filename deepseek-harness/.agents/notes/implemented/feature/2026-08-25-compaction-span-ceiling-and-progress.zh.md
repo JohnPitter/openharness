@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`summarizerSpanBudget` 仍计算 `floor(window / 2) - maxTokens - envelope`。正结果再取 `min(SUMMARIZER_SPAN_CEILING, 该值)`，其中 `SUMMARIZER_SPAN_CEILING = 65_536`。envelope 感知结果为零时保持为零，因此小广告窗口上的压力仍不设上限。压力、溢出和 `compactNow` 都经过该函数。
+`summarizerSpanBudget` 仍计算 `floor(window / 2) - maxTokens - envelope`。正结果再取 `min(spanCeiling, 该值)`。envelope 感知结果为零时保持为零，因此小广告窗口上的压力仍不设上限。压力、溢出和 `compactNow` 都经过该函数。上限与 envelope 预留现在是 `BasicCompactionConfig.summarizerSpanCeiling`／`summarizerEnvelopeReserve`（可像 `maxTokens` 一样通过 `modelPolicies` 按模型覆盖），默认值即本说明最初硬编码的 `SUMMARIZER_SPAN_CEILING = 65_536`／`SUMMARIZER_ENVELOPE_RESERVE = 16_384` 常量——为何改为配置字段见[可配置摘要区间说明](2026-08-30-compaction-configurable-span-and-tighter-defaults.zh.md)。
 
 当压力重试已落地替换但仍高于阈值时，`compactIfNeeded` 返回最近一次结果，而不是抛出。下一次 `agent/pre-step` 从该替换继续。不能缩小源内容的摘要仍在区域事务内被拒绝。
 

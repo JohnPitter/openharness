@@ -6,6 +6,7 @@
 
 import { deepFreeze } from '@deepseek-ai/dsh-llm'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { SUMMARIZER_ENVELOPE_RESERVE, SUMMARIZER_SPAN_CEILING } from './region.ts'
 import type {
   BasicCompactionConfig,
   CompactionPolicyConfig,
@@ -32,6 +33,8 @@ const POLICY_CONFIG_KEYS = [
   'maxTokens',
   'compactionRetries',
   'maxOverflowRetries',
+  'summarizerSpanCeiling',
+  'summarizerEnvelopeReserve',
 ] as const
 
 /** Complete public top-level configuration key set. */
@@ -91,6 +94,8 @@ export function resolveConfig(config: BasicCompactionConfig = {}): ResolvedConfi
     maxTokens: config.maxTokens ?? 8192,
     compactionRetries: config.compactionRetries ?? 1,
     maxOverflowRetries: config.maxOverflowRetries ?? 1,
+    summarizerSpanCeiling: config.summarizerSpanCeiling ?? SUMMARIZER_SPAN_CEILING,
+    summarizerEnvelopeReserve: config.summarizerEnvelopeReserve ?? SUMMARIZER_ENVELOPE_RESERVE,
     modelPolicies,
     auto: config.auto ?? true,
   })
@@ -121,6 +126,8 @@ export function resolveTargetPolicy(
     maxTokens: override?.maxTokens ?? config.maxTokens,
     compactionRetries: override?.compactionRetries ?? config.compactionRetries,
     maxOverflowRetries: override?.maxOverflowRetries ?? config.maxOverflowRetries,
+    summarizerSpanCeiling: override?.summarizerSpanCeiling ?? config.summarizerSpanCeiling,
+    summarizerEnvelopeReserve: override?.summarizerEnvelopeReserve ?? config.summarizerEnvelopeReserve,
   })
 }
 
@@ -163,6 +170,8 @@ export function resolveCompactSpec(
     maxTokens: policy.maxTokens,
     compactionRetries: policy.compactionRetries,
     maxOverflowRetries: policy.maxOverflowRetries,
+    summarizerSpanCeiling: policy.summarizerSpanCeiling,
+    summarizerEnvelopeReserve: policy.summarizerEnvelopeReserve,
   })
 }
 
@@ -234,6 +243,8 @@ function validatePolicy(
   const maxTokens = config.maxTokens
   const compactionRetries = config.compactionRetries
   const maxOverflowRetries = config.maxOverflowRetries
+  const summarizerSpanCeiling = config.summarizerSpanCeiling
+  const summarizerEnvelopeReserve = config.summarizerEnvelopeReserve
   if (thresholdRatio !== undefined) assertRatio(`${name}.thresholdRatio`, thresholdRatio)
   if (retainRatio !== undefined) assertRatio(`${name}.retainRatio`, retainRatio)
   if (retainTokens !== undefined) assertNonNegativeInteger(`${name}.retainTokens`, retainTokens)
@@ -246,6 +257,12 @@ function validatePolicy(
   }
   if (maxOverflowRetries !== undefined) {
     assertNonNegativeInteger(`${name}.maxOverflowRetries`, maxOverflowRetries)
+  }
+  if (summarizerSpanCeiling !== undefined) {
+    assertPositiveInteger(`${name}.summarizerSpanCeiling`, summarizerSpanCeiling)
+  }
+  if (summarizerEnvelopeReserve !== undefined) {
+    assertNonNegativeInteger(`${name}.summarizerEnvelopeReserve`, summarizerEnvelopeReserve)
   }
 
   validateSummarizationPair(config, name)

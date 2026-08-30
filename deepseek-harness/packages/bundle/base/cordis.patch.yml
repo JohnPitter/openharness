@@ -167,7 +167,9 @@
           # DeepSeek/free). GPT/Grok/Muse Spark (Responses) and Claude/Qwen
           # (Messages) stay addable with a different `api` — pi-ai binds one
           # wire protocol per route. Muse Spark 1.2 Contributor Free is omitted
-          # for that reason (`/zen/v1/responses`).
+          # for that reason (`/zen/v1/responses`). Each entry's `group` (a
+          # display-only field the Settings → Models editor reads to cluster
+          # rows under a heading) marks its Zen pricing tier: Free or Zen.
           opencode:
             displayName: OpenCode
             apiKeyEnv: OPENCODE_API_KEY
@@ -178,62 +180,151 @@
                 name: Big Pickle
                 contextWindow: 262144
                 maxTokens: 32768
+                group: Free
               - id: mimo-v2.5-free
                 name: MiMo V2.5 Free
                 contextWindow: 262144
                 maxTokens: 32768
+                group: Free
               - id: hy3-free
                 name: Hy3 Free
                 contextWindow: 200000
                 maxTokens: 32768
+                group: Free
               - id: nemotron-3-ultra-free
                 name: Nemotron 3 Ultra Free
                 contextWindow: 131072
                 maxTokens: 32768
+                group: Free
               - id: nemotron-3.5-lightning-free
                 name: Nemotron 3.5 Lightning Free
                 contextWindow: 131072
                 maxTokens: 32768
+                group: Free
               - id: deepseek-v4-flash-free
                 name: DeepSeek V4 Flash Free
                 contextWindow: 200000
                 maxTokens: 128000
+                group: Free
               - id: laguna-s-2.1-free
                 name: Laguna S 2.1 Free
                 contextWindow: 200000
                 maxTokens: 32768
+                group: Free
               - id: kimi-k2.7-code
                 name: Kimi K2.7 Code
                 contextWindow: 262144
                 maxTokens: 32768
+                group: Zen
               - id: kimi-k3
                 name: Kimi K3
                 contextWindow: 262144
                 maxTokens: 32768
+                group: Zen
               - id: glm-5.2
                 name: GLM 5.2
                 contextWindow: 202752
                 maxTokens: 131072
+                group: Zen
               - id: glm-5.1
                 name: GLM 5.1
                 contextWindow: 202752
                 maxTokens: 131072
+                group: Zen
               - id: minimax-m2.7
                 name: MiniMax M2.7
                 contextWindow: 204800
                 maxTokens: 131072
+                group: Zen
               - id: minimax-m3
                 name: MiniMax M3
                 contextWindow: 204800
                 maxTokens: 131072
+                group: Zen
               - id: deepseek-v4-pro
                 name: DeepSeek V4 Pro
                 contextWindow: 1000000
                 maxTokens: 65536
+                group: Zen
               - id: deepseek-v4-flash
                 name: DeepSeek V4 Flash
                 contextWindow: 1000000
                 maxTokens: 65536
+                group: Zen
+
+          # OpenCode Zen Go: a separate cheaper-tier chat-completions gateway at
+          # its own sub-path (`/zen/go/v1`, not `/zen/v1`). Several ids repeat
+          # from the route above (e.g. `deepseek-v4-pro`) with different
+          # capacities and pricing, which is exactly why this cannot be folded
+          # into the `opencode` route's models list: a route may not list one
+          # id twice, and each entry has a single baseURL. Same credential
+          # (`OPENCODE_API_KEY`) as the Zen route above.
+          opencode-go:
+            displayName: OpenCode Go
+            apiKeyEnv: OPENCODE_API_KEY
+            api: openai-completions
+            baseURL: https://opencode.ai/zen/go/v1
+            models:
+              - id: deepseek-v4-flash
+                name: DeepSeek V4 Flash Go
+                contextWindow: 1000000
+                maxTokens: 384000
+                group: Go
+              - id: deepseek-v4-pro
+                name: DeepSeek V4 Pro Go
+                contextWindow: 1000000
+                maxTokens: 384000
+                group: Go
+              - id: glm-5.1
+                name: GLM 5.1 Go
+                contextWindow: 202752
+                maxTokens: 32768
+                group: Go
+              - id: glm-5.2
+                name: GLM 5.2 Go
+                contextWindow: 1000000
+                maxTokens: 131072
+                group: Go
+              - id: hy3
+                name: Hy3
+                contextWindow: 256000
+                maxTokens: 64000
+                group: Go
+              - id: kimi-k2.6
+                name: Kimi K2.6
+                contextWindow: 262144
+                maxTokens: 65536
+                group: Go
+              - id: kimi-k2.7-code
+                name: Kimi K2.7 Code Go
+                contextWindow: 262144
+                maxTokens: 262144
+                group: Go
+              - id: kimi-k3
+                name: Kimi K3 (2x usage)
+                contextWindow: 1048576
+                maxTokens: 131072
+                group: Go
+              - id: mimo-v2.5
+                name: MiMo V2.5
+                contextWindow: 1000000
+                maxTokens: 128000
+                group: Go
+              - id: mimo-v2.5-pro
+                name: MiMo V2.5 Pro
+                contextWindow: 1048576
+                maxTokens: 128000
+                group: Go
+              - id: minimax-m2.7
+                name: MiniMax M2.7 Go
+                contextWindow: 204800
+                maxTokens: 131072
+                group: Go
+              - id: qwen3.6-plus
+                name: Qwen3.6 Plus
+                contextWindow: 1000000
+                maxTokens: 65536
+                group: Go
 
     - id: llm-cursor
       name: '@deepseek-ai/dsh-llm-cursor'
@@ -492,7 +583,11 @@
     - id: spill-policy
       name: '@deepseek-ai/dsh-spill-policy'
       config:
-        maxInlineBytes: 50000
+        # Halved from the v1 default (50000): a smaller inline cap keeps more
+        # oversized tool output out of the replayed context compaction later
+        # sends to the summarizer, without losing the full result — it stays
+        # retrievable at the spilled file's path.
+        maxInlineBytes: 24000
 
     # Durability checkpoints before each model request and top-level dispatch.
     - id: session-checkpoint-policy
@@ -500,12 +595,14 @@
 
     # Compacts oversized tool results before the broader conversation compactor
     # runs, preserving the model-visible result within the configured budget.
+    # Halved from the v1 defaults so the region a compaction cycle replays to
+    # the summarizer (for provider prefix-cache reuse) starts smaller.
     - id: tool-result-pruner
       name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
       config:
-        thresholdChars: 8192
-        headChars: 4096
-        tailChars: 1024
+        thresholdChars: 4096
+        headChars: 2048
+        tailChars: 512
 
     - id: tool-todo
       name: '@deepseek-ai/dsh-tool-todo'

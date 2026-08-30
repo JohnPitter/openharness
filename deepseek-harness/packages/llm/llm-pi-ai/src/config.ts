@@ -300,6 +300,10 @@ const modelFields = {
   // installed catalog's capability", while `false` disables reasoning.
   reasoningEfforts: z.union([z.const(false), reasoningEfforts]),
   compat: compatProfile,
+  // Display-only: the configuration surface groups a route's models under
+  // this label (a pricing tier, for instance) instead of listing them flat.
+  // Resolution never reads it, so an unset group serves the model unchanged.
+  group: z.string(),
 }
 
 const modelProfile: z<PiAiModelProfile> = z.object({

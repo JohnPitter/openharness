@@ -10,7 +10,7 @@ On a 1M-context route the envelope-aware half-window cap still selected ~475k to
 
 ## Decision
 
-`summarizerSpanBudget` still computes `floor(window / 2) - maxTokens - envelope`. A positive result is then `min(SUMMARIZER_SPAN_CEILING, that value)` with `SUMMARIZER_SPAN_CEILING = 65_536`. A zero envelope-aware result stays zero so pressure on a tiny advertised window remains uncapped. Pressure, overflow, and `compactNow` all go through that function.
+`summarizerSpanBudget` still computes `floor(window / 2) - maxTokens - envelope`. A positive result is then `min(spanCeiling, that value)`. A zero envelope-aware result stays zero so pressure on a tiny advertised window remains uncapped. Pressure, overflow, and `compactNow` all go through that function. The ceiling and the envelope reserve are `BasicCompactionConfig.summarizerSpanCeiling`/`summarizerEnvelopeReserve` (per-model overridable through `modelPolicies`, like `maxTokens`), defaulting to the `SUMMARIZER_SPAN_CEILING = 65_536` / `SUMMARIZER_ENVELOPE_RESERVE = 16_384` constants this note originally hardcoded — see the [configurable summarizer span note](2026-08-30-compaction-configurable-span-and-tighter-defaults.md) for why they became config fields.
 
 When pressure retries land replacements that remain above threshold, `compactIfNeeded` returns the latest result instead of throwing. The next `agent/pre-step` continues from the replacement. A summary that does not shrink its source is still rejected inside the region transaction.
 

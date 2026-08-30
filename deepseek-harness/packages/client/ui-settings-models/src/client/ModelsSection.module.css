@@ -483,6 +483,24 @@
   gap: 8px;
 }
 
+/* One labeled cluster of rows inside a route's model list (a pricing tier,
+   for instance) — only rendered when a row carries a `group` field. */
+.modelGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modelGroupHeading {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .modelListHead {
   display: flex;
   align-items: flex-start;

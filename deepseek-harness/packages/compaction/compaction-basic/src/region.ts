@@ -44,14 +44,26 @@ export const COMPACTION_TIMEOUT_CODE = 'COMPACTION_TIMEOUT'
 /** Five minutes covers the existing adapter idle watchdog without allowing keepalives to extend a transaction forever. */
 export const COMPACTION_OPERATION_TIMEOUT_MS = 5 * 60 * 1_000
 
-/** Resolve a fail-closed summarizer span budget from the durable request context. */
-export function loggedSummarizerSpanBudget(session: Session, maxTokens: number): number {
+/**
+ * Resolve a fail-closed summarizer span budget from the durable request context.
+ * @param session - session whose latest recorded request window is read.
+ * @param maxTokens - configured summarizer output limit.
+ * @param envelopeReserve - configured envelope reserve; defaults to the built-in constant.
+ * @param spanCeiling - configured absolute span ceiling; defaults to the built-in constant.
+ * @returns a non-negative integer safe span budget.
+ */
+export function loggedSummarizerSpanBudget(
+  session: Session,
+  maxTokens: number,
+  envelopeReserve = SUMMARIZER_ENVELOPE_RESERVE,
+  spanCeiling = SUMMARIZER_SPAN_CEILING,
+): number {
   const recorded = session.requestContext()?.contextWindow as number | null | undefined
   if (recorded === undefined) {
-    return summarizerSpanBudget(SUMMARIZER_CONTEXT_WINDOW_FALLBACK, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
+    return summarizerSpanBudget(SUMMARIZER_CONTEXT_WINDOW_FALLBACK, maxTokens, envelopeReserve, spanCeiling)
   }
   if (recorded === null || !Number.isFinite(recorded) || recorded < 0) return 0
-  return summarizerSpanBudget(recorded, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
+  return summarizerSpanBudget(recorded, maxTokens, envelopeReserve, spanCeiling)
 }
 
 /** One validated inclusive span of current surface positions. */
@@ -118,11 +130,16 @@ interface TransactionFailure {
  * Maximum priced span for a summarizer request. The half-window bound tolerates
  * a recorded/model context mismatch; output and envelope reserves keep a
  * 262K-recorded conversation inside a 128K summarizer route. A positive
- * envelope-aware result is then capped at `SUMMARIZER_SPAN_CEILING` so a 1M
- * window does not send a half-million-token request.
+ * envelope-aware result is then capped at `spanCeiling` so a 1M window does not
+ * send a half-million-token request.
  * @param contextWindow - positive adapter-owned model capacity.
  * @param maxTokens - configured summarizer output limit.
- * @param envelopeReserve - explicit budget for system/instruction overhead.
+ * @param envelopeReserve - explicit budget for system/instruction overhead;
+ * defaults to the built-in `SUMMARIZER_ENVELOPE_RESERVE` constant, overridable
+ * through `BasicCompactionConfig.summarizerEnvelopeReserve`.
+ * @param spanCeiling - absolute latency-safe span ceiling; defaults to the
+ * built-in `SUMMARIZER_SPAN_CEILING` constant, overridable through
+ * `BasicCompactionConfig.summarizerSpanCeiling`.
  * @returns a non-negative integer safe for selection. When the budget is zero,
  * selection must produce no range, so callers make no summarizer request. The
  * half-window arithmetic invariant applies only when this value is greater than zero
@@ -131,12 +148,14 @@ interface TransactionFailure {
 export function summarizerSpanBudget(
   contextWindow: number,
   maxTokens: number,
-  envelopeReserve = 16_384,
+  envelopeReserve = SUMMARIZER_ENVELOPE_RESERVE,
+  spanCeiling = SUMMARIZER_SPAN_CEILING,
 ): number {
   const halfWindow = Math.floor(contextWindow / 2)
-  if (!Number.isFinite(halfWindow) || !Number.isFinite(maxTokens) || !Number.isFinite(envelopeReserve)) return 0
+  if (!Number.isFinite(halfWindow) || !Number.isFinite(maxTokens) || !Number.isFinite(envelopeReserve)
+    || !Number.isFinite(spanCeiling)) return 0
   const envelopeAware = Math.max(0, halfWindow - Math.max(0, maxTokens) - Math.max(0, envelopeReserve))
-  return envelopeAware === 0 ? 0 : Math.min(SUMMARIZER_SPAN_CEILING, envelopeAware)
+  return envelopeAware === 0 ? 0 : Math.min(Math.max(0, spanCeiling), envelopeAware)
 }
 
 /**
@@ -145,10 +164,17 @@ export function summarizerSpanBudget(
  * uncapped so a small advertised capacity can still reduce below threshold.
  * @param contextWindow - positive adapter-owned model capacity.
  * @param maxTokens - configured summarizer output limit.
+ * @param envelopeReserve - configured envelope reserve; defaults to the built-in constant.
+ * @param spanCeiling - configured absolute span ceiling; defaults to the built-in constant.
  * @returns a positive span cap, or `undefined` when the envelope-aware budget is zero.
  */
-export function pressureSummarizerSpanBudget(contextWindow: number, maxTokens: number): number | undefined {
-  const safe = summarizerSpanBudget(contextWindow, maxTokens, SUMMARIZER_ENVELOPE_RESERVE)
+export function pressureSummarizerSpanBudget(
+  contextWindow: number,
+  maxTokens: number,
+  envelopeReserve = SUMMARIZER_ENVELOPE_RESERVE,
+  spanCeiling = SUMMARIZER_SPAN_CEILING,
+): number | undefined {
+  const safe = summarizerSpanBudget(contextWindow, maxTokens, envelopeReserve, spanCeiling)
   return safe > 0 ? safe : undefined
 }
 

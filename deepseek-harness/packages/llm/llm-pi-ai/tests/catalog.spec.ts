@@ -1244,12 +1244,26 @@ describe('OpenHarness shipped catalog routes', () => {
         api: 'openai-completions',
         baseURL: 'https://opencode.ai/zen/v1',
         models: [
-          { id: 'kimi-k2.7-code', name: 'Kimi K2.7 Code', contextWindow: 262_144, maxTokens: 32_768 },
-          { id: 'glm-5.2', name: 'GLM 5.2', contextWindow: 202_752, maxTokens: 131_072 },
+          { id: 'mimo-v2.5-free', name: 'MiMo V2.5 Free', contextWindow: 262_144, maxTokens: 32_768, group: 'Free' },
+          { id: 'kimi-k2.7-code', name: 'Kimi K2.7 Code', contextWindow: 262_144, maxTokens: 32_768, group: 'Zen' },
+          { id: 'glm-5.2', name: 'GLM 5.2', contextWindow: 202_752, maxTokens: 131_072, group: 'Zen' },
+        ],
+      },
+      // A second gateway sub-path sharing the same credential as the route
+      // above: `group` clusters the Settings → Models editor's list, and the
+      // separate route (rather than a third `opencode` entry) is what a
+      // model id repeated across tiers with different capacities forces.
+      'opencode-go': {
+        displayName: 'OpenCode Go',
+        apiKeyEnv: 'OPENCODE_API_KEY',
+        api: 'openai-completions',
+        baseURL: 'https://opencode.ai/zen/go/v1',
+        models: [
+          { id: 'kimi-k2.7-code', name: 'Kimi K2.7 Code Go', contextWindow: 262_144, maxTokens: 262_144, group: 'Go' },
         ],
       },
     })
-    expect([...resolved.keys()]).toEqual(['claude-code', 'openai-codex', 'zai', 'opencode'])
+    expect([...resolved.keys()]).toEqual(['claude-code', 'openai-codex', 'zai', 'opencode', 'opencode-go'])
     expect(resolved.get('claude-code')?.displayName).toBe('Claude Code')
     expect(resolved.get('claude-code')?.cacheRetention).toBe('long')
     expect(resolved.get('openai-codex')?.displayName).toBe('Codex')
@@ -1276,6 +1290,13 @@ describe('OpenHarness shipped catalog routes', () => {
     expect(resolved.get('opencode')?.displayName).toBe('OpenCode')
     expect(resolved.get('opencode')?.piProvider.baseUrl).toBe('https://opencode.ai/zen/v1')
     expect((resolved.get('opencode')?.piProvider.getModels() ?? []).map(model => model.id))
-      .toEqual(['kimi-k2.7-code', 'glm-5.2'])
+      .toEqual(['mimo-v2.5-free', 'kimi-k2.7-code', 'glm-5.2'])
+    // Purely descriptive: it clusters the configuration surface's row list and
+    // never reaches the pi-ai model dispatch resolves against.
+    expect(resolved.get('opencode')?.piProvider.getModels().every(model => !('group' in model))).toBe(true)
+    expect(resolved.get('opencode-go')?.displayName).toBe('OpenCode Go')
+    expect(resolved.get('opencode-go')?.piProvider.baseUrl).toBe('https://opencode.ai/zen/go/v1')
+    expect((resolved.get('opencode-go')?.piProvider.getModels() ?? []).map(model => model.id))
+      .toEqual(['kimi-k2.7-code'])
   })
 })
