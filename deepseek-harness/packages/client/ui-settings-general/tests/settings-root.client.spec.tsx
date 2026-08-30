@@ -47,7 +47,7 @@ function mount({
   // Mutable row source standing in for the bound useSections hook; bump()
   // plays a ledger change through the same observable contract.
   let current = rows
-  let currentConnectionState = connectionState
+  let currentConnectionState: ConnectionSnapshot = connectionState
   const listeners = new Set<() => void>()
   const connectionListeners = new Set<() => void>()
   const reconnect = vi.fn()
