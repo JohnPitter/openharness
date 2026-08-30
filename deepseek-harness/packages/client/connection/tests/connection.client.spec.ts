@@ -13,7 +13,7 @@ import { ConnectionController } from '../src/client/connection.ts'
 import { FakeApiClient, deferred, ok } from './fake-api.client.ts'
 
 const SID = 'fk-c1' as SessionId
-const FAST = { backoffBaseMs: 10, backoffFactor: 1, backoffMaxMs: 10, streamOpenTimeoutMs: 500 }
+const FAST = { backoffBaseMs: 10, backoffFactor: 2, backoffMaxMs: 10_000, streamOpenTimeoutMs: 500 }
 
 function subscribedFrame(lastSeq = 0) {
   return { type: 'session/subscribed', sessionId: SID, lastSeq } as const
@@ -205,7 +205,7 @@ describe('connection lifecycle', () => {
 
       await vi.waitFor(() => { expect(describeCalls).toBe(2) })
       await vi.waitFor(() => { expect(connected).toBe(1) })
-      expect(states).toEqual(['reconnecting', 'connected'])
+      expect(states).toEqual(['connecting', 'connected'])
     } finally {
       controller.stop()
       warnSpy.mockRestore()
@@ -225,7 +225,7 @@ describe('connection lifecycle', () => {
     }
   })
 
-  it('emits deduplicated connected/reconnecting state transitions', async () => {
+  it('emits deduplicated connected/connecting state transitions', async () => {
     const api = new FakeApiClient()
     const states: ConnectionState[] = []
     let connected = 0
@@ -240,7 +240,7 @@ describe('connection lifecycle', () => {
       expect(states).toEqual(['connected'])
       api.failStreams(new Error('torn'))
       await vi.waitFor(() => { expect(connected).toBe(2) })
-      expect(states).toEqual(['connected', 'reconnecting', 'connected'])
+      expect(states).toEqual(['connected', 'connecting', 'connected'])
     } finally {
       controller.stop()
       warnSpy.mockRestore()
@@ -265,7 +265,7 @@ describe('connection lifecycle', () => {
     expect(connected).toBe(0)
   })
 
-  it('deduplicates consecutive reconnecting emissions across two straight failures', async () => {
+  it('deduplicates consecutive connecting emissions across two straight failures', async () => {
     const api = new FakeApiClient()
     const gate = deferred<Awaited<ReturnType<FakeApiClient['onDescribe']>>>()
     let describeCalls = 0
@@ -285,7 +285,7 @@ describe('connection lifecycle', () => {
       await vi.waitFor(() => { expect(describeCalls).toBe(3) })
       gate.resolve(ok({ version: '0', cwd: '/f', attachedSessions: 0, home: '/h', canOpenPath: true }))
       await vi.waitFor(() => { expect(connected).toBe(1) })
-      expect(states).toEqual(['reconnecting', 'connected']) // two failures, one reconnecting emission
+      expect(states).toEqual(['connecting', 'connected']) // two failures, one connecting emission
     } finally {
       controller.stop()
       warnSpy.mockRestore()
@@ -317,6 +317,34 @@ describe('connection lifecycle', () => {
       expect(api.callsOf('host.describe')).toHaveLength(1)
     } finally {
       controller.stop()
+    }
+  })
+
+  it('reconnect() aborts backoff and starts a fresh attempt immediately', async () => {
+    const api = new FakeApiClient()
+    const gate = deferred<Awaited<ReturnType<FakeApiClient['onDescribe']>>>()
+    let describeCalls = 0
+    api.onDescribe = () => {
+      describeCalls++
+      return describeCalls === 1 ? Promise.reject(new Error('host down')) : gate.promise
+    }
+    const states: ConnectionState[] = []
+    let connected = 0
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const controller = new ConnectionController(api, {
+      onConnected: () => { connected++ },
+      onStateChange: state => states.push(state),
+    }, { backoffBaseMs: 10_000, backoffFactor: 2, backoffMaxMs: 10_000, streamOpenTimeoutMs: 500 })
+    controller.start()
+    try {
+      await vi.waitFor(() => { expect(states).toEqual(['connecting']) })
+      controller.reconnect()
+      gate.resolve(ok({ version: '0', cwd: '/f', attachedSessions: 0, home: '/h', canOpenPath: true }))
+      await vi.waitFor(() => { expect(connected).toBe(1) })
+      expect(states[states.length - 1]).toBe('connected')
+    } finally {
+      controller.stop()
+      warnSpy.mockRestore()
     }
   })
 })

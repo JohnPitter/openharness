@@ -23,6 +23,7 @@
 
 import { stat } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
+import { evaluate } from '@deepseek-ai/cordis-plugin-loader'
 import z from '@deepseek-ai/schemastery'
 import { bindScopeParent, createScope, scopeOf, type Scope, type ScopeKey, type ScopeParentBinding } from '@deepseek-ai/dsh-scope'
 // Type-only: resolves the `agent/created` lifecycle event this service watches.
@@ -31,9 +32,12 @@ import { settingsNamespace, type SettingsScope, type default as SettingsService 
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { discoverPresets, USER_PRESET_DIR } from './discovery.ts'
 import { copyComposition, deleteComposition, readComposition } from './authoring.ts'
-import { mountPreset, serviceForAgent, standingMountFor } from './mount.ts'
+import { mountPreset, livePresetMounts, serviceForAgent, standingMountFor } from './mount.ts'
 import { PresetExistsError } from './authoring.ts'
 import { PresetMountError, UnknownPresetError, type AgentPreset, type Config, type PresetRoot } from './preset.ts'
+import {
+  fileComposition, mountedCompositionRows, type AgentPresetComposition,
+} from './composition-inventory.ts'
 import type {} from './types.ts'
 
 /** Settings namespace carrying the user's chosen default preset. */
@@ -50,7 +54,7 @@ export const AgentPresetSettingsSchema: z<AgentPresetSettings> = z.object({
   default: z.string(),
 })
 
-export { COMPOSITION_FILE, discoverPresets, scanRoot } from './discovery.ts'
+export { COMPOSITION_FILE, discoverPresets, scanRoot, entryListProblem } from './discovery.ts'
 export {
   METADATA_FILE, readPresetMetadata, renderPresetMetadata, type PresetMetadata,
 } from './metadata.ts'
@@ -65,6 +69,13 @@ export {
 export { resolveSessionPreset, type PresetBearingSession } from './session.ts'
 export { PresetMountError, UnknownPresetError } from './preset.ts'
 export type { AgentPreset, Config, PresetRoot, PresetTrust } from './preset.ts'
+export {
+  fileComposition, mountedCompositionRows,
+  type AgentPresetComposition, type AgentPresetCompositionRow, type CompositionRowEnablement,
+  type DisabledExpressionEvaluator,
+} from './composition-inventory.ts'
+export { presetDisplayText } from './display.ts'
+export type { BuiltInPresetCopyKey, PresetDisplaySource, PresetDisplayText } from './display.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -198,6 +209,58 @@ export class AgentPresets extends Service {
    */
   async list(): Promise<AgentPreset[]> {
     return await discoverPresets(this.resolvedRoots)
+  }
+
+  /**
+   * Plugin rows each roster preset names, for listing surfaces.
+   *
+   * A preset with a live standing mount in this runtime answers from that
+   * mount's Loader entries — evaluated `disabled`, real root-fiber states. A
+   * preset no session has composed since boot answers from its composition
+   * file. Reading is never mounting: listing plugins cannot activate them
+   * early. A composition that stopped reading between discovery's health
+   * verdict and this read is reported broken with the raced reason rather
+   * than dropped.
+   * @returns one composition per roster preset, in roster order.
+   */
+  async compositionInventory(): Promise<AgentPresetComposition[]> {
+    const defaultId = this.defaultId
+    // The Loader's own expression scope: what a mount decision would consult.
+    // An identifier this scope cannot resolve throws under `with`, and the
+    // row stays `'conditional'`; only a gate whose identifiers resolve BOTH
+    // here and under a mounted row's entry chain, with different values,
+    // could report a wrong verdict — the shipped gates read `process` alone.
+    const evaluateExpression = (expression: string): unknown => evaluate(this.ctx.loader.ctx, expression)
+    // Mount records span every Cordis runtime in the process; only this
+    // runtime's mounts describe this roster's presets.
+    const rootFiber = this.ctx.root.fiber
+    const found: AgentPresetComposition[] = []
+    for (const preset of await this.list()) {
+      const identity = {
+        id: preset.id,
+        trust: preset.trust,
+        ...preset.name === undefined ? {} : { name: preset.name },
+        isDefault: preset.id === defaultId,
+      }
+      // Before the broken verdict: a mounted preset whose file was since
+      // deleted or corrupted still runs its standing composition. Newest
+      // generation last: mount records keep insertion order, and a
+      // superseded generation's record precedes its replacement's.
+      const mount = livePresetMounts(rootFiber).findLast(candidate => candidate.presetId === preset.id)
+      if (mount !== undefined) {
+        found.push({ ...identity, rows: mountedCompositionRows(mount.tree) })
+        continue
+      }
+      if (preset.broken !== undefined) {
+        found.push({ ...identity, broken: preset.broken, rows: [] })
+        continue
+      }
+      const read = await fileComposition(preset.path, evaluateExpression)
+      found.push('broken' in read
+        ? { ...identity, broken: read.broken, rows: [] }
+        : { ...identity, rows: read.rows })
+    }
+    return found
   }
 
   /**

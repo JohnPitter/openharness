@@ -145,11 +145,11 @@ describe('connection client apply', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const loop = handle.start({
       onStateChange: (state) => {
-        if (state === 'reconnecting') {
+        if (state === 'connecting') {
           reconnectSnapshots.push(handle.hostDescription.getSnapshot()?.canOpenPath)
         }
       },
-    }, { backoffBaseMs: 10, backoffFactor: 1, backoffMaxMs: 10, streamOpenTimeoutMs: 500 })
+    }, { backoffBaseMs: 10, backoffFactor: 2, backoffMaxMs: 10_000, streamOpenTimeoutMs: 500 })
     try {
       await vi.waitFor(() => {
         expect(handle.hostDescription.getSnapshot()?.canOpenPath).toBe(true)

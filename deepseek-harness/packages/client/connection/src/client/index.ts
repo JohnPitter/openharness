@@ -51,6 +51,14 @@ export interface HostDescriptionSource {
   subscribe(listener: () => void): () => void
 }
 
+/** Observable recovery lifecycle of the owned Connection loop. */
+export interface ConnectionStateSource {
+  /** Current state, or undefined before the first connection outcome. */
+  getSnapshot(): ConnectionState | undefined
+  /** Subscribe to state changes. */
+  subscribe(listener: () => void): () => void
+}
+
 /** Required services (none — this is the wire root). */
 export const inject: string[] = []
 
@@ -90,8 +98,12 @@ export interface ConnectionHandle {
   readonly isLoopback: boolean
   /** Generation-scoped Host facts, including the account home and native path-open capability. */
   readonly hostDescription: HostDescriptionSource
+  /** Current recovery lifecycle for connection-specific consumers. */
+  readonly state: ConnectionStateSource
   /** Generic logical RPC channels over the same Connection transport. */
   readonly rpc: ClientConnectionRpc
+  /** Reset retry progression and replace the current attempt immediately. */
+  reconnect(): void
   /**
    * Start the connect/pump/reconnect loop with the consumer's frame sinks.
    * One consumer owns the streams (the runtime object layer); a second call
@@ -101,6 +113,27 @@ export interface ConnectionHandle {
    * @returns stop handle for the loop.
    */
   start(sinks: ConnectionSinks, config?: ConnectionConfig): { stop(): void }
+}
+
+interface BrowserNetworkTarget {
+  readonly navigator?: { readonly onLine?: boolean }
+  addEventListener(type: 'online' | 'offline', listener: () => void): void
+  removeEventListener(type: 'online' | 'offline', listener: () => void): void
+}
+
+function watchBrowserNetwork(controller: ConnectionController): () => void {
+  const browser = (globalThis as { readonly window?: BrowserNetworkTarget }).window
+  const initiallyAvailable = browser?.navigator?.onLine
+  if (browser === undefined || initiallyAvailable === undefined) return () => {}
+  const online = (): void => { controller.setNetworkAvailable(true) }
+  const offline = (): void => { controller.setNetworkAvailable(false) }
+  controller.setNetworkAvailable(initiallyAvailable)
+  browser.addEventListener('online', online)
+  browser.addEventListener('offline', offline)
+  return () => {
+    browser.removeEventListener('online', online)
+    browser.removeEventListener('offline', offline)
+  }
 }
 
 /**
@@ -115,8 +148,12 @@ export function apply(ctx: Context): void {
   const api: IApiClient = fixtureClient ?? transport?.createApiClient() ?? new WebApiClient()
   const rpc = fixtureClient?.rpc ?? createWebConnectionRpc(transport?.fetch)
   let started = false
+  let controller: ConnectionController | undefined
+  let stopNetworkWatch = (): void => {}
   let description: HostDescription | undefined
+  let state: ConnectionState | undefined
   const descriptionListeners = new Set<() => void>()
+  const stateListeners = new Set<() => void>()
   const publishDescription = (next: HostDescription | undefined): void => {
     if (Object.is(description, next)) return
     description = next
@@ -125,6 +162,17 @@ export function apply(ctx: Context): void {
         listener()
       } catch (error) {
         console.error('[web-runtime] host-description listener threw:', error)
+      }
+    }
+  }
+  const publishState = (next: ConnectionState | undefined): void => {
+    if (state === next) return
+    state = next
+    for (const listener of [...stateListeners]) {
+      try {
+        listener()
+      } catch (error) {
+        console.error('[web-runtime] connection-state listener threw:', error)
       }
     }
   }
@@ -138,11 +186,21 @@ export function apply(ctx: Context): void {
         return () => { descriptionListeners.delete(listener) }
       },
     },
+    state: {
+      getSnapshot: () => state,
+      subscribe: (listener) => {
+        stateListeners.add(listener)
+        return () => { stateListeners.delete(listener) }
+      },
+    },
     rpc,
+    reconnect() {
+      controller?.reconnect()
+    },
     start(sinks, config) {
       if (started) throw new Error('connection: the stream loop is already owned by another consumer')
       started = true
-      const controller = new ConnectionController(api, {
+      const owned = new ConnectionController(api, {
         ...sinks,
         onConnected: (next) => {
           publishDescription(next)
@@ -153,16 +211,23 @@ export function apply(ctx: Context): void {
           if (!Object.is(description, next)) return
           sinks.onConnected?.(next)
         },
-        onStateChange: (state) => {
-          if (state === 'reconnecting') publishDescription(undefined)
-          sinks.onStateChange?.(state)
+        onStateChange: (next) => {
+          if (next !== 'connected') publishDescription(undefined)
+          publishState(next)
+          sinks.onStateChange?.(next)
         },
       }, config ?? {})
-      controller.start()
+      controller = owned
+      stopNetworkWatch = watchBrowserNetwork(owned)
+      owned.start()
       return {
         stop: () => {
-          controller.stop()
+          stopNetworkWatch()
+          stopNetworkWatch = () => {}
+          owned.stop()
+          if (controller === owned) controller = undefined
           publishDescription(undefined)
+          publishState(undefined)
         },
       }
     },

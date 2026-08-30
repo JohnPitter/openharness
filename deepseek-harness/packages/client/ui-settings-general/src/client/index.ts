@@ -91,8 +91,10 @@ export function apply(ctx: ClientContext): void {
   let onboardingVersion = -1
   let onboardingSteps: readonly SettingsOnboardingStep[] = []
   const shellInjected = (): SettingsRootInjected => ({
+    reconnect: () => { connection.reconnect() },
     bindNavigation: handler => ctx.settingsNav.bind(handler),
     hooks: {
+      connectionState: connection.state,
       sections: {
         getSnapshot: () => {
           const version = ctx.slots.getVersion('settings.section')
@@ -141,6 +143,7 @@ export function apply(ctx: ClientContext): void {
   })
   ctx.slots.inject('sidebar.settings', () => ctx.slots.register({
     name: 'sidebar.settings',
+    locale: NS,
     children: {
       'settings.trigger': { kind: 'single', scope: 'root' },
       'settings.header': { kind: 'single', scope: 'root' },

@@ -4,15 +4,30 @@
    panel is a two-column layout — 188px nav rail + content column with a
    54px header and the 24px-padded options area. */
 
-/* Trigger row: the 42px foot-row box shared with the Cordis footer action. */
-.trigger {
+.triggerRow {
   flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
   width: calc(100% + 4px);
-  height: 42px;
   margin: 4px -2px;
+}
+
+.triggerRow.railRow {
+  width: 36px;
+  margin: 8px 0 10px;
+}
+
+/* Trigger row: the 42px foot-row box shared with the Cordis footer action. */
+.trigger {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  height: 42px;
+  margin: 0;
   padding: 0 10px 0 8px;
   box-sizing: border-box;
   border: none;
@@ -34,7 +49,7 @@
 .trigger.rail {
   width: 36px;
   height: 36px;
-  margin: 8px 0 10px;
+  margin: 0;
   justify-content: center;
   gap: 0;
   padding: 0;

@@ -37,7 +37,7 @@ export type {} from '@deepseek-ai/dsh-settings/types'
  * the carrier's runtime values stay behind their own module edge.
  */
 export type {
-  ClientResponse, ConfigurableProviderView, ConnectionHandle, ConnectionSinks, ContentBlock,
+  ClientResponse, ConfigurableProviderView, ConnectionHandle, ConnectionSinks, ConnectionState, ContentBlock,
   CredentialView, DirectoryListing, DiscoveredModelView, AccountUsageView, AccountUsageWindowView, HistoryEntry, HostFrame, IApiClient,
   UsageBuckets, UsageDayView, UsageModelView, UsagePanelView,
   MessageId, ModelCatalogFailure, ModelProviderGroup, ModelReasoningEffort, ModelSelection,

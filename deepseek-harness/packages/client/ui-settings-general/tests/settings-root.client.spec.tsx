@@ -4,8 +4,12 @@ import { useEffect, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { SettingsRootComponentProps } from '../src/client/shell-contract.ts'
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
+import { en, type SettingsKey } from '../src/client/locales.ts'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 type Row = { id: string; order: number; label: string }
 type Step = { id: string; order: number }
@@ -18,9 +22,12 @@ const SEAT_CONTENT: Record<string, string> = {
   'settings.close': 'Close',
 }
 
+type ConnectionSnapshot = Parameters<Parameters<SettingsRootComponentProps['useConnectionState']>[0]>[0]
+
 function mount({
   wide = true,
   onboardingActive = true,
+  connectionState = 'connected',
   rows = [
     { id: 'general', order: 0, label: 'General' },
     { id: 'models', order: 10, label: 'Models' },
@@ -30,11 +37,21 @@ function mount({
     { id: 'welcome', order: -100 },
     { id: 'credential', order: 0 },
   ],
-}: { wide?: boolean; onboardingActive?: boolean; rows?: Row[]; steps?: Step[] } = {}) {
+}: {
+  wide?: boolean
+  onboardingActive?: boolean
+  connectionState?: ConnectionSnapshot
+  rows?: Row[]
+  steps?: Step[]
+} = {}) {
   // Mutable row source standing in for the bound useSections hook; bump()
   // plays a ledger change through the same observable contract.
   let current = rows
+  let currentConnectionState = connectionState
   const listeners = new Set<() => void>()
+  const connectionListeners = new Set<() => void>()
+  const reconnect = vi.fn()
+  const t = ((key: SettingsKey) => en[key]) as SettingsRootComponentProps['t']
   const renderSlot = vi.fn(
     ((key: string, _owner: unknown, opts?: { only?: string }) => {
       if (key === 'settings.section') return <div data-testid={`section-${opts?.only ?? 'all'}`} />
@@ -54,6 +71,17 @@ function mount({
     useSessions,
     useWorkspaces: unusedHook,
     wide,
+    reconnect,
+    t,
+    useConnectionState: (select) => {
+      const [, force] = useState(0)
+      useEffect(() => {
+        const listener = () => { force(n => n + 1) }
+        connectionListeners.add(listener)
+        return () => { connectionListeners.delete(listener) }
+      }, [])
+      return select(currentConnectionState)
+    },
     useOnboardingSteps: select => select(steps),
     useSections: (select) => {
       const [, force] = useState(0)
@@ -77,11 +105,20 @@ function mount({
       for (const fn of [...listeners]) fn()
     })
   }
-  return { view, renderSlot, bump, listeners, openBound: (id: string) => { boundOpen?.(id) } }
+  const setConnectionState = (next: ConnectionSnapshot) => {
+    act(() => {
+      currentConnectionState = next
+      for (const fn of [...connectionListeners]) fn()
+    })
+  }
+  return { view, renderSlot, bump, listeners, reconnect, setConnectionState, openBound: (id: string) => { boundOpen?.(id) } }
 }
 
 function openPanel() {
-  fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+  const trigger = screen.getByRole('button', { name: 'Settings' })
+  trigger.focus()
+  fireEvent.click(trigger)
+  return trigger
 }
 
 describe('SettingsRoot trigger', () => {
@@ -99,6 +136,34 @@ describe('SettingsRoot trigger', () => {
   it('hands the rail state to the trigger seat', () => {
     const { renderSlot } = mount({ wide: false })
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: false })
+  })
+
+  it('shows outage, retry progress, and a two-second recovery confirmation', () => {
+    vi.useFakeTimers()
+    const mounted = mount()
+    expect(screen.queryByRole('button', { name: 'Disconnected, reconnect now' })).toBeNull()
+
+    mounted.setConnectionState('disconnected')
+    const indicator = screen.getByRole('button', { name: 'Disconnected, reconnect now' })
+    expect(indicator.textContent).toContain('Disconnected')
+    fireEvent.click(indicator)
+    expect(mounted.reconnect).toHaveBeenCalledOnce()
+
+    mounted.setConnectionState('connecting')
+    expect(screen.getByRole('button', { name: 'Connecting, restart now' }).textContent)
+      .toContain('Connecting...')
+
+    mounted.setConnectionState('connected')
+    expect(screen.getByRole('status', { name: 'Connected' })).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(1_999) })
+    expect(screen.getByRole('status', { name: 'Connected' })).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('keeps the reconnect indicator out of the collapsed rail', () => {
+    mount({ wide: false, connectionState: 'disconnected' })
+    expect(screen.queryByRole('button', { name: 'Disconnected, reconnect now' })).toBeNull()
   })
 })
 
@@ -131,11 +196,12 @@ describe('SettingsPanel chrome seats', () => {
 })
 
 describe('SettingsPanel close paths', () => {
-  it('closes via the header button', () => {
+  it('closes via the header button and restores trigger focus', () => {
     mount()
-    openPanel()
+    const trigger = openPanel()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
   })
 
   it('closes via a mask click', () => {

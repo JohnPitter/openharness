@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Button, ConnectionBanner, Input, Menu, Modal, Pill } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, ConnectionBanner, ConnectionIndicator, Input, Menu, Modal, Pill } from '@deepseek-ai/dsh-client-ui-primitives'
 import { POINTER_GRACE_MS } from '../src/pointer-grace.ts'
 
 afterEach(cleanup)
@@ -405,6 +405,31 @@ describe('Modal', () => {
     const mask = document.querySelector('[aria-hidden="true"]') as HTMLElement
     fireEvent.click(mask)
     expect(onClose).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('ConnectionIndicator', () => {
+  const labels = {
+    disconnectedLabel: 'Disconnected',
+    reconnectLabel: 'Reconnect now',
+    connectingLabel: 'Connecting',
+    recoveredLabel: 'Connected',
+    reconnectActionLabel: 'Disconnected, reconnect now',
+    restartActionLabel: 'Connecting, restart now',
+  }
+
+  it('renders nothing before the first connection outcome', () => {
+    const { container } = render(
+      <ConnectionIndicator state={undefined} {...labels} onReconnect={() => {}} />,
+    )
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('requests reconnect from the disconnected outage control', () => {
+    const onReconnect = vi.fn()
+    render(<ConnectionIndicator state="disconnected" {...labels} onReconnect={onReconnect} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnected, reconnect now' }))
+    expect(onReconnect).toHaveBeenCalledOnce()
   })
 })
 

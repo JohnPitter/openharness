@@ -201,6 +201,11 @@ export class InputTriggerController {
       case 'tab':
       case 'enter': {
         if (state.highlight === null) return key === 'tab' ? 'consumed' : 'pass'
+        // Refinement keeps the previous rows and highlight visible while the
+        // next fetch is pending; Enter/Tab then neither pick the stale row
+        // nor fall through to submit — an explicit no-op until the group is ready.
+        const group = state.groups.find(g => g.source === state.highlight?.source)
+        if (group === undefined || group.status !== 'ready') return 'consumed'
         this.pick(state.highlight.source, state.highlight.index)
         return 'pick-highlighted'
       }

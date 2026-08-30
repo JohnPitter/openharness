@@ -18,6 +18,7 @@
 - `ctx.agentPresets.composedPreset(agentCtx): string | undefined` 某个**活着的** agent 正在运行的 preset，从其 scope 链读取而不是从其会话读取——对于持久化 header 尚在构建中的 agent，这是唯一能拿到的答案。
 - `ctx.agentPresets.recompose(agentCtx, id): Promise<AgentPreset>` 把一个 agent 重链到另一个 preset 的常驻组装。在 agent 空闲时合法——**由调用方负责该检查**；新挂载在链移动之前确保完成，失败时 agent 原封不动。与 `mount()` 一样拒绝损坏的 preset。
 - `ctx.agentPresets.standingKeyFor(id?): Promise<ScopeKey>` 没有 agent 的宿主读取方（冷读记录）解析 preset 注册所用的常驻 scope key；确保挂载而不启动任何 agent、会话或轮次。与 `mount()` 一样拒绝损坏的 preset。
+- `ctx.agentPresets.compositionInventory(): Promise<AgentPresetComposition[]>` 每个 roster preset 一组：已有常驻挂载的从 Loader 行回答，尚未挂载的从组合文件回答且不挂载，损坏文件带着原因留在名单上。读取从不激活 preset。
 - `ctx.agentPresets.roots: readonly PresetRoot[]` 本 roster 实际扫描的根目录——全部已配置根目录按序在前，随后是推导出的 harness home 根目录。它不是 `config.roots`：判断「是否已组装 roster」应读它，从而由同一处推导决定。
 - `ctx.agentPresets.authorable: boolean` 上述根目录中是否有任一具备 `user` 信任级别，因而 preset 是否可创建。
 - `ctx.agentPresets.read(id): Promise<string>` 某个 preset 的组装文本，与存储内容逐字一致。
@@ -114,7 +115,7 @@ agent-presets:
 
 ## 挂载会拒绝什么
 
-直接挂载的子树不会出现在 `ctx.loader.entries()` 中，因此没有任何启动审计能覆盖它。`mount()` 因此自行校验结果可用，并拒绝三种情况。
+直接挂载的子树不会出现在 `ctx.loader.entries()` 中，因此没有任何启动审计能覆盖它。`mount()` 因此自行校验结果可用，并拒绝三种情况。当 roster 本身是 Loader 条目时，常驻 `PresetTree` 收回该条目的 `subtree` 槽，使 preset 行仍不进入宿主的 `loader.entries()` 遍历。
 
 **目标上下文没有 scope。** 挂载到不带 agent scope 的上下文，会把该 preset 的工具注册成全局的，作用于进程内每一个 agent。
 

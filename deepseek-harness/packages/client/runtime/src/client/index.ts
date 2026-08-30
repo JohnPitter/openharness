@@ -224,7 +224,7 @@ export function apply(ctx: Context): void {
       // Generation death fires before any next-generation frame can arrive
       // (reconnect replays flow from stream open, ahead of onConnected):
       // the only safe moment to drop generation-scoped interaction state.
-      if (state === 'reconnecting') {
+      if (state === 'disconnected' || state === 'connecting') {
         sessions.handleDisconnected()
       }
     },

@@ -720,6 +720,17 @@ describe('arbitrate', () => {
     expect(controller.arbitrate('tab', false)).toBe('consumed')
   })
 
+  it('enter and tab are no-ops while the highlighted group is still pending', async () => {
+    const { controller, cmd } = await menuBench()
+    controller.track('/go', 3, { tier: 'plain' }, 1)
+    expect(controller.menu.getSnapshot().groups[0]?.status).toBe('pending')
+    expect(controller.menu.getSnapshot().highlight).toEqual({ source: 'command', index: 0 })
+    expect(controller.arbitrate('enter', false)).toBe('consumed')
+    expect(controller.arbitrate('tab', false)).toBe('consumed')
+    expect(cmd.picks).toEqual([])
+    expect(controller.menu.getSnapshot().open).toBe(true)
+  })
+
   it('escape closes and consumes', async () => {
     const { controller } = await menuBench()
     expect(controller.arbitrate('escape', false)).toBe('consumed')

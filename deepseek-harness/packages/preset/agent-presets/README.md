@@ -18,6 +18,7 @@ Discovery is unmemoized: `list()` and `resolve()` re-read the roots on every cal
 - `ctx.agentPresets.composedPreset(agentCtx): string | undefined` The preset one LIVE agent runs on, read from its scope chain rather than from its session — the only answer available for an agent whose durable header is still being built.
 - `ctx.agentPresets.recompose(agentCtx, id): Promise<AgentPreset>` Re-link one agent to a different preset's standing composition. Valid while the agent is idle — **the caller owns that check**; the new mount is ensured before the link moves, so a failure leaves the agent as it was. Refuses a broken preset like `mount()`.
 - `ctx.agentPresets.standingKeyFor(id?): Promise<ScopeKey>` The standing scope key a host reader with no agent (a cold transcript read) resolves preset registrations in; ensures the mount without starting an agent, session, or turn. Refuses a broken preset like `mount()`.
+- `ctx.agentPresets.compositionInventory(): Promise<AgentPresetComposition[]>` One group per roster preset: live standing mounts answer from their Loader rows, unmounted presets from the composition file without mounting, and a broken file stays listed with its reason. Reading never activates a preset.
 - `ctx.agentPresets.roots: readonly PresetRoot[]` The roots this roster scans — every configured root in order, then the derived harness-home root. Not `config.roots`: read this to answer whether a roster is composed at all, so one derivation decides it.
 - `ctx.agentPresets.authorable: boolean` Whether any of those roots has `user` trust, and therefore whether a preset can be created at all.
 - `ctx.agentPresets.read(id): Promise<string>` One preset's composition text, exactly as stored.
@@ -114,7 +115,7 @@ The value is read per resolution rather than snapshotted, so a hot-reloaded docu
 
 ## What a mount rejects
 
-A directly-plugged subtree is absent from `ctx.loader.entries()`, so no boot audit covers it. `mount()` therefore proves the result usable itself, and rejects three things.
+A directly-plugged subtree is absent from `ctx.loader.entries()`, so no boot audit covers it. `mount()` therefore proves the result usable itself, and rejects three things. When the roster itself is a Loader entry, the standing `PresetTree` reclaims that entry's `subtree` slot so preset rows still stay off the host `loader.entries()` walk.
 
 **An unscoped target.** Mounting into a context that carries no agent scope would register the preset's tools globally, for every agent in the process.
 
