@@ -13,6 +13,7 @@ import type { RpcReceipt } from '@deepseek-ai/dsh-api-remotes/client'
 import { RpcId } from '@deepseek-ai/dsh-client-connection/client'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import { planReviewOf, type QuestionComposerProps, type QuestionWait } from '../src/client/contract/slots.ts'
+import { createQuestionDraftStore } from '../src/client/draft-store.ts'
 import { QuestionComposer } from '../src/client/QuestionComposer.tsx'
 import { en, zh } from '../src/client/locales.ts'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
@@ -26,6 +27,10 @@ const SID = 's1' as SessionId
 const seatOver = (dict: Record<string, string>, common: Record<string, string>): QuestionComposerProps['t'] =>
   (key => dict[key] ?? common[key] ?? key)
 
+// The plan-review presentation never reads the draft store, so a plain
+// snapshot-read stub over one instance satisfies the mandated store share.
+const questionDraftStore = createQuestionDraftStore().create(SID)
+
 /** Framework standard-kit stubs: the panel consumes only the locale seat. */
 const kit = {
   sessionId: SID,
@@ -36,6 +41,8 @@ const kit = {
   useProjection: (() => undefined) as never,
   useInput: (() => { throw new Error('unused') }) as never,
   inputActions: { setDraft: () => { throw new Error('unused') }, submit: () => { throw new Error('unused') } } as never,
+  useStore: (selector => selector(questionDraftStore.getSnapshot())) as QuestionComposerProps['useStore'],
+  actions: questionDraftStore.actions,
   t: seatOver(zh, commonZh),
 }
 

@@ -101,6 +101,56 @@ describe('desktop-complete', () => {
     expect(result.completed).toEqual([{ sessionId: sid('a'), title: 'Ship the client', sound: 'chord' }])
   })
 
+  it('does not chime when a Workflow planner idles right after dispatching a still-running worker', () => {
+    const prev = new Map<SessionId, boolean>([[sid('planner'), true]])
+    const { next, completed } = rootTaskCompletions(prev, {
+      [sid('planner')]: row('planner', false, { title: 'Ship the feature' }),
+      [sid('worker')]: row('worker', true, { parentId: sid('planner'), origin: 'subagent' }),
+    })
+    expect(completed).toEqual([])
+    // The busy bit stays true (planner OR running descendant), so a later
+    // real idle still diffs correctly against it.
+    expect(next.get(sid('planner'))).toBe(true)
+  })
+
+  it('chimes once the last running descendant finishes, even though the root went idle earlier', () => {
+    let prev = new Map<SessionId, boolean>()
+    // Planner starts, then idles right after dispatching a worker that is
+    // still running — no chime (previous test covers the no-chime edge).
+    prev = rootTaskCompletions(prev, {
+      [sid('planner')]: row('planner', true, { title: 'Ship the feature' }),
+    }).next
+    prev = rootTaskCompletions(prev, {
+      [sid('planner')]: row('planner', false, { title: 'Ship the feature' }),
+      [sid('worker')]: row('worker', true, { parentId: sid('planner'), origin: 'subagent' }),
+    }).next
+    // The worker finishes; the planner is still not running on its own, but
+    // the overall task just became truly idle.
+    const result = rootTaskCompletions(prev, {
+      [sid('planner')]: row('planner', false, { title: 'Ship the feature' }),
+      [sid('worker')]: row('worker', false, { parentId: sid('planner'), origin: 'subagent' }),
+    }, 'tada')
+    expect(result.completed).toEqual([{ sessionId: sid('planner'), title: 'Ship the feature', sound: 'tada' }])
+  })
+
+  it('follows a running grandchild through a nested subagent chain', () => {
+    const prev = new Map<SessionId, boolean>([[sid('root'), true]])
+    const { completed } = rootTaskCompletions(prev, {
+      [sid('root')]: row('root', false, { title: 'Ship the feature' }),
+      [sid('child')]: row('child', false, { parentId: sid('root'), origin: 'subagent' }),
+      [sid('grandchild')]: row('grandchild', true, { parentId: sid('child'), origin: 'subagent' }),
+    })
+    expect(completed).toEqual([])
+  })
+
+  it('a subagent row never fires its own completion, regardless of its parent', () => {
+    const prev = new Map<SessionId, boolean>([[sid('worker'), true]])
+    const { completed } = rootTaskCompletions(prev, {
+      [sid('worker')]: row('worker', false, { parentId: sid('planner'), origin: 'subagent' }),
+    })
+    expect(completed).toEqual([])
+  })
+
   it('watches the list store and posts each new idle edge once', () => {
     let snapshot: Pick<SessionListState, 'byId'> = { byId: { [sid('a')]: row('a', true) } }
     const listeners = new Set<() => void>()

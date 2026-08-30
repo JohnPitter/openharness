@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useSyncExternalStore } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type {
   ConversationSnapshot, SessionId, SessionListState, WorkspaceListState,
@@ -9,6 +10,7 @@ import type { RpcReceipt } from '@deepseek-ai/dsh-api-remotes/client'
 import { RpcId } from '@deepseek-ai/dsh-client-connection/client'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import { PendingQuestion, type QuestionComposerProps } from '../src/client/contract/slots.ts'
+import { createQuestionDraftStore } from '../src/client/draft-store.ts'
 import { QuestionComposer, parseRecommendedLabel } from '../src/client/QuestionComposer.tsx'
 import { en, zh } from '../src/client/locales.ts'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
@@ -22,10 +24,10 @@ const SID = 's1' as SessionId
 const seatOver = (dict: Record<string, string>, common: Record<string, string>): QuestionComposerProps['t'] =>
   (key => dict[key] ?? common[key] ?? key)
 
-/** Framework standard-kit stubs: the composer consumes only the locale seat;
+/** Framework standard-kit stubs: the composer consumes the locale and draft-store seats;
  *  the composed props type mandates delivery of the rest (framework hooks are
  *  plain stubs per the client testing discipline). */
-const kit = {
+const kitBase = {
   session: undefined,
   sessionId: SID,
   useSession: (() => { throw new Error('unused') }) as unknown as SnapshotSelectorHook<ConversationSnapshot>,
@@ -37,6 +39,20 @@ const kit = {
   // The seat's key domain is question ∪ common.
   t: seatOver(zh, commonZh),
 }
+
+let kit: typeof kitBase & Pick<QuestionComposerProps, 'useStore' | 'actions'>
+
+beforeEach(() => {
+  // One store instance per test, mirroring the Session scope the renderer owns;
+  // a remount inside the test keeps the scope, so drafts must survive it.
+  const instance = createQuestionDraftStore().create(SID)
+  const useStore: QuestionComposerProps['useStore'] = selector => useSyncExternalStore(
+    listener => instance.subscribe(listener),
+    () => selector(instance.getSnapshot()),
+    () => selector(instance.getSnapshot()),
+  )
+  kit = { ...kitBase, useStore, actions: instance.actions }
+})
 
 const QUESTIONS = [
   {
@@ -307,6 +323,23 @@ describe('QuestionComposer', () => {
     const replayed = wait('same-id')
     view.rerender(<QuestionComposer matched={replayed.carrier} interactions={[replayed.carrier]} {...kit} />)
     expect(screen.getByText('2 / 3')).toBeTruthy()
+  })
+
+  it('restores the current page and drafts after the strict Session entry remounts', () => {
+    const pending = wait()
+    const view = render(<QuestionComposer matched={pending.carrier} interactions={[pending.carrier]} {...kit} />)
+    fireEvent.click(screen.getByRole('radio', { name: /研究潜力型/ }))
+    const custom = screen.getByPlaceholderText('输入你的答案')
+    fireEvent.change(custom, { target: { value: '保留这段草稿' } })
+    expect(screen.getByText('2 / 3')).toBeTruthy()
+
+    view.unmount()
+    render(<QuestionComposer matched={pending.carrier} interactions={[pending.carrier]} {...kit} />)
+
+    expect(screen.getByText('2 / 3')).toBeTruthy()
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('输入你的答案').value).toBe('保留这段草稿')
+    fireEvent.click(screen.getByLabelText('上一题'))
+    expect(screen.getByRole('radio', { name: /研究潜力型/ }).getAttribute('aria-checked')).toBe('true')
   })
 })
 

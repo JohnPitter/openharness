@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-29-desktop-task-complete-skips-pending-interaction.md
-2026-08-29-desktop-task-complete-skips-pending-interaction.md: 9d4f8ee44e65ba5223f2d201c6d625d3b3893bc7
-2026-08-29-desktop-task-complete-skips-pending-interaction.zh.md: f9f06a90385a9d97a60aa9be72ba41234f1bee35
+2026-08-29-desktop-task-complete-skips-pending-interaction.md: 1546a31813c66ab4bec0038e0f59983b61fc7d5b
+2026-08-29-desktop-task-complete-skips-pending-interaction.zh.md: bee06ee9571eaf8ee280a35806d70f2f18d758f8

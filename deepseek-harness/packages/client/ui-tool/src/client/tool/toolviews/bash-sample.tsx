@@ -3,8 +3,9 @@
 // Product chrome matches ToolRow / Think (figma: Bash · {description}).
 //
 // A bash call normally declares the terminal render intent, so this row renders
-// the command's own output through TerminalBlock. Execution failures that
-// settle without terminal material use the bounded generic IN/OUT fallback —
+// the command's own output through TerminalBlock. Execution failures and settled
+// persistent-shell results (a terminal call intent with no terminal result view)
+// use the bounded generic IN/OUT fallback —
 // both are expand-gated exactly like
 // ToolRow's unified interaction: collapsed by default, the whole summary row
 // is the toggle (click / Enter / Space, icon→chevron hover preview; the
@@ -21,7 +22,9 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '../../contract/slots.ts'
-import { terminalBlockLabels, terminalCardModel, terminalFailed } from '../models/terminal-card-model.ts'
+import {
+  isSettledPersistentShellCall, terminalBlockLabels, terminalCardModel, terminalFailed,
+} from '../models/terminal-card-model.ts'
 import { toolRowModel, type ToolRowState } from '../models/tool-call-model.ts'
 import { localizeDisplayedError, localizeToolOutput, localizedToolTitle } from '../models/localize-tool-copy.ts'
 import { CONVERSATION_NS as NS } from '../../locale.ts'
@@ -67,13 +70,13 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
     : model.state
   const status = stateStatus(state, t)
   const [expanded, setExpanded] = useState(false)
-  // Execution failures (for example cancellation before the process reports a
-  // terminal result) use the generic presenter. Keep their recorded args and
-  // full error reachable instead of collapsing the row to the first line.
-  const genericError = terminal === null
-    && model.state === 'error'
+  // Execution failures and persistent-shell results have no terminal card.
+  // Keep their recorded args and complete output reachable through the generic
+  // body; background acknowledgements and malformed calls remain collapsed.
+  const genericBody = terminal === null
+    && (model.state === 'error' || isSettledPersistentShellCall(block))
     && (model.body !== null || model.output !== null)
-  const expandable = terminal !== null || genericError
+  const expandable = terminal !== null || genericBody
   const open = expanded && expandable
   const failureLine = model.state === 'error' && model.errorSummary !== null
     ? localizeDisplayedError(model.errorSummary, t)
@@ -147,7 +150,7 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
                 {model.output !== null && (
                   <div className={css.ioSection}>
                     <span className={css.ioLabel}>{t('tool.io.out')}</span>
-                    <span className={css.ioText} data-error>
+                    <span className={css.ioText} data-error={state === 'error' || undefined}>
                       {localizeToolOutput(model.output, t)}
                     </span>
                   </div>

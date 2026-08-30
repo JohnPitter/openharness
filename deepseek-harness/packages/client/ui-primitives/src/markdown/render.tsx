@@ -120,7 +120,7 @@ export interface MarkdownFileMentions {
  * numbering accumulated in document order while references render.
  */
 export interface MarkdownRenderContext {
-  /** Streaming arm: fences render plain and TeX stays literal. */
+  /** Streaming arm: fences highlight incrementally as they grow; TeX (including ```math fences) stays literal until the settled pass. */
   readonly streaming: boolean
   /** Localized fence copy-button labels. */
   readonly codeLabels: MarkdownCodeLabels | undefined
@@ -328,7 +328,13 @@ function renderCode(node: Md.Code, key: Key, context: MarkdownRenderContext): Re
       // CodeBlock's display trim removes; feeding the bare value would make
       // that trim eat a REAL trailing blank line inside the fence instead.
       code={`${node.value}\n`}
-      lang={context.streaming ? undefined : lang}
+      lang={lang}
+      // Streaming keys are source offsets, stable while the fence grows, so
+      // the CodeBlock instance (and its incremental highlight session)
+      // survives every chunk. A fence whose info string is still mid-chunk
+      // has no content yet and took the empty-fence arm above, so `lang`
+      // here is final: it can never re-resolve to a different grammar.
+      streaming={context.streaming}
       copyLabel={context.codeLabels?.copyLabel}
       copiedLabel={context.codeLabels?.copiedLabel}
     />

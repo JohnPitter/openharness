@@ -13,6 +13,8 @@ import { WebSocketDownlinks } from '../src/websocket-downlink.ts'
 type MuxSource = (signal: AbortSignal) => AsyncIterable<RpcRequest<MuxFrame>>
 type HostSource = (signal: AbortSignal) => AsyncIterable<RpcRequest<HostFrame>>
 
+const HEARTBEAT_INTERVAL_MS = 30_000
+
 const running: (() => Promise<void>)[] = []
 
 afterEach(async () => {
@@ -76,6 +78,34 @@ async function acceptedSocket(downlinks: WebSocketDownlinks): Promise<WebSocket>
 }
 
 describe('WebSocket downlinks', () => {
+  it('sends WebSocket Ping control frames without application messages', async () => {
+    const downlinks = new WebSocketDownlinks(api(idle, idle), 20)
+    const host = await serve(downlinks)
+    running.push(host.close)
+    const client = new WebSocket(`${host.origin}${MUX_EVENTS_PATH}`)
+    await once(client, 'open')
+    const serverSocket = await acceptedSocket(downlinks)
+    const messages = vi.fn()
+    client.on('message', messages)
+
+    const ping = once(client, 'ping')
+    const pong = once(serverSocket, 'pong')
+    expect((await ping)[0]).toEqual(Buffer.alloc(0))
+    expect((await pong)[0]).toEqual(Buffer.alloc(0))
+    expect(messages).not.toHaveBeenCalled()
+
+    const closingPing = vi.spyOn(serverSocket, 'ping')
+    client.pause()
+    serverSocket.close()
+    expect(serverSocket.readyState).toBe(WebSocket.CLOSING)
+    await new Promise<void>((resolve) => { setTimeout(resolve, 25) })
+    expect(closingPing).not.toHaveBeenCalled()
+
+    const closed = once(client, 'close')
+    client.resume()
+    await closed
+  })
+
   it('carries mux and host over independent downstream sockets and cancels each source on close', async () => {
     let muxAborted = false
     let hostAborted = false
@@ -99,7 +129,7 @@ describe('WebSocket downlinks', () => {
           hostAborted = true
         }
       },
-    ))
+    ), HEARTBEAT_INTERVAL_MS)
     const host = await serve(downlinks)
     running.push(host.close)
 
@@ -142,7 +172,7 @@ describe('WebSocket downlinks', () => {
         }
       },
       idle,
-    ))
+    ), HEARTBEAT_INTERVAL_MS)
     const host = await serve(downlinks)
     running.push(host.close)
     const socket = new WebSocket(`${host.origin}${MUX_EVENTS_PATH}`)
@@ -161,7 +191,7 @@ describe('WebSocket downlinks', () => {
         throw new Error('mux source failed')
       },
       idle,
-    ))
+    ), HEARTBEAT_INTERVAL_MS)
     const host = await serve(downlinks)
     running.push(host.close)
     const socket = new WebSocket(`${host.origin}${MUX_EVENTS_PATH}`)
@@ -185,7 +215,7 @@ describe('WebSocket downlinks', () => {
         }
       },
       idle,
-    ))
+    ), HEARTBEAT_INTERVAL_MS)
     const host = await serve(downlinks)
     running.push(host.close)
     const socket = new WebSocket(`${host.origin}${MUX_EVENTS_PATH}`)
@@ -217,7 +247,7 @@ describe('WebSocket downlinks', () => {
         }
       },
       idle,
-    ))
+    ), HEARTBEAT_INTERVAL_MS)
     const host = await serve(downlinks)
     running.push(host.close)
     const socket = new WebSocket(`${host.origin}${MUX_EVENTS_PATH}`)
@@ -242,7 +272,7 @@ describe('WebSocket downlinks', () => {
         }
       },
       idle,
-    ))
+    ), HEARTBEAT_INTERVAL_MS)
     const host = await serve(downlinks)
     running.push(host.close)
     const socket = new WebSocket(`${host.origin}${MUX_EVENTS_PATH}`)
@@ -266,7 +296,7 @@ describe('WebSocket downlinks', () => {
   })
 
   it('rejects when its acceptor has already closed', async () => {
-    const downlinks = new WebSocketDownlinks(api(idle, idle))
+    const downlinks = new WebSocketDownlinks(api(idle, idle), HEARTBEAT_INTERVAL_MS)
     await downlinks.close()
     await expect(downlinks.close()).rejects.toThrow('The server is not running')
   })
@@ -288,7 +318,7 @@ describe('WebSocket downlinks', () => {
         }
       },
       idle,
-    ))
+    ), HEARTBEAT_INTERVAL_MS)
     const host = await serve(downlinks)
     const socket = new WebSocket(`${host.origin}${MUX_EVENTS_PATH}`)
     await once(socket, 'open')

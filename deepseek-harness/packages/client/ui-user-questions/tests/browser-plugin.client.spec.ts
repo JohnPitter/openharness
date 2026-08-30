@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { QuestionComposer } from '../src/client/QuestionComposer.tsx'
+import { createQuestionDraftStore } from '../src/client/draft-store.ts'
 import { apply, inject } from '../src/client/index.ts'
 
 async function bench() {
@@ -55,6 +56,11 @@ describe('apply', () => {
     // copy rides the standard locale seat.
     expect(entry.inject).toBeUndefined()
     expect(entry.locale).toBe('question')
+    // The entry declares its Session-scoped draft store: empty until a request writes.
+    const store = entry.store as ReturnType<typeof createQuestionDraftStore>
+    expect(store.create('session-question').getSnapshot()).toEqual({
+      progress: { index: 0, drafts: [] },
+    })
     // The selector narrows the chain currency: question wait in → that wait; none → null.
     const select = entry.select as (owner: { interactions: readonly { kind: string }[] }) => unknown
     const question = { kind: 'question' }

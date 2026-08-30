@@ -37,16 +37,39 @@ export function isRootTaskSession(row: Pick<SessionSummary, 'parentId' | 'origin
 }
 
 /**
- * Diff running bits against the previous observation. First sight of a
- * session only records the bit — sessions already idle at bind do not chime.
- * A root that stopped running because it is now blocking on the user
- * (an approval, a plan review, or a question — the sidebar amber-dot state)
- * has not finished its task, so that edge is not a completion either; the
- * eventual real idle, once `pendingInteraction` clears, still fires.
- * @param prev - last observed running bit per session.
+ * Whether any descendant (a dispatched subagent, or one it dispatched in
+ * turn) of this session is currently running. `byId` carries every attached
+ * session the host reports, including subagent children, regardless of
+ * whether any catalog UI is open — a Workflow planner's own turn can end
+ * (running: false) immediately after it dispatches a worker, well before
+ * the worker finishes, so the planner's own running bit alone is not
+ * enough to tell a real finish from a dispatch-and-idle.
+ * @param sessionId - session whose descendants to check.
+ * @param byId - current list rows.
+ * @returns true when a child, grandchild, or deeper descendant is running.
+ */
+function hasRunningDescendant(sessionId: SessionId, byId: SessionListState['byId']): boolean {
+  for (const row of Object.values(byId)) {
+    if (row.parentId !== sessionId) continue
+    if (row.running || hasRunningDescendant(row.id, byId)) return true
+  }
+  return false
+}
+
+/**
+ * Diff busy bits against the previous observation. First sight of a session
+ * only records the bit — sessions already idle at bind do not chime. A
+ * root's busy bit is its own running flag OR any running descendant's, so
+ * a planner that idles right after dispatching a still-working subagent
+ * stays "busy" until that subagent (and any of its own descendants) also
+ * finishes. A root that stopped running because it is now blocking on the
+ * user (an approval, a plan review, or a question — the sidebar amber-dot
+ * state) has not finished its task either; the eventual real idle, once
+ * `pendingInteraction` clears and no descendant is running, still fires.
+ * @param prev - last observed busy bit per session.
  * @param byId - current list rows.
  * @param sound - live preference id stamped onto each completion.
- * @returns the next running map and every root that just went idle.
+ * @returns the next busy map and every root that just went idle.
  */
 export function rootTaskCompletions(
   prev: ReadonlyMap<SessionId, boolean>,
@@ -56,9 +79,10 @@ export function rootTaskCompletions(
   const next = new Map<SessionId, boolean>()
   const completed: DesktopTaskComplete[] = []
   for (const [sessionId, row] of Object.entries(byId) as [SessionId, SessionSummary][]) {
-    next.set(sessionId, row.running)
-    if (!isRootTaskSession(row)) continue
-    if (prev.get(sessionId) === true && !row.running && row.pendingInteraction === undefined) {
+    if (!isRootTaskSession(row)) { next.set(sessionId, row.running); continue }
+    const busy = row.running || hasRunningDescendant(sessionId, byId)
+    next.set(sessionId, busy)
+    if (prev.get(sessionId) === true && !busy && row.pendingInteraction === undefined) {
       completed.push({ sessionId, title: row.title ?? row.displayTitle, sound })
     }
   }

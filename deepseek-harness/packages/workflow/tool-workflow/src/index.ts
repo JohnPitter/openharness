@@ -211,7 +211,12 @@ export function apply(ctx: Context, config: Config): void {
   // lives in tool plugins as prompt sections, not in the deployment persona).
   ctx.systemPrompt.section({
     name: `tool:${toolName}`,
-    order: 115,
+    // Distinct from tool:cordis's 115 (same tie upstream hit): a stable sort
+    // breaks ties by plugin-activation order, which varies across platform
+    // compositions, so ACP/SDK snapshot replays could assemble this section
+    // before or after tool:cordis unpredictably. An explicit half-step keeps
+    // workflow after cordis without disturbing any other section's order.
+    order: 115.5,
     text: `The ${toolName} tool is not a shell and cannot grep, edit, or run commands. It runs a JavaScript orchestration script whose agent() hooks start subagents; a script that returns without starting agents is a no-op. Use it ONLY when the user explicitly asks for a workflow or the work fans out across many independent pieces. For one or two tasks, call subagent only.`,
   })
   ctx.tools.register(defineTool({

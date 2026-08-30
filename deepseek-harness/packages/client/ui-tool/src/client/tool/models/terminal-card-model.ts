@@ -75,6 +75,32 @@ export function terminalFailed(model: TerminalCardModel): boolean {
 }
 
 /**
+ * Identify a settled root call from the persistent Bash or PowerShell tool.
+ * Its result stays on the generic input/output path because the persistent
+ * shell can report resets and partial output without one process exit status.
+ * @param block - running or settled Tool block.
+ * @returns whether the block is a settled persistent-shell call.
+ */
+export function isSettledPersistentShellCall(block: ToolCallBlock): boolean {
+  if (!('kind' in block) || block.call === null) return false
+  const { name, argsRaw } = block.call
+  if (name !== 'bash' && name !== 'pwsh') return false
+  let args: unknown
+  try {
+    args = JSON.parse(argsRaw)
+  } catch {
+    // Non-JSON args (mid-stream truncation residue) are not a classifiable shell call.
+    return false
+  }
+  if (typeof args !== 'object' || args === null) return false
+  const { command, description } = args as Record<string, unknown>
+  if (typeof command !== 'string' || command.trim() === '') return false
+  // Standard dsh-tool-bash and dsh-tool-pwsh schemas require `description`;
+  // the persistent shell providers omit it, so its absence marks the call.
+  return description === undefined
+}
+
+/**
  * Resolve a terminal view's working directory the way the render-intent
  * contract assigns to the UI bridge: an absolute path is used as-is, a relative
  * one joins under the session workspace, and an omitted one IS the session
@@ -168,6 +194,11 @@ function collapse(body: string, rooted: boolean, separator = '/'): string {
  *   presentation decides how the settled call renders, and the bash tool
  *   returns a generic fenced card for an execution error or a background
  *   start, whose text and error styling the generic path preserves.
+ * - A settled persistent-shell call: the persistent bash/pwsh tools declare a
+ *   terminal call intent but no terminal result view (resets and partial
+ *   output have no single process exit status), so the result keeps the
+ *   generic input/output card; {@link isSettledPersistentShellCall} lets the
+ *   row keep that generic result expandable.
  *
  * Window truncation can drop the call head from a settled result (see
  * `ToolResultNode.call`/`callView` in dsh-client-runtime), leaving a terminal

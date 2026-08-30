@@ -17,7 +17,9 @@ import type { ToolCallView, ToolResultView } from '@deepseek-ai/dsh-api-remotes/
 import type { SelectionTarget } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import { terminalCardModel, terminalFailed } from '../src/client/tool/models/terminal-card-model.ts'
+import {
+  isSettledPersistentShellCall, terminalCardModel, terminalFailed,
+} from '../src/client/tool/models/terminal-card-model.ts'
 import { createChatStore } from '@deepseek-ai/dsh-client-ui-conversation/src/client/stores.ts'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { DetailsPanel } from '@deepseek-ai/dsh-client-ui-conversation/src/client/skeleton/DetailsPanel.tsx'
@@ -240,6 +242,38 @@ describe('terminalCardModel', () => {
   })
 })
 
+describe('isSettledPersistentShellCall', () => {
+  it('identifies a settled persistent shell call by its description-less args', () => {
+    // The persistent bash/pwsh schemas take only 'command'; the standard
+    // schemas require 'description', so its absence marks the persistent call.
+    expect(isSettledPersistentShellCall(settled({
+      call: { name: 'bash', argsRaw: '{"command":"ls -la"}' },
+    }))).toBe(true)
+    expect(isSettledPersistentShellCall(settled({
+      call: { name: 'pwsh', argsRaw: '{"command":"ls"}' },
+    }))).toBe(true)
+  })
+
+  it('rejects running, windowless, non-shell, malformed, and standard calls', () => {
+    expect(isSettledPersistentShellCall(running())).toBe(false)
+    expect(isSettledPersistentShellCall(settled({ call: null }))).toBe(false)
+    expect(isSettledPersistentShellCall(settled({
+      call: { name: 'read', argsRaw: '{"command":"ls"}' },
+    }))).toBe(false)
+    expect(isSettledPersistentShellCall(settled({
+      call: { name: 'bash', argsRaw: '{oops' },
+    }))).toBe(false)
+    expect(isSettledPersistentShellCall(settled({
+      call: { name: 'bash', argsRaw: '"ls"' },
+    }))).toBe(false)
+    expect(isSettledPersistentShellCall(settled({
+      call: { name: 'bash', argsRaw: '{"command":"  "}' },
+    }))).toBe(false)
+    // Standard bash/pwsh args always carry the required description.
+    expect(isSettledPersistentShellCall(settled())).toBe(false)
+  })
+})
+
 describe('chat row terminal body', () => {
   const ownerProps = (block: RunningToolCall | ToolResultNode): GenericToolCardProps => ({
     callId: 'c1', toolName: 'bash', block, openFile: vi.fn(), t,
@@ -408,6 +442,31 @@ describe('BashRow terminal card', () => {
       callView: { card: 'terminal', title: 'ls -la' },
     }))} />)
     expect(view.getByText('List files')).toBeTruthy()
+  })
+
+  it('expands a settled persistent shell through the generic input/output card', () => {
+    // The persistent bash tool declares a terminal call intent but no terminal
+    // result view, so its settled row keeps the command summary and discloses
+    // args and output through the generic body instead of collapsing for good.
+    const view = render(<BashRow {...rowProps(settled({
+      call: { name: 'bash', argsRaw: '{"command":"ls -la"}' },
+      callView: { card: 'terminal', title: 'ls -la' },
+      resultView: null,
+    }))} />)
+    const row = view.container.querySelector('[data-sample="bash"]')!
+    expect(view.getByText('ls -la')).toBeTruthy()
+    expect(row.getAttribute('role')).toBe('button')
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.click(row)
+
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    expect(view.getByText('输入')).toBeTruthy()
+    expect(view.getByText('输出')).toBeTruthy()
+    expect(view.getByText(/"command": "ls -la"/)).toBeTruthy()
+    expect(view.container.querySelector('[class*="_ioText_"][data-error]')).toBeNull()
+    expect(view.container.querySelectorAll('[class*="_ioText_"]')[1]?.textContent)
+      .toBe('a.ts  b.ts\nc.ts  d.ts\n')
   })
 
   it('a non-terminal bash call (background start) renders the summary row alone', () => {

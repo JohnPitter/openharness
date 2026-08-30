@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// One intentional divergence from the original react-markdown recording:
+// streaming fences highlight (with their banner language visible) since the
+// incremental fence-highlight decision, so `*.streaming.txt` fixtures with
+// fenced code pin shiki span trees where react-markdown had the plain arm.
 // DOM-parity contract for MarkdownText: every corpus document's rendered DOM
 // is pinned as a file snapshot. The fixtures were recorded from the
 // react-markdown implementation this renderer replaced; the custom mdast
