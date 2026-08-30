@@ -2,6 +2,7 @@
 package update
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 
 // Version is the build's semver without a leading v. Release builds also pass
 // -ldflags "-X openharness/internal/update.Version=…".
-var Version = "0.1.52"
+var Version = "0.1.53"
 
 // Repo is owner/name of the GitHub repository that publishes releases.
 var Repo = "JohnPitter/openharness"
@@ -25,6 +26,18 @@ var Repo = "JohnPitter/openharness"
 const AssetName = "openharness.exe"
 
 const userAgent = "openharness-updater"
+
+// checkTimeout bounds the small releases-API JSON lookup.
+const checkTimeout = 20 * time.Second
+
+// downloadTimeout bounds the exe download. The asset is roughly 190MB;
+// http.Client.Timeout is a single deadline over the whole request including
+// body reads, so reusing checkTimeout here previously failed downloads on
+// any connection slower than ~90 Mbps with "context deadline exceeded
+// (Client.Timeout or context cancellation while reading body)". A per-request
+// context deadline lets each operation size its own budget on one shared
+// client with no blanket Timeout.
+const downloadTimeout = 10 * time.Minute
 
 // Info is what the shell shows when a newer tag exists.
 type Info struct {
@@ -52,11 +65,29 @@ type Checker struct {
 	Client *http.Client
 	API    string
 	Repo   string
+	// CheckTimeout overrides checkTimeout when positive.
+	CheckTimeout time.Duration
+	// DownloadTimeout overrides downloadTimeout when positive.
+	DownloadTimeout time.Duration
+}
+
+func (c *Checker) checkTimeoutOrDefault() time.Duration {
+	if c.CheckTimeout > 0 {
+		return c.CheckTimeout
+	}
+	return checkTimeout
+}
+
+func (c *Checker) downloadTimeoutOrDefault() time.Duration {
+	if c.DownloadTimeout > 0 {
+		return c.DownloadTimeout
+	}
+	return downloadTimeout
 }
 
 func defaultChecker() *Checker {
 	return &Checker{
-		Client: &http.Client{Timeout: 20 * time.Second},
+		Client: &http.Client{},
 		Repo:   Repo,
 	}
 }
@@ -76,7 +107,9 @@ func Check() (Info, error) {
 // Check compares current against the latest published release.
 func (c *Checker) Check(current string) (Info, error) {
 	info := Info{Current: normalize(current)}
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/repos/%s/releases/latest", c.api(), c.Repo), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), c.checkTimeoutOrDefault())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/repos/%s/releases/latest", c.api(), c.Repo), nil)
 	if err != nil {
 		return info, err
 	}
@@ -175,7 +208,9 @@ func (c *Checker) Apply() error {
 }
 
 func (c *Checker) download(url string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), c.downloadTimeoutOrDefault())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}

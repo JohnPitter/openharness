@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestCompareSemver(t *testing.T) {
@@ -129,5 +130,61 @@ func TestCheckNotFoundIsQuiet(t *testing.T) {
 	}
 	if info.Available {
 		t.Fatalf("%+v", info)
+	}
+}
+
+// TestDownloadOutlivesCheckTimeout proves the release-check timeout can no
+// longer cut off a still-progressing download: a shared http.Client.Timeout
+// used to bound both operations, so a body slower than the check budget
+// failed with "context deadline exceeded (Client.Timeout or context
+// cancellation while reading body)" even though the transfer was still
+// making progress. download() now runs under its own, longer deadline.
+func TestDownloadOutlivesCheckTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("first-chunk-"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		// Outlives a tight check-sized budget but stays under the longer
+		// download-sized one below.
+		time.Sleep(80 * time.Millisecond)
+		_, _ = w.Write([]byte("second-chunk"))
+	}))
+	t.Cleanup(srv.Close)
+
+	c := &Checker{
+		Client:          srv.Client(),
+		CheckTimeout:    20 * time.Millisecond,
+		DownloadTimeout: 2 * time.Second,
+	}
+	bin, err := c.download(srv.URL)
+	if err != nil {
+		t.Fatalf("download should outlive the tight check timeout: %v", err)
+	}
+	if string(bin) != "first-chunk-second-chunk" {
+		t.Fatalf("unexpected body: %q", bin)
+	}
+}
+
+// TestDownloadRespectsItsOwnTimeout confirms download() is still bounded by
+// its own deadline — a stalled body still fails, just against the right
+// (longer) budget instead of check's short one.
+func TestDownloadRespectsItsOwnTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("chunk"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(200 * time.Millisecond)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := &Checker{Client: srv.Client(), DownloadTimeout: 20 * time.Millisecond}
+	if _, err := c.download(srv.URL); err == nil {
+		t.Fatal("expected the download's own timeout to fire")
 	}
 }
