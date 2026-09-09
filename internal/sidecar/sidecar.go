@@ -402,6 +402,40 @@ func exitWithoutURL(waitErr error, stderr string) string {
 	return fmt.Sprintf("dsh encerrou sem anunciar URL: %s", msg)
 }
 
+// sidecarEnv rebuilds the process environment so binDir is first on PATH.
+// Existing PATH/Path entries are dropped (PATHEXT is kept) and replaced with
+// one PATH=binDir+sep+oldPath. lsp-stdio resolveExecutable uses that PATH.
+func sidecarEnv(environ []string, binDir string) []string {
+	oldPath := ""
+	out := make([]string, 0, len(environ)+1)
+	for _, kv := range environ {
+		key, val, ok := strings.Cut(kv, "=")
+		if !ok {
+			out = append(out, kv)
+			continue
+		}
+		if isPathEnvKey(key) {
+			if oldPath == "" {
+				oldPath = val
+			}
+			continue
+		}
+		out = append(out, kv)
+	}
+	path := binDir
+	if oldPath != "" {
+		path = binDir + string(os.PathListSeparator) + oldPath
+	}
+	return append(out, "PATH="+path)
+}
+
+func isPathEnvKey(key string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(key, "PATH")
+	}
+	return key == "PATH"
+}
+
 // Start extrai (se preciso) e sobe `dsh web` em porta livre, retornando a URL.
 func (m *Manager) Start(ctx context.Context) (string, error) {
 	m.mu.Lock()
@@ -429,9 +463,12 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 	m.cmd = exec.Command(nodePath, binPath, "web", "--no-open", "--host", "127.0.0.1", "--port", "0")
 	m.cmd.Dir = filepath.Join(dir, "dsh-runtime")
 	prepareSidecarCmd(m.cmd)
-	m.cmd.Env = append(os.Environ(),
+	// lsp-stdio resolveExecutable looks up typescript-language-server on PATH
+	// at preset mount. A Wails GUI often inherits a PATH without npm globals,
+	// so the extracted runtime's node_modules/.bin must come first.
+	m.cmd.Env = sidecarEnv(append(os.Environ(),
 		"DSH_HOME="+filepath.Join(m.Root, "dsh-home"),
-	)
+	), filepath.Join(dir, "dsh-runtime", "node_modules", ".bin"))
 	stdout, err := m.cmd.StdoutPipe()
 	if err != nil {
 		m.mu.Unlock()
