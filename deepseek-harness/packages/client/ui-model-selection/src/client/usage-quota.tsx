@@ -26,8 +26,36 @@ export function MeterBar({ percent, className, fillClassName }: {
   )
 }
 
+/** Ring geometry shared by the occupancy/quota rings: 14px viewBox, 2px stroke. */
+const RING_RADIUS = 5.5
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
+
+/** CSS class triple a ring consumer supplies from its own module. */
+export interface RingStyles {
+  ring?: string | undefined
+  ringTrack?: string | undefined
+  ringFill?: string | undefined
+}
+
+/** Compact radial meter for a 0–100 percent, stroked through the caller's classes. */
+export function Ring({ percent, styles }: { percent: number; styles: RingStyles }): ReactNode {
+  return (
+    <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden className={styles.ring}>
+      <circle className={styles.ringTrack} cx="7" cy="7" r={RING_RADIUS} />
+      <circle
+        className={styles.ringFill}
+        cx="7"
+        cy="7"
+        r={RING_RADIUS}
+        strokeDasharray={`${RING_CIRCUMFERENCE * percent / 100} ${RING_CIRCUMFERENCE}`}
+        transform="rotate(-90 7 7)"
+      />
+    </svg>
+  )
+}
+
 /** Rolling-window length in hours, defaulting to a 5-hour coding-plan window. */
-function windowHours(window: AccountUsageWindowView): string {
+export function windowHours(window: AccountUsageWindowView): string {
   const minutes = window.windowMinutes
   return minutes !== undefined && minutes > 0
     ? String(minutes % 60 === 0 ? minutes / 60 : Math.max(1, Math.round(minutes / 60)))

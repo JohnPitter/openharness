@@ -269,6 +269,33 @@ describe('UsageStatusChip', () => {
     expect(screen.getAllByText(en['usage.quotaWeekly'])).toHaveLength(1)
   })
 
+  it('leads the chip meta with the short quota window before the panel opens', async () => {
+    const { loadAccountUsage } = mount({
+      quota: {
+        supported: true,
+        windows: [
+          { id: 'weekly', used: 214, limit: 2048, percent: 10 },
+          { id: 'rate', used: 139, limit: 200, percent: 70, windowMinutes: 300 },
+        ],
+      },
+    })
+    await waitFor(() => {
+      expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding')
+    })
+    expect(await screen.findByText('40% · 100K · 70% 5h')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('falls back to the weekly quota segment when no short window exists', async () => {
+    mount({
+      quota: {
+        supported: true,
+        windows: [{ id: 'weekly', used: 214, limit: 2048, percent: 10 }],
+      },
+    })
+    expect(await screen.findByText('40% · 100K · 10% weekly')).toBeTruthy()
+  })
+
   it('hides the quota section when the provider has no account surface', async () => {
     const { loadAccountUsage } = mount({ quota: { supported: false } })
     fireEvent.click(screen.getByRole('button', { expanded: false }))

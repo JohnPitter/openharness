@@ -1,0 +1,46 @@
+/* Composer account-quota ring: same 28px hit-target family as the
+   neighboring ContextMeter trigger, with a tertiary percent readout. */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 28px;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.trigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.ring {
+  flex: none;
+  display: block;
+}
+
+.ringTrack,
+.ringFill {
+  fill: none;
+  stroke-width: 2;
+}
+
+.ringTrack {
+  stroke: var(--dsw-alias-border-l2);
+}
+
+.ringFill {
+  stroke: var(--dsw-alias-brand-primary);
+  stroke-linecap: round;
+}
+
+.percent {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
