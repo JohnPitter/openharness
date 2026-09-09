@@ -11,7 +11,8 @@ describe('llm-cursor composition contract', () => {
       apiKeyEnv: 'CURSOR_ACCESS_TOKEN',
       transportMode: 'native',
       defaultModel: 'composer-2.5',
-      clientVersion: '3.17.21',
+      clientVersion: '3.19.13',
+      clientCommit: 'dd066f332fcea7382764400fde902f61920648d0',
       models: [{ id: 'composer-2.5', name: 'Composer 2.5', contextWindow: 200_000, maxTokens: 32_768 }],
     })
   })

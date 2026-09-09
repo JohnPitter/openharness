@@ -5,7 +5,10 @@ import { LlmError } from '@deepseek-ai/dsh-llm'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import {
-  CursorAdapter, defaultMachineId, DEFAULT_CLIENT_VERSION, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS,
+  CursorAgentAdapter, DEFAULT_CLIENT_COMMIT, DEFAULT_CLIENT_VERSION,
+} from './agent-adapter.ts'
+import {
+  defaultMachineId, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS,
   DEFAULT_MODELS, type CursorCatalogModel, type GhostMode,
 } from './adapter.ts'
 import { CursorCloudAdapter } from './cloud-adapter.ts'
@@ -15,8 +18,11 @@ import { handleCursorOauthHttp, OAUTH_HTTP_PREFIX } from './oauth-http.ts'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export {
-  CursorAdapter, CATALOG_LISTING_TIMEOUT_MS, DEFAULT_CLIENT_VERSION, DEFAULT_CONTEXT_WINDOW,
-  DEFAULT_MAX_TOKENS, DEFAULT_MODELS,
+  CursorAgentAdapter, DEFAULT_CLIENT_COMMIT, DEFAULT_CLIENT_VERSION,
+  type CursorAgentTransportConfig,
+} from './agent-adapter.ts'
+export {
+  CATALOG_LISTING_TIMEOUT_MS, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_TOKENS, DEFAULT_MODELS,
 } from './adapter.ts'
 export type { CursorCatalogModel, GhostMode } from './adapter.ts'
 export { CursorCloudAdapter } from './cloud-adapter.ts'
@@ -39,6 +45,7 @@ export interface Config {
   baseURL: string
   websiteURL: string
   clientVersion: string
+  clientCommit: string
   timezone?: string
   machineId?: string
   macMachineId?: string
@@ -62,6 +69,7 @@ export const Config = z.object({
   baseURL: z.string().default(DEFAULT_BACKEND_URL),
   websiteURL: z.string().default(DEFAULT_WEBSITE_URL),
   clientVersion: z.string().default(DEFAULT_CLIENT_VERSION),
+  clientCommit: z.string().default(DEFAULT_CLIENT_COMMIT),
   timezone: z.string(),
   machineId: z.string(),
   macMachineId: z.string(),
@@ -172,9 +180,10 @@ export function apply(ctx: Context, config: Config): void {
   // Live getters: Apply can raise clientVersion without tearing down the HTTP/2 session.
   const adapter = transportMode === 'sdk'
     ? new CursorCloudAdapter(resolveKey, () => current().models ?? DEFAULT_MODELS)
-    : new CursorAdapter(resolveKey, () => current().models ?? DEFAULT_MODELS, {
+    : new CursorAgentAdapter(resolveKey, () => current().models ?? DEFAULT_MODELS, {
       get baseURL() { return current().baseURL },
       get clientVersion() { return current().clientVersion },
+      get clientCommit() { return current().clientCommit },
       get timezone() { return current().timezone ?? timezone },
       get machineId() { return current().machineId ?? defaultMachineId() },
       get ghostMode() { return current().ghostMode },

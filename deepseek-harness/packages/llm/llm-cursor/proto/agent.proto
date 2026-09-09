@@ -1,0 +1,261 @@
+// Sparse projection of Cursor's `agent.v1` AgentService wire schema.
+//
+// Only the fields this adapter reads or writes are declared; field numbers
+// match the deployed schema (recovered from the cursor-agent client) so
+// unknown fields pass through untouched on the wire and are skipped on
+// decode. `Run` is a BiDi Connect RPC at `/agent.v1.AgentService/Run`:
+// the client opens with one `AgentClientMessage.run_request`, answers
+// `ExecServerMessage` requests (request context, MCP tool calls) with
+// `ExecClientMessage` results, and consumes `InteractionUpdate`s until
+// `turn_ended`.
+
+syntax = "proto3";
+
+package agent.v1;
+
+// Wire-identical projection of google.protobuf.Value/Struct/ListValue: the
+// package name never crosses the wire, so declaring them here keeps this file
+// import-free while encoding exactly the well-known-type byte layout.
+message Value {
+	oneof kind {
+		NullValue null_value = 1;
+		double number_value = 2;
+		string string_value = 3;
+		bool bool_value = 4;
+		Struct struct_value = 5;
+		ListValue list_value = 6;
+	}
+}
+
+enum NullValue {
+	NULL_VALUE = 0;
+}
+
+message Struct {
+	map<string, Value> fields = 1;
+}
+
+message ListValue {
+	repeated Value values = 1;
+}
+
+// ---------- client envelope ----------
+
+message AgentClientMessage {
+	oneof message {
+		AgentRunRequest run_request = 1;
+		ExecClientMessage exec_client_message = 2;
+	}
+}
+
+message AgentRunRequest {
+	ConversationState conversation_state = 1;
+	ConversationAction action = 2;
+	ModelDetails model_details = 3;
+	McpTools mcp_tools = 4;
+	string conversation_id = 5;
+	optional string conversation_group_id = 16;
+	optional string custom_system_prompt = 8;
+	RequestedModel requested_model = 9;
+	optional SystemPromptSpec system_prompt_spec = 29;
+}
+
+message SystemPromptSpec {
+	oneof spec {
+		string replace = 1;
+		string append = 2;
+	}
+}
+
+message ConversationState {
+	repeated string root_prompt_messages_json = 1;
+}
+
+message ConversationAction {
+	oneof action {
+		UserMessageAction user_message_action = 1;
+	}
+}
+
+message UserMessageAction {
+	UserMessage user_message = 1;
+}
+
+message UserMessage {
+	string text = 1;
+	string message_id = 2;
+}
+
+// ---------- model identity ----------
+
+message ModelDetails {
+	string model_id = 1;
+	bytes thinking_details = 2;
+	string display_model_id = 3;
+	string display_name = 4;
+	string display_name_short = 5;
+	repeated string aliases = 6;
+	bool max_mode = 7;
+}
+
+message RequestedModel {
+	string model_id = 1;
+	bool max_mode = 2;
+	string display_name = 6;
+	bool built_in_model = 7;
+}
+
+message GetUsableModelsRequest {
+	repeated string custom_model_ids = 1;
+}
+
+message GetUsableModelsResponse {
+	repeated ModelDetails models = 1;
+}
+
+// ---------- MCP tools declared by the client, executed by the client ----------
+
+message McpTools {
+	repeated McpToolDefinition mcp_tools = 1;
+}
+
+message McpToolDefinition {
+	string name = 1;
+	string description = 2;
+	Struct input_schema = 3;
+	string provider_identifier = 4;
+	string tool_name = 5;
+	optional string input_schema_json = 6;
+}
+
+// ---------- exec RPCs the server issues inside a run ----------
+
+message ExecClientMessage {
+	uint32 id = 1;
+	oneof message {
+		RequestContextResult request_context_result = 10;
+		McpResult mcp_result = 11;
+	}
+}
+
+message ExecServerMessage {
+	uint32 id = 1;
+	oneof message {
+		RequestContextArgs request_context_args = 10;
+		McpArgs mcp_args = 11;
+	}
+}
+
+message RequestContextArgs {
+	optional string notes_session_id = 2;
+}
+
+message RequestContextResult {
+	oneof result {
+		RequestContextSuccess success = 1;
+		RequestContextError error = 2;
+	}
+}
+
+message RequestContextSuccess {
+	RequestContext request_context = 1;
+}
+
+message RequestContextError {
+	string error = 1;
+}
+
+message RequestContext {
+	RequestContextEnv env = 4;
+	optional bool web_search_enabled = 17;
+}
+
+message RequestContextEnv {
+	string os_version = 1;
+	repeated string workspace_paths = 2;
+	string shell = 3;
+	string time_zone = 10;
+}
+
+message McpArgs {
+	string name = 1;
+	map<string, Value> args = 2;
+	string tool_call_id = 3;
+	string provider_identifier = 4;
+	string tool_name = 5;
+	optional string server_identifier = 9;
+}
+
+message McpResult {
+	oneof result {
+		McpSuccess success = 1;
+		McpToolError error = 2;
+	}
+}
+
+message McpSuccess {
+	repeated McpToolResultContentItem content = 1;
+	bool is_error = 2;
+}
+
+message McpToolError {
+	string error = 1;
+}
+
+message McpToolResultContentItem {
+	oneof content {
+		McpToolResultText text = 1;
+	}
+}
+
+message McpToolResultText {
+	string text = 1;
+}
+
+// ---------- server envelope and turn updates ----------
+
+message AgentServerMessage {
+	oneof message {
+		InteractionUpdate interaction_update = 1;
+		ExecServerMessage exec_server_message = 2;
+	}
+}
+
+message InteractionUpdate {
+	oneof message {
+		TextDeltaUpdate text_delta = 1;
+		ToolCallStartedUpdate tool_call_started = 2;
+		ToolCallCompletedUpdate tool_call_completed = 3;
+		ThinkingDeltaUpdate thinking_delta = 4;
+		bytes heartbeat = 13;
+		TurnEndedUpdate turn_ended = 14;
+	}
+}
+
+message TextDeltaUpdate {
+	string text = 1;
+	bool is_server_notice = 2;
+}
+
+message ThinkingDeltaUpdate {
+	string text = 1;
+}
+
+message TurnEndedUpdate {
+	optional uint64 input_tokens = 1;
+	optional uint64 output_tokens = 2;
+	optional uint64 cache_write_tokens = 3;
+	optional uint64 cache_read_tokens = 4;
+}
+
+message ToolCallStartedUpdate {
+	string call_id = 1;
+	bytes tool_call = 2;
+	string model_call_id = 3;
+}
+
+message ToolCallCompletedUpdate {
+	string call_id = 1;
+	bytes tool_call = 2;
+	string model_call_id = 3;
+}

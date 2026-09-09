@@ -1,107 +1,312 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { gzipSync } from 'node:zlib'
+import { platform } from 'node:os'
 import { LlmError } from '@deepseek-ai/dsh-llm'
-import { checksum, CATALOG_LISTING_TIMEOUT_MS, CursorAdapter, rejectedWhenAborted } from '../src/adapter.ts'
-import type { CursorHttp2Transport, Http2RequestOptions, Http2Response } from '../src/transport.ts'
-import { encodeModelsResponse, encodeResponseFixture, frame, trailerFrame } from '../src/protobuf.ts'
+import type { StreamChunk } from '@deepseek-ai/dsh-llm'
+import { checksum, rejectedWhenAborted } from '../src/adapter.ts'
+import { CursorAgentAdapter } from '../src/agent-adapter.ts'
+import type { CursorAgentTransportConfig } from '../src/agent-adapter.ts'
+import type {
+  CursorHttp2Transport, Http2RequestOptions, Http2Response, InteractiveHttp2Stream,
+} from '../src/transport.ts'
+import { frame, parseFrames, trailerFrame } from '../src/protobuf.ts'
+import {
+  decodeClientFrame, encodeServerFrame, encodeUsableModelsResponse,
+} from '../src/agent-proto.ts'
 
 const base = { provider: 'cursor', model: 'composer-2.5', messages: [] as never[] }
 
+const config: CursorAgentTransportConfig = {
+  baseURL: 'https://api2.cursor.sh',
+  clientVersion: '3.19.13',
+  clientCommit: 'commit-sha',
+  timezone: 'UTC',
+  machineId: 'machine',
+  ghostMode: false,
+}
+
 afterEach(() => { vi.useRealTimers() })
 
-/** One text-delta data frame followed by a clean trailer — a complete, successful stream. */
-const textFrames = (text: string): Uint8Array => {
-  const b = new TextEncoder().encode(
-    String.fromCharCode(18, text.length + 2, 10, text.length, ...new TextEncoder().encode(text)),
-  )
-  const data = frame(b)
-  const trailer = trailerFrame()
-  const out = new Uint8Array(data.length + trailer.length)
-  out.set(data)
-  out.set(trailer, data.length)
-  return out
-}
+/** Test-driven BiDi response body: frames arrive only when the test pushes them. */
+class ScriptDriver {
+  private queue: Uint8Array[] = []
+  private waiters: Array<() => void> = []
+  closed = false
 
-/** Yield `bytes` as a single chunk from an async iterable, the shape `response.body` has. */
-async function* bodyOf(bytes: Uint8Array): AsyncIterable<Uint8Array> {
-  yield bytes
-}
+  push(bytes: Uint8Array): void {
+    this.queue.push(bytes)
+    const waiters = this.waiters.splice(0)
+    for (const wake of waiters) wake()
+  }
 
-/** A fake {@link CursorHttp2Transport} whose `request()` is fully scripted by the test. */
-function fakeTransport(
-  handler: (options: Http2RequestOptions) => Http2Response | Promise<Http2Response>,
-): CursorHttp2Transport & { closed: boolean } {
-  const state = { closed: false }
-  return {
-    get closed() { return state.closed },
-    async request(options) { return handler(options) },
-    close() { state.closed = true },
+  close(): void {
+    this.closed = true
+    const waiters = this.waiters.splice(0)
+    for (const wake of waiters) wake()
+  }
+
+  async *body(): AsyncIterable<Uint8Array> {
+    for (;;) {
+      while (this.queue.length > 0) yield this.queue.shift()!
+      if (this.closed) return
+      await new Promise<void>(resolve => this.waiters.push(resolve))
+      if (this.closed && this.queue.length === 0) return
+    }
   }
 }
 
-function okResponse(body: Uint8Array, status = 200): Http2Response {
-  return { status, headers: {}, body: bodyOf(body) }
+interface FakeRun {
+  stream: InteractiveHttp2Stream
+  driver: ScriptDriver
+  written: Uint8Array[]
+  options: Omit<Http2RequestOptions, 'body'>
 }
 
-/** Connect unary body: one data frame plus a clean trailer, matching api2.cursor.sh. */
-function connectUnary(payload: Uint8Array, flags = 0): Uint8Array {
-  const data = frame(payload, flags)
-  const trailer = trailerFrame()
-  const out = new Uint8Array(data.length + trailer.length)
-  out.set(data)
-  out.set(trailer, data.length)
-  return out
+/** A fake transport: `request()` scripted for unary calls, `openStream()` producing test-driven runs. */
+function fakeTransport(handler?: (options: Http2RequestOptions) => Http2Response | Promise<Http2Response>) {
+  const state = { closed: false, runs: [] as FakeRun[], requests: [] as Http2RequestOptions[] }
+  const transport: CursorHttp2Transport & typeof state = {
+    get closed() { return state.closed },
+    get runs() { return state.runs },
+    get requests() { return state.requests },
+    async request(options) {
+      state.requests.push(options)
+      if (handler === undefined) throw new LlmError('no scripted unary response', 'PROVIDER_ERROR')
+      return handler(options)
+    },
+    openStream(options) {
+      const driver = new ScriptDriver()
+      const written: Uint8Array[] = []
+      const stream: InteractiveHttp2Stream = {
+        response: Promise.resolve({ status: 200, headers: {}, body: driver.body() }),
+        write(chunk) { written.push(chunk) },
+        end(chunk) { if (chunk !== undefined) written.push(chunk); driver.close() },
+        close() { driver.close() },
+      }
+      const run: FakeRun = { stream, driver, written, options }
+      state.runs.push(run)
+      return stream
+    },
+    close() { state.closed = true },
+  }
+  return transport
 }
 
-describe('CursorAdapter native transport', () => {
-  it('maps multi-turn conversation and streams protobuf text', async () => {
-    let requestBody: Uint8Array | undefined
-    const transport = fakeTransport((options) => {
-      requestBody = options.body
-      return okResponse(textFrames('hello'))
-    })
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    const chunks = []
-    for await (const c of adapter.stream({
+function adapterOf(transport: CursorHttp2Transport, catalog: Array<{ id: string; name?: string }> = []) {
+  return new CursorAgentAdapter(async () => 'jwt', () => catalog, config, transport)
+}
+
+/** Decoded client messages the adapter wrote into a run, in write order (data frames only). */
+function clientMessages(run: FakeRun): unknown[] {
+  return run.written.flatMap(bytes => parseFrames(bytes)
+    .filter(packet => packet.flags === 0)
+    .map(packet => decodeClientFrame(packet.payload)))
+}
+
+function dataFrame(value: unknown): Uint8Array {
+  return frame(encodeServerFrame(value))
+}
+
+function textDelta(text: string): Uint8Array {
+  return dataFrame({ interactionUpdate: { textDelta: { text } } })
+}
+
+const turnEnded = (inputTokens = 10, outputTokens = 3): Uint8Array =>
+  dataFrame({ interactionUpdate: { turnEnded: { inputTokens, outputTokens } } })
+
+async function collect(iterable: AsyncIterable<StreamChunk>): Promise<StreamChunk[]> {
+  const chunks: StreamChunk[] = []
+  for await (const chunk of iterable) chunks.push(chunk)
+  return chunks
+}
+
+describe('CursorAgentAdapter run protocol', () => {
+  it('streams thinking, text, and usage until the turn ends', async () => {
+    const transport = fakeTransport()
+    const adapter = adapterOf(transport)
+    const runPromise = collect(adapter.stream({
       ...base,
+      sessionId: 's1' as never,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] } as never],
+    }))
+    await vi.waitFor(() => { expect(transport.runs.length).toBe(1) })
+    const run = transport.runs[0]!
+    run.driver.push(dataFrame({ interactionUpdate: { thinkingDelta: { text: 'hm' } } }))
+    run.driver.push(textDelta('he'))
+    run.driver.push(textDelta('llo'))
+    run.driver.push(turnEnded(11, 4))
+    const chunks = await runPromise
+    expect(chunks).toContainEqual({ type: 'reasoning-delta', index: 0, text: 'hm' })
+    expect(chunks).toContainEqual({ type: 'text-delta', index: 1, text: 'llo' })
+    expect(chunks).toContainEqual({ type: 'usage', usage: { inputTokens: 11, outputTokens: 4 } })
+    expect(chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
+    const messages = clientMessages(run) as Array<{ runRequest?: { action?: { userMessageAction?: { userMessage?: { text?: string } } } } }>
+    expect(messages[0]?.runRequest?.action?.userMessageAction?.userMessage?.text).toBe('hi')
+  })
+
+  it('sends the official client headers and run request fields', async () => {
+    const transport = fakeTransport()
+    const adapter = adapterOf(transport)
+    const runPromise = collect(adapter.stream({
+      ...base,
+      sessionId: 's1' as never,
+      system: 'be brief',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] } as never],
+    }))
+    await vi.waitFor(() => { expect(transport.runs.length).toBe(1) })
+    const run = transport.runs[0]!
+    run.driver.push(turnEnded())
+    await runPromise
+    const headers = run.options.headers
+    expect(headers.authorization).toBe('Bearer jwt')
+    expect(headers['content-type']).toBe('application/connect+proto')
+    expect(headers['x-cursor-client-version']).toBe('3.19.13')
+    expect(headers['x-cursor-client-commit']).toBe('commit-sha')
+    expect(headers['x-cursor-client-type']).toBe('ide')
+    expect(headers['x-cursor-client-layout']).toBe('editor')
+    expect(headers['x-cursor-client-device-type']).toBe('desktop')
+    expect(headers['x-cursor-client-os']).toBe(platform())
+    expect(headers['x-cursor-client-arch']).toBe(process.arch)
+    expect(headers['x-new-onboarding-completed']).toBe('false')
+    expect(headers['x-amzn-trace-id']).toBe(`Root=${headers['x-request-id']}`)
+    const messages = clientMessages(run) as Array<{
+      runRequest?: {
+        modelDetails?: { modelId?: string }
+        requestedModel?: { modelId?: string; builtInModel?: boolean }
+        systemPromptSpec?: { append?: string }
+      }
+    }>
+    expect(messages[0]?.runRequest?.modelDetails?.modelId).toBe('composer-2.5')
+    expect(messages[0]?.runRequest?.requestedModel).toEqual({ modelId: 'composer-2.5', builtInModel: true })
+    expect(messages[0]?.runRequest?.systemPromptSpec?.append).toBe('be brief')
+  })
+
+  it('answers request-context exec requests with a minimal tool-less context', async () => {
+    const transport = fakeTransport()
+    const adapter = adapterOf(transport)
+    const runPromise = collect(adapter.stream({
+      ...base,
+      sessionId: 's1' as never,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] } as never],
+    }))
+    await vi.waitFor(() => { expect(transport.runs.length).toBe(1) })
+    const run = transport.runs[0]!
+    run.driver.push(dataFrame({ execServerMessage: { id: 7, requestContextArgs: {} } }))
+    await vi.waitFor(() => { expect(run.written.length).toBeGreaterThan(1) })
+    run.driver.push(turnEnded())
+    await runPromise
+    const messages = clientMessages(run) as Array<{
+      execClientMessage?: { id?: number; requestContextResult?: { success?: { requestContext?: { env?: { shell?: string } } } } }
+    }>
+    expect(messages[1]?.execClientMessage?.id).toBe(7)
+    expect(messages[1]?.execClientMessage?.requestContextResult?.success?.requestContext?.env?.shell).toBeTypeOf('string')
+  })
+
+  it('declares harness tools, surfaces mcp calls, and continues with their results', async () => {
+    const transport = fakeTransport()
+    const adapter = adapterOf(transport)
+    const firstTurn = collect(adapter.stream({
+      ...base,
+      sessionId: 's1' as never,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'weather?' }] } as never],
+      tools: [{ name: 'get_weather', description: 'Get weather.', parameters: { type: 'object', properties: { city: { type: 'string' } } } }],
+    }))
+    await vi.waitFor(() => { expect(transport.runs.length).toBe(1) })
+    const run = transport.runs[0]!
+    run.driver.push(dataFrame({
+      execServerMessage: {
+        id: 3,
+        mcpArgs: { name: 'get_weather', args: { city: { stringValue: 'Lisbon' } }, toolCallId: 'call_1' },
+      },
+    }))
+    const first = await firstTurn
+    expect(first).toContainEqual({ type: 'tool-call-delta', index: 3, id: 'call_1', name: 'get_weather', argumentsDelta: '{"city":"Lisbon"}' })
+    expect(first.at(-1)).toEqual({ type: 'finish', reason: { kind: 'tool-calls' } })
+    const openMessages = clientMessages(run) as Array<{
+      runRequest?: { mcpTools?: { mcpTools?: Array<{ name?: string; inputSchemaJson?: string }> } }
+    }>
+    expect(openMessages[0]?.runRequest?.mcpTools?.mcpTools?.[0]?.name).toBe('get_weather')
+    expect(openMessages[0]?.runRequest?.mcpTools?.mcpTools?.[0]?.inputSchemaJson).toContain('"city"')
+
+    const secondTurn = collect(adapter.stream({
+      ...base,
+      sessionId: 's1' as never,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'weather?' }] } as never,
+        { role: 'assistant', content: [{ type: 'tool-call', id: 'call_1', name: 'get_weather', arguments: '{"city":"Lisbon"}' }] } as never,
+        { role: 'user', content: [{ type: 'tool-result', toolCallId: 'call_1', content: [{ type: 'text', text: '22C sunny' }] }] } as never,
+      ],
+    }))
+    await vi.waitFor(() => {
+      const messages = clientMessages(run) as Array<{ execClientMessage?: { mcpResult?: unknown } }>
+      expect(messages.some(message => message.execClientMessage?.mcpResult !== undefined)).toBe(true)
+    })
+    const written = clientMessages(run) as Array<{
+      execClientMessage?: { id?: number; mcpResult?: { success?: { content?: Array<{ text?: { text?: string } }> } } }
+    }>
+    const result = written.find(message => message.execClientMessage?.mcpResult !== undefined)
+    expect(result?.execClientMessage?.id).toBe(3)
+    expect(result?.execClientMessage?.mcpResult?.success?.content?.[0]?.text?.text).toBe('22C sunny')
+    run.driver.push(textDelta('done'))
+    run.driver.push(turnEnded(20, 2))
+    const second = await secondTurn
+    expect(second).toContainEqual({ type: 'text-delta', index: 1, text: 'done' })
+    expect(second).toContainEqual({ type: 'usage', usage: { inputTokens: 20, outputTokens: 2 } })
+    expect(second.at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
+  })
+
+  it('flattens prior turns into the next run’s user message', async () => {
+    const transport = fakeTransport()
+    const adapter = adapterOf(transport)
+    const runPromise = collect(adapter.stream({
+      ...base,
+      sessionId: 's2' as never,
       messages: [
         { role: 'user', content: [{ type: 'text', text: 'one' }] } as never,
         { role: 'assistant', content: [{ type: 'text', text: 'two' }] } as never,
+        { role: 'user', content: [{ type: 'text', text: 'three' }] } as never,
       ],
-    })) chunks.push(c)
-    expect(requestBody?.[0]).toBe(0)
-    expect(chunks.some(c => c.type === 'text-delta' && c.text === 'hello')).toBe(true)
+    }))
+    await vi.waitFor(() => { expect(transport.runs.length).toBe(1) })
+    const run = transport.runs[0]!
+    run.driver.push(turnEnded())
+    await runPromise
+    const messages = clientMessages(run) as Array<{ runRequest?: { action?: { userMessageAction?: { userMessage?: { text?: string } } } } }>
+    const text = messages[0]?.runRequest?.action?.userMessageAction?.userMessage?.text ?? ''
+    expect(text).toContain('[user]\none')
+    expect(text).toContain('[assistant]\ntwo')
+    expect(text.endsWith('[user]\nthree')).toBe(true)
   })
 
-  it('maps tools to an Agent request and sends official client headers', async () => {
-    let headers: Http2RequestOptions['headers'] | undefined
-    const transport = fakeTransport((options) => {
-      headers = options.headers
-      return okResponse(textFrames('ok'))
-    })
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    for await (const _ of adapter.stream({
+  it('fails the turn with the trailer error', async () => {
+    const transport = fakeTransport()
+    const adapter = adapterOf(transport)
+    const runPromise = collect(adapter.stream({
       ...base,
-      tools: [{ name: 'my tool', description: 'desc', parameters: { type: 'object' } }],
-    })) { }
-    expect(headers?.authorization).toBe('Bearer jwt')
-    expect(headers?.['x-cursor-client-type']).toBe('ide')
-    expect(headers?.['x-cursor-client-layout']).toBe('editor')
-    expect(headers?.['x-cursor-client-device-type']).toBe('desktop')
-    expect(headers?.['x-cursor-client-os']).toBe(process.platform)
-    expect(headers?.['x-cursor-client-os-version']).toBeTypeOf('string')
-    expect(headers?.['x-cursor-client-arch']).toBe(process.arch)
-    expect(headers?.['x-new-onboarding-completed']).toBe('false')
-    expect(headers?.['x-amzn-trace-id']).toBe(`Root=${headers?.['x-request-id']}`)
-    expect(headers).not.toHaveProperty('x-cursor-client-key')
-    expect(headers?.['x-cursor-timezone']).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+      sessionId: 's1' as never,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] } as never],
+    }))
+    await vi.waitFor(() => { expect(transport.runs.length).toBe(1) })
+    transport.runs[0]!.driver.push(trailerFrame({ code: 'resource_exhausted', message: 'quota exceeded' }))
+    await expect(runPromise).rejects.toMatchObject({ code: 'RATE_LIMIT' })
   })
 
-  it('declares request metering', () => {
-    const adapter = new CursorAdapter(async () => 'jwt', () => [])
-    expect(adapter.providerInfo('cursor')).toMatchObject({
-      id: 'cursor', name: 'Cursor', metering: 'requests',
-    })
+  it('aborts the turn when the signal fires mid-run', async () => {
+    const transport = fakeTransport()
+    const adapter = adapterOf(transport)
+    const controller = new AbortController()
+    const runPromise = collect(adapter.stream({
+      ...base,
+      sessionId: 's1' as never,
+      signal: controller.signal,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] } as never],
+    }))
+    await vi.waitFor(() => { expect(transport.runs.length).toBe(1) })
+    controller.abort()
+    await expect(runPromise).rejects.toMatchObject({ code: 'ABORTED' })
+  })
+
+  it('rejects a pre-aborted signal', async () => {
+    await expect(rejectedWhenAborted(AbortSignal.abort())).rejects.toMatchObject({ code: 'ABORTED' })
   })
 
   it('uses the official checksum vector', () => {
@@ -109,289 +314,33 @@ describe('CursorAdapter native transport', () => {
     expect(checksum('machine', 'mac', 1700000000000)).toBe('paaotEjtmachine/mac')
   })
 
-  it('reuses a session id across stream calls', async () => {
-    const sessionIds: string[] = []
-    const transport = fakeTransport((options) => {
-      sessionIds.push(options.headers['x-session-id'] ?? '')
-      return okResponse(textFrames('ok'))
+  it('declares request metering', () => {
+    const adapter = adapterOf(fakeTransport())
+    expect(adapter.providerInfo('cursor')).toMatchObject({ id: 'cursor', name: 'Cursor', metering: 'requests' })
+  })
+})
+
+describe('CursorAgentAdapter listModels', () => {
+  it('lists usable models from the unary application/proto RPC', async () => {
+    const transport = fakeTransport(options => {
+      expect(options.path).toBe('/aiserver.v1.AiService/GetUsableModels')
+      expect(options.headers['content-type']).toBe('application/proto')
+      return { status: 200, headers: {}, body: (async function* () { yield encodeUsableModelsResponse([
+        { modelId: 'a', displayName: 'Model A' }, { modelId: 'b' },
+      ]) })() }
     })
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    for await (const _ of adapter.stream(base)) { }
-    for await (const _ of adapter.stream(base)) { }
-    expect(sessionIds[0]).toBe(sessionIds[1])
-  })
-
-  it('reports HTTP and missing credentials', async () => {
-    const transport = fakeTransport(() => okResponse(new Uint8Array(), 401))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    await expect(async () => {
-      for await (const _ of adapter.stream(base)) { }
-    }).rejects.toMatchObject({ code: 'AUTH' })
-    const missing = new CursorAdapter(async () => {
-      throw new LlmError('missing', 'MISSING_CREDENTIAL')
-    }, () => [], undefined, transport)
-    await expect(async () => {
-      for await (const _ of missing.stream(base)) { }
-    }).rejects.toMatchObject({ code: 'MISSING_CREDENTIAL' })
-  })
-
-  it('honors abort and unsupported options', async () => {
-    const controller = new AbortController()
-    const transport = fakeTransport(async (options) => {
-      await new Promise((resolve, reject) => {
-        options.signal?.addEventListener('abort', () => { reject(new LlmError('request aborted', 'ABORTED')) }, { once: true })
-        setTimeout(resolve, 100)
-      })
-      return okResponse(textFrames('ok'))
-    })
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    const pending = (async () => {
-      for await (const _ of adapter.stream({ ...base, signal: controller.signal })) { }
-    })()
-    controller.abort()
-    await expect(pending).rejects.toMatchObject({ code: 'ABORTED' })
-    await expect(async () => {
-      for await (const _ of adapter.stream({ ...base, stop: ['x'] })) { }
-    }).rejects.toMatchObject({ code: 'UNSUPPORTED' })
-  })
-
-  it('aborts mid-stream once the response body is already flowing', async () => {
-    const controller = new AbortController()
-    async function* slowBody(): AsyncIterable<Uint8Array> {
-      yield frame(new TextEncoder().encode(String.fromCharCode(18, 3, 10, 1, 97))) // one 'a' text delta
-      await new Promise(resolve => setTimeout(resolve, 50))
-      yield trailerFrame()
-    }
-    const transport = fakeTransport(() => ({ status: 200, headers: {}, body: slowBody() }))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    const pending = (async () => {
-      const chunks = []
-      for await (const c of adapter.stream({ ...base, signal: controller.signal })) chunks.push(c)
-      return chunks
-    })()
-    await new Promise(resolve => setTimeout(resolve, 10))
-    controller.abort()
-    await expect(pending).rejects.toMatchObject({ code: 'ABORTED' })
-  })
-
-  it('discovers models through the unary RPC', async () => {
-    const transport = fakeTransport((options) => {
-      expect(options.headers['content-type']).toBe('application/connect+proto')
-      expect(options.body[0]).toBe(0)
-      return okResponse(connectUnary(encodeModelsResponse([{
-        name: 'server-id',
-        clientDisplayName: 'Display',
-        serverModelName: 'server-id',
-        contextTokenLimit: 8192,
-      }])))
-    })
-    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
-    await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'server-id', name: 'Display' }])
-  })
-
-  it('discovers model_names when AvailableModel rows are absent', async () => {
-    const transport = fakeTransport(() => okResponse(connectUnary(encodeModelsResponse([], ['grok-4', 'composer-2.5']))))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
+    const adapter = adapterOf(transport)
     await expect(adapter.listModels('cursor')).resolves.toEqual([
-      { provider: 'cursor', id: 'grok-4', name: 'grok-4' },
-      { provider: 'cursor', id: 'composer-2.5', name: 'composer-2.5' },
+      { provider: 'cursor', id: 'a', name: 'Model A' },
+      { provider: 'cursor', id: 'b', name: 'b' },
     ])
   })
 
-  it('inflates a gzip GetUsableModels data frame', async () => {
-    const proto = encodeModelsResponse([{ name: 'gzip-id', clientDisplayName: 'Gzip', serverModelName: 'gzip-id' }])
-    const transport = fakeTransport(() => okResponse(connectUnary(gzipSync(proto), 1)))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
-    await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'gzip-id', name: 'Gzip' }])
-  })
-
-  it('still reads an unframed protobuf listing body', async () => {
-    const transport = fakeTransport(() => okResponse(encodeModelsResponse([{
-      name: 'raw-id',
-      clientDisplayName: 'Raw',
-      serverModelName: 'raw-id',
-    }])))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
-    await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'raw-id', name: 'Raw' }])
-  })
-
-  it('falls back to the catalog when the unary listing is empty', async () => {
-    const transport = fakeTransport(() => okResponse(connectUnary(encodeModelsResponse([]))))
-    const adapter = new CursorAdapter(
-      async () => 'jwt',
-      () => [{ id: 'fallback', name: 'Fallback' }],
-      undefined,
-      transport,
-    )
+  it('falls back to the configured catalog when the listing fails', async () => {
+    const transport = fakeTransport(() => { throw new LlmError('boom', 'PROVIDER_ERROR') })
+    const adapter = adapterOf(transport, [{ id: 'composer-2.5', name: 'Composer 2.5' }])
     await expect(adapter.listModels('cursor')).resolves.toEqual([
-      { provider: 'cursor', id: 'fallback', name: 'Fallback' },
+      { provider: 'cursor', id: 'composer-2.5', name: 'Composer 2.5' },
     ])
-  })
-
-  it('falls back to the catalog when listing exceeds the bound', async () => {
-    vi.useFakeTimers()
-    const transport = fakeTransport(async (options) => {
-      await new Promise((_, reject) => {
-        options.signal?.addEventListener('abort', () => {
-          reject(new LlmError('request aborted', 'ABORTED'))
-        }, { once: true })
-      })
-      return okResponse(new Uint8Array())
-    })
-    const adapter = new CursorAdapter(
-      async () => 'jwt',
-      () => [{ id: 'fallback', name: 'Fallback' }],
-      undefined,
-      transport,
-    )
-    const pending = adapter.listModels('cursor')
-    await vi.advanceTimersByTimeAsync(CATALOG_LISTING_TIMEOUT_MS)
-    await expect(pending).resolves.toEqual([{ provider: 'cursor', id: 'fallback', name: 'Fallback' }])
-    vi.useRealTimers()
-  })
-
-  it('resolves catalog capacities for a listed model', async () => {
-    const adapter = new CursorAdapter(async () => 'jwt', () => [{
-      id: 'composer-2.5',
-      name: 'Composer 2.5',
-      contextWindow: 200_000,
-      maxTokens: 32_768,
-    }])
-    await expect(adapter.resolveModel('cursor', 'composer-2.5')).resolves.toMatchObject({
-      provider: 'cursor',
-      id: 'composer-2.5',
-      name: 'Composer 2.5',
-      context: { contextWindow: 200_000 },
-      defaultMaxTokens: 32_768,
-    })
-  })
-
-  it('returns no models for a foreign provider and default capacities for an unlisted id', async () => {
-    const adapter = new CursorAdapter(async () => 'jwt', () => [])
-    await expect(adapter.listModels('other')).resolves.toEqual([])
-    await expect(adapter.resolveModel('cursor', 'unknown')).resolves.toMatchObject({
-      id: 'unknown',
-      name: 'unknown',
-      context: { contextWindow: 200_000 },
-      defaultMaxTokens: 32_768,
-    })
-  })
-
-  it('rejects immediately when the listing abort has already fired', async () => {
-    await expect(rejectedWhenAborted(AbortSignal.abort())).rejects.toMatchObject({ code: 'ABORTED' })
-  })
-
-  it('falls back to the catalog when the listing trailer carries an error', async () => {
-    const transport = fakeTransport(() => okResponse(trailerFrame({
-      code: 'unauthenticated',
-      message: 'expired',
-    })))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
-    await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'fallback', name: 'Fallback' }])
-  })
-
-  it('falls back to configured models on unary auth failure', async () => {
-    const transport = fakeTransport(() => okResponse(new Uint8Array(), 401))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [{ id: 'fallback', name: 'Fallback' }], undefined, transport)
-    await expect(adapter.listModels('cursor')).resolves.toEqual([{ provider: 'cursor', id: 'fallback', name: 'Fallback' }])
-  })
-
-  it('emits protobuf usage before finish', async () => {
-    const data = frame(encodeResponseFixture({ text: 'x', debuggingOnlyTokenCount: 7 }))
-    const trailer = trailerFrame()
-    const body = new Uint8Array(data.length + trailer.length)
-    body.set(data)
-    body.set(trailer, data.length)
-    const transport = fakeTransport(() => okResponse(body))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    const chunks = []
-    for await (const c of adapter.stream(base)) chunks.push(c)
-    expect(chunks.at(-2)).toEqual({ type: 'usage', usage: { inputTokens: 0, outputTokens: 7 } })
-    expect(chunks.at(-1)?.type).toBe('finish')
-  })
-
-  it('maps a resource_exhausted trailer to a RATE_LIMIT LlmError', async () => {
-    const trailer = trailerFrame({
-      code: 'resource_exhausted',
-      message: 'Error',
-      details: [{ debug: { details: { detail: 'You have hit your usage limit.' } } }],
-    })
-    const transport = fakeTransport(() => okResponse(trailer))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    await expect(async () => {
-      for await (const _ of adapter.stream(base)) { }
-    }).rejects.toMatchObject({ code: 'RATE_LIMIT', message: expect.stringContaining('You have hit your usage limit.') as string })
-  })
-
-  it('maps a version-rejected resource_exhausted trailer to PROVIDER_ERROR', async () => {
-    const details = [
-      'Your version of Cursor is no longer supported. Please update to continue.',
-      'Please update to the latest version at cursor.com/downloads to continue.',
-    ]
-    for (const detail of details) {
-      const transport = fakeTransport(() => okResponse(trailerFrame({
-        code: 'resource_exhausted',
-        message: 'Error',
-        details: [{ debug: { details: { detail } } }],
-      })))
-      const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-      await expect(async () => {
-        for await (const _ of adapter.stream(base)) { }
-      }).rejects.toMatchObject({ code: 'PROVIDER_ERROR' })
-    }
-  })
-
-  it('maps unauthenticated/permission_denied trailers to AUTH', async () => {
-    for (const code of ['unauthenticated', 'permission_denied']) {
-      const transport = fakeTransport(() => okResponse(trailerFrame({ code, message: 'nope' })))
-      const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-      await expect(async () => {
-        for await (const _ of adapter.stream(base)) { }
-      }).rejects.toMatchObject({ code: 'AUTH' })
-    }
-  })
-
-  it('maps an unrecognized trailer error code to PROVIDER_ERROR', async () => {
-    const transport = fakeTransport(() => okResponse(trailerFrame({ code: 'internal', message: 'boom' })))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    await expect(async () => {
-      for await (const _ of adapter.stream(base)) { }
-    }).rejects.toMatchObject({ code: 'PROVIDER_ERROR' })
-  })
-
-  it('treats a clean trailer with no error as a normal stream end', async () => {
-    const transport = fakeTransport(() => okResponse(textFrames('done')))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    const chunks = []
-    for await (const c of adapter.stream(base)) chunks.push(c)
-    expect(chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
-  })
-
-  it('rejects an unknown Connect frame flag as a PROTOCOL error', async () => {
-    const transport = fakeTransport(() => okResponse(frame(new Uint8Array([1, 2, 3]), 3)))
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    await expect(async () => {
-      for await (const _ of adapter.stream(base)) { }
-    }).rejects.toMatchObject({ code: 'PROTOCOL' })
-  })
-
-  it('fails a request that times out waiting for a response', async () => {
-    const transport: CursorHttp2Transport = {
-      async request() {
-        throw new LlmError('Cursor request timed out after 1ms', 'TIMEOUT')
-      },
-      close() {},
-    }
-    const adapter = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    await expect(async () => {
-      for await (const _ of adapter.stream(base)) { }
-    }).rejects.toMatchObject({ code: 'TIMEOUT' })
-  })
-
-  it('disposes its owned transport but not an injected one', () => {
-    const transport = fakeTransport(() => okResponse(textFrames('ok')))
-    const injected = new CursorAdapter(async () => 'jwt', () => [], undefined, transport)
-    injected.dispose()
-    expect(transport.closed).toBe(false)
   })
 })

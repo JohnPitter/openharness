@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { FinishReason, LlmFailure, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as LlmCursor from '@deepseek-ai/dsh-llm-cursor'
 
@@ -65,12 +65,15 @@ function assertTextStream(chunks: StreamChunk[]): void {
     throw new Error(`Cursor real API request failed (${reason.failure.code}): ${reason.failure.message}`)
   }
 
+  // Blocks open and close in order (a reasoning block may precede the text
+  // block); text deltas land before the final block-end.
   const protocol = chunks.slice(0, finishIndex).map(chunk => chunk.type)
   expect(protocol[0]).toBe('block-start')
-  expect(protocol.at(-1)).toBe('block-end')
+  expect(protocol.filter(type => type === 'block-start').length)
+    .toBe(protocol.filter(type => type === 'block-end').length)
   expect(protocol.filter(type => type === 'text-delta').length).toBeGreaterThan(0)
-  expect(protocol.indexOf('text-delta')).toBeGreaterThan(protocol.indexOf('block-start'))
-  expect(protocol.lastIndexOf('text-delta')).toBeLessThan(protocol.indexOf('block-end'))
+  expect(protocol.lastIndexOf('text-delta')).toBeLessThan(protocol.lastIndexOf('block-end'))
+  expect(protocol.at(-1)).toBe('block-end')
 
   const text = chunks
     .filter((chunk): chunk is Extract<StreamChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
@@ -94,4 +97,38 @@ describe.skipIf(!process.env.CURSOR_ACCESS_TOKEN)('llm-cursor e2e (real API)', (
     ])
     assertTextStream(chunks)
   }, 120_000)
+
+  it('completes a tool-call and result cycle over the run protocol', async () => {
+    const ctx = await harness()
+    const sessionId = `cursor-native-tools-${Date.now()}` as never
+    const tools = [{
+      name: 'echo',
+      description: 'Echo the message back',
+      parameters: { type: 'object', properties: { msg: { type: 'string' } }, required: ['msg'] },
+    }]
+    const prompt = user("Call the echo tool with msg='ping' and then report exactly what it returned.")
+    const first: StreamChunk[] = []
+    for await (const chunk of ctx.llm.stream({ provider: 'cursor', model: MODEL, sessionId, messages: [prompt], tools })) {
+      first.push(chunk)
+    }
+    expect(first.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'tool-calls' } })
+    const call = first.find(chunk => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
+    if (call?.type !== 'block-end' || call.block.type !== 'tool-call') throw new Error('real API did not emit a tool call')
+    const second: StreamChunk[] = []
+    for await (const chunk of ctx.llm.stream({
+      provider: 'cursor',
+      model: MODEL,
+      sessionId,
+      messages: [prompt, createToolResultMessage({ callId: call.block.id, content: [{ type: 'text', text: 'pong-echo' }], isError: false })],
+      tools,
+    })) {
+      second.push(chunk)
+    }
+    expect(second.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'stop' } })
+    const text = second
+      .filter((chunk): chunk is Extract<StreamChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
+      .map(chunk => chunk.text)
+      .join('')
+    expect(text).toContain('pong-echo')
+  }, 180_000)
 })

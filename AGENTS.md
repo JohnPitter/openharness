@@ -139,12 +139,15 @@ em vez de entrar na mesma lista de modelos.
 ## Provider Cursor
 
 `packages/llm/llm-cursor` é um plugin próprio (não entra no catálogo pi-ai). Default
-`transportMode: native`: Connect/protobuf HTTP/2 em `api2.cursor.sh`, o modelo
-roda no loop do harness. `sdk` (Cloud Agent `@cursor/sdk`) fica como opt-in em
-`settings.yaml`. Chave `CURSOR_ACCESS_TOKEN` (JWT) + `CURSOR_REFRESH_TOKEN`;
-Sign in no card (PKCE-shaped em `/dsh-llm-cursor/oauth`) ou colar o token.
-`layoutOf` mapeia `llm-cursor` → família `cursor`. `metering: 'requests'`.
-Registrado em `cordis.patch.yml` + `package.json` + `tsconfig.host.json`.
+`transportMode: native`: o protocolo do cursor-agent, `agent.v1.AgentService/Run`
+(stream BiDi Connect/protobuf HTTP/2 em `api2.cursor.sh`; o ChatService antigo está
+retirado do ar no servidor). As tools do harness viram `mcp_tools` e o resultado
+retorna por `mcp_result` no mesmo run aberto. `sdk` (Cloud Agent `@cursor/sdk`)
+fica como opt-in em `settings.yaml`. Chave `CURSOR_ACCESS_TOKEN` (JWT) +
+`CURSOR_REFRESH_TOKEN`; Sign in no card (PKCE-shaped em `/dsh-llm-cursor/oauth`)
+ou colar o token. `layoutOf` mapeia `llm-cursor` → família `cursor`.
+`metering: 'requests'`. Registrado em `cordis.patch.yml` + `package.json` +
+`tsconfig.host.json`.
 
 Login OAuth (Settings → Models, no card do provider): Claude Code e Codex
 aceitam **Sign in** (PKCE no browser, callback localhost) **e** colar token.

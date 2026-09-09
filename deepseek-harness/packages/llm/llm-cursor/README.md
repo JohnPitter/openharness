@@ -10,7 +10,8 @@ llm-cursor:
   defaultModel: composer-2.5
   baseURL: https://api2.cursor.sh
   websiteURL: https://cursor.com
-  clientVersion: 3.17.21
+  clientVersion: 3.19.13
+  clientCommit: dd066f332fcea7382764400fde902f61920648d0
   # Omitido: usa o fuso retornado por Intl.DateTimeFormat().resolvedOptions().timeZone
   timezone: America/Sao_Paulo
   machineId: your-stable-machine-id
@@ -23,7 +24,9 @@ llm-cursor:
       maxTokens: 32768
 ```
 
-`clientVersion` é um valor estático no código (`3.17.21`, a versão mais recente publicada no canal `stable`/`win32-x64-user` no momento desta implementação — o mesmo número em `product.json` do cliente desktop instalado). O backend rejeita um pin antigo com `resource_exhausted` cuja mensagem humana diz que a versão do Cursor não é mais suportada; `listModels` então cai no array `models` (só Composer 2.5) e o chat falha. Sobrescreva `clientVersion` na configuração, ou atualize o default compilado, quando o backend exigir uma versão mais recente. O mesmo código Connect também cobre billing/quota (`analyticsMetadata.actionRequired: "payment"`); o adapter distingue o caso de versão pelo texto `no longer supported` / `cursor.com/downloads` e mapeia esse trailer para `PROVIDER_ERROR`, não `RATE_LIMIT`.
+`clientVersion` e `clientCommit` são valores estáticos no código (`3.19.13` + o `commitSha` do mesmo build — os mesmos valores em `product.json` do cliente desktop instalado e na API de downloads do Cursor). O backend rejeita pins antigos; o endpoint antigo de chat (`aiserver.v1.ChatService`) está retirado do ar no servidor (`ERROR_DEPRECATED` / "version no longer supported"), por isso o modo `native` fala o protocolo do cursor-agent: `agent.v1.AgentService/Run` (stream BiDi Connect/protobuf sobre HTTP/2). Sobrescreva `clientVersion`/`clientCommit` na configuração, ou atualize os defaults compilados, quando o backend exigir um build mais recente. O código Connect `resource_exhausted` também cobre billing/quota; o adapter distingue o caso de versão pelo texto `no longer supported` / `cursor.com/downloads` e mapeia esse trailer para `PROVIDER_ERROR`, não `RATE_LIMIT`.
+
+No protocolo de runs, cada turno abre um stream com um frame `run_request` (ação do usuário, `model_details`, `requested_model`, tools do harness declaradas como `mcp_tools` com `provider_identifier: openharness`); o servidor responde `request_context_args` (respondido com um env mínimo, sem workspace/tools) e streama `interaction_update` (`thinking_delta` → bloco reasoning, `text_delta` → bloco text, `turn_ended` com `input_tokens`/`output_tokens` → `usage` + `finish(stop)`). Uma chamada de tool chega como exec `mcp_args` (args em `google.protobuf.Value`), vira um bloco tool-call + `finish(tool-calls)` e o run fica aberto; a próxima `stream()` com tool-result reentra no MESMO run como frame `mcp_result`. Runs expiram em 30 minutos; turnos anteriores de um run novo são retransmitidos como texto marcado `[user]`/`[assistant]`/`[tool result ...]` dentro da mensagem do usuário (o replay nativo do protocolo usa blobs enviados pelo cliente — `ConversationStateStructure.turns` + `UploadConversationBlobs` — que este adapter não implementa). O system prompt vai em `system_prompt_spec.append` (o campo `custom_system_prompt` é rejeitado nesta conta com `unknown option '--system-prompt'`).
 
 No modo `sdk`, `CURSOR_API_KEY` (ou `apiKeyEnv`) contém uma chave `crsr_...`; `CURSOR_SDK_KEY` é a referência persistida após mint. Se só houver `CURSOR_ACCESS_TOKEN` (JWT), o plugin chama `DashboardService/CreateUserApiKey` via HTTP/2, grava a chave e a reutiliza. No modo `native`, `apiKeyEnv`/`refreshTokenEnv` continuam apontando para JWT e refresh token (`CURSOR_ACCESS_TOKEN`/`CURSOR_REFRESH_TOKEN`).
 
@@ -37,17 +40,18 @@ O plugin implementa nativamente em Node o fluxo OAuth-like do cliente desktop co
 
 O adapter nativo renova o access token automaticamente antes de cada `stream`/`listModels`: decodifica o `exp` do JWT atual (`decodeJwtExp`) e, se faltarem menos de 2 minutos para expirar (ou já tiver expirado) e houver um refresh token armazenado, chama `refreshTokens` e persiste o resultado via `ctx.credentials.set` antes de prosseguir. Chamadas concorrentes compartilham uma única promise de refresh em voo (nenhum refresh token é gasto duas vezes). Falha no refresh vira `LlmError` código `AUTH`. Um access token que não seja um JWT decodificável é usado como está, sem tentativa de refresh.
 
-O adapter envia o histórico como mensagens protobuf nativas (reflection do `proto/lite.proto` via `protobufjs`), preserva turnos, mapeia schemas de tools para `mcp_tools` e decodifica frames Connect incrementais. Mensagens system são removidas de `conversation` e enviadas em `ExplicitContext.context`, que é o campo equivalente no proto.
+O adapter codifica/decodifica as mensagens `agent.v1` via reflection do `proto/agent.proto` (`protobufjs`) — uma projeção esparsa do schema real (só os campos que o adapter lê/escreve; números de campo extraídos do pacote do cursor-agent CLI), com `google.protobuf.Value` redeclarado em `agent.v1` (idêntico no wire). Frames Connect são decodificados incrementalmente; frames do servidor que o adapter não reconhece (outros exec args, updates desconhecidos) são ignorados, e um watchdog de stall (`runStallTimeoutMs`, padrão 120s, só frames com progresso do turno reiniciam) falha o turno com `TIMEOUT`.
 
 ### Matriz de suporte
 
 | Capacidade | `sdk` | `native` |
 |---|---|---|
 | Chat Cloud Agent | sim | não |
-| Histórico multi-turn | prompt textual com marcadores `[role]` | mensagens protobuf nativas |
-| `listModels` | `Cursor.models.list({ apiKey })` | RPC `GetUsableModels` |
-| tools | bridge local SDK (`sessionId` obrigatório) | tools nativas |
+| Histórico multi-turn | prompt textual com marcadores `[role]` | texto marcado `[role]` dentro da mensagem do usuário |
+| `listModels` | `Cursor.models.list({ apiKey })` | RPC unário `GetUsableModels` (`application/proto`) |
+| tools | bridge local SDK (`sessionId` obrigatório) | bridge `mcp_args`/`mcp_result` no mesmo run |
 | temperature, stop | `UNSUPPORTED` | `UNSUPPORTED` |
+| Anexos de imagem | não | não (`PROVIDER_ERROR`) |
 | Auto-refresh JWT | mint de `crsr_` uma vez | refresh OAuth antes da chamada |
 
 ## Agentic loop (bridge de tools)
@@ -69,7 +73,7 @@ Sem tools, o adapter continua criando um Agent Cloud novo por stream. `onDelta` 
 
 `api2.cursor.sh` só oferece `h2` no ALPN de sua TLS; um cliente HTTP/1.1 (o `fetch` global do Node, via undici) recebe HTTP 464 "Incompatible Protocol Versions" do load balancer do host. Por isso o transporte (`src/transport.ts`, interface `CursorHttp2Transport`) usa `node:http2` diretamente: cada instância do adapter abre uma sessão HTTP/2 (`http2.connect(baseURL)`), reaberta lazily caso caia, e reaproveitada entre chamadas de `stream`/`listModels`. A sessão é fechada em `adapter.dispose()`, chamado quando o fiber do plugin descarrega (`ctx.effect()` em `index.ts`); um transporte injetado nos testes não é fechado pelo adapter — o teste o possui. O corpo da resposta é consumido como stream incremental, alimentando o mesmo decoder de frames Connect usado antes. `options.signal` aborta a requisição em qualquer fase (aguardando headers ou já recebendo o corpo) fechando o stream HTTP/2 subjacente. O timeout de espera por headers de resposta é configurável via `CursorTransportConfig.timeoutMs` (padrão 120000ms/120s) e produz `LlmError` código `TIMEOUT`.
 
-O checksum usa o algoritmo oficial, com `machineId`/`macMachineId` persistentes; sem `machineId`, o provider deriva um hash estável de plataforma, arquitetura e identidade do host. O `x-session-id` é gerado uma vez por instância do plugin. Frames gzip (flag `0x01`) são descomprimidos; flags desconhecidas produzem `LlmError` código `PROTOCOL`. `temperature` e `stop` retornam `UNSUPPORTED`. `listModels('cursor')` consulta o RPC unário `aiserver.v1.AiService/GetUsableModels` em `application/connect+proto` sobre o mesmo transporte HTTP/2, com abort de 2,5s; o pedido vai em um frame Connect e a resposta é desempacotada por `payloadFromConnectBody` (dados, gzip, trailer, ou protobuf sem frame). A implementação usa `AvailableModelsRequest/Response` do dump 3.17.8: `model_names=1`, `models=2`, e `AvailableModel` com `name=1`, `context_token_limit=15`, `client_display_name=17` e `server_model_name=18`. Ids em `model_names` entram no catálogo quando nenhuma linha `models` já carrega esse id. Em falha, timeout, listagem vazia, trailer com `error` ou autenticação, usa o array `models` da configuração e registra `warn`.
+O checksum usa o algoritmo oficial, com `machineId`/`macMachineId` persistentes; sem `machineId`, o provider deriva um hash estável de plataforma, arquitetura e identidade do host. `x-request-id`, `x-amzn-trace-id` (`Root=<x-request-id>`) e `x-session-id` são gerados por chamada. Frames gzip (flag `0x01`) são descomprimidos; flags desconhecidas produzem `LlmError` código `PROTOCOL`. `temperature` e `stop` retornam `UNSUPPORTED`. `listModels('cursor')` consulta o RPC unário `aiserver.v1.AiService/GetUsableModels` com corpo protobuf cru em `application/proto` (sem frame Connect; a resposta também pode vir enquadrada — `payloadFromConnectBody` cobre ambos) sobre o mesmo transporte HTTP/2, com abort de 2,5s; a resposta é `GetUsableModelsResponse` com linhas `ModelDetails` (`model_id=1`, `display_name=4`). Em falha, timeout, listagem vazia ou autenticação, usa a última listagem que funcionou e, em primeira falha, o array `models` da configuração, registrando `console.error`.
 
 ### Frames Connect e erros de trailer
 
@@ -86,15 +90,15 @@ A mensagem da `LlmError` combina `error.message` com o texto humano em `error.de
 
 ### Cabeçalhos de cliente
 
-Os cabeçalhos em `CursorAdapter.headers()` seguem a paridade observada no cliente desktop oficial (`setCommonHeaders`/`tzg`): `x-cursor-client-os` usa `process.platform` cru (`win32`/`darwin`/`linux`, sem normalizar para `windows`/`mac`), `x-cursor-client-layout` é sempre `'editor'` (o valor do desktop para uma instalação sem Glass/unified-agent), `x-new-onboarding-completed` é sempre `'false'`, `x-cursor-client-os-version` carrega `os.release()`, e `x-amzn-trace-id` reaproveita o mesmo valor de `x-request-id` (`Root=<x-request-id>`). `x-cursor-timezone` só é enviado quando o fuso configurado valida contra `Intl.DateTimeFormat('en-US', { timeZone })`; um fuso inválido é omitido em vez de enviado. `Connect-Protocol-Version`, `User-Agent: connect-es` e o content-type `application/connect+proto` permanecem como no adapter original.
+Os cabeçalhos em `CursorAgentAdapter.headers()` seguem a paridade observada no cursor-agent/desktop 3.19.x: `x-cursor-client-version` + `x-cursor-client-commit` (o par do build), `x-cursor-client-os` usa `process.platform` cru (`win32`/`darwin`/`linux`), `x-cursor-client-layout` é sempre `'editor'`, `x-cursor-client-type` é `'ide'`, `x-cursor-client-device-type` é `'desktop'`, `x-new-onboarding-completed` é `'false'`, `x-cursor-client-os-version` carrega `os.release()`, `x-cursor-client-arch` carrega `process.arch`, e `x-amzn-trace-id` reaproveita o mesmo valor de `x-request-id` (`Root=<x-request-id>`). O stream BiDi usa `content-type`/`accept` `application/connect+proto` com `connect-protocol-version: 1`.
 
 ## Model Experience
 
-O modelo recebe a conversa nativa e schemas JSON das tools; texto e thinking são emitidos em blocos separados. Quando `StreamUnifiedChatResponse.debugging_only_token_count=3` chega, os valores são acumulados e um chunk `usage` (outputTokens) precede `finish`; sem esse campo, não há usage. `WebCitation.references` é simples no dump (`title=2`, `url=1`, `chunk=3`) e é anexado ao texto como links Markdown. O adapter não implementa cache de tokens.
+O modelo recebe o turno atual mais o histórico retransmitido como texto marcado, o system prompt em `system_prompt_spec.append` e os schemas JSON das tools como `mcp_tools`. Thinking e texto chegam como `thinking_delta`/`text_delta` e são emitidos em blocos separados (reasoning antes de text). `turn_ended` carrega `input_tokens`/`output_tokens` reais do turno, emitidos como chunk `usage` antes de `finish`; `cache_write`/`cache_read` existem no proto mas não são expostos. O adapter não implementa cache de tokens e o servidor mantém o stream aberto com heartbeats após `turn_ended` (o cliente fecha).
 
 ## Known Limitations and Deferred Work
 
-O protocolo privado do Cursor pode alterar campos, cabeçalhos ou framing sem aviso. `StreamUnifiedChatResponseWithTools` não declara `usage`/`token_usage` no `lite.proto` nem nos bindings upstream de referência; por isso o adapter emite `finish` diretamente quando não há usage disponível.
+O protocolo privado do Cursor pode alterar campos, cabeçalhos ou framing sem aviso; `proto/agent.proto` é uma projeção esparsa (campos desconhecidos decodificam como mensagens vazias e são ignorados). Limitações do estágio atual: anexos de imagem falham com `PROVIDER_ERROR`; o histórico entre runs vai como texto marcado na mensagem do usuário (o replay nativo por blobs — `ConversationStateStructure.turns` + `UploadConversationBlobs` — não é implementado); as ferramentas built-in do Cursor (shell/read/write/grep) não são oferecidas nem respondidas — um exec desconhecido aciona o watchdog de stall; `exclude_workspace_context` é rejeitado pela conta atual (`invalid_argument`) e por isso não é enviado.
 
 O comportamento do bundle do cliente desktop de gravar `access_token` também no campo de refresh após um refresh (ver `src/auth.ts`) é documentado como possível bug de minificação no relatório de engenharia reversa que fundamenta esta implementação; `refreshTokens()` não o replica e não foi possível confirmar contra o backend real se o `refresh_token` original continua aceito indefinidamente após múltiplos refreshes — `tests/auth.e2e.ts` cobre um único ciclo de exchange+refresh quando `CURSOR_API_KEY` está definido, mas não uma sequência longa. O `client_id` de produção (`KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB`) é específico do cliente oficial e pode mudar sem aviso entre versões.
 

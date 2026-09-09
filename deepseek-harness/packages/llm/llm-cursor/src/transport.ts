@@ -35,6 +35,18 @@ export interface Http2RequestOptions {
   signal?: AbortSignal
 }
 
+/** One writable BiDi request: the caller keeps writing frames while the response streams in. */
+export interface InteractiveHttp2Stream {
+  /** Resolves once response headers arrive. */
+  readonly response: Promise<Http2Response>
+  /** Queue one body frame; ordering matches call order. */
+  write(chunk: Uint8Array): void
+  /** Half-close the request body; the response keeps streaming until the server ends it. */
+  end(chunk?: Uint8Array): void
+  /** Abort the whole stream in both directions. */
+  close(): void
+}
+
 /** What the adapter needs from an HTTP/2 transport: one POST call and disposal. */
 export interface CursorHttp2Transport {
   /**
@@ -48,6 +60,18 @@ export interface CursorHttp2Transport {
    *   stream failure.
    */
   request(options: Http2RequestOptions): Promise<Http2Response>
+  /**
+   * Open a BiDi POST the caller writes to incrementally, as the Cursor agent
+   * protocol requires: exec answers and the end-of-stream frame go out while
+   * the response is still streaming in.
+   * @param options - path, headers, and an optional abort signal. The request
+   *   body is NOT part of the options; it is produced by `write`/`end`.
+   * @returns a handle whose `response` resolves with the streamed response.
+   * @throws LlmError coded `ABORTED` when `signal` fires before or during the
+   *   stream's lifetime, or `TIMEOUT` when no response header arrives within
+   *   the configured timeout.
+   */
+  openStream(options: Omit<Http2RequestOptions, 'body'>): InteractiveHttp2Stream
   /** Close the underlying session. Idempotent; safe to call more than once. */
   close(): void
 }
@@ -144,6 +168,70 @@ export function createHttp2Transport(options: Http2TransportOptions): CursorHttp
         })
         stream.end(body)
       })
+    },
+    openStream({ path, headers, signal }: Omit<Http2RequestOptions, 'body'>): InteractiveHttp2Stream {
+      if (signal?.aborted === true) throw abortedError()
+      const activeSession = ensureSession()
+      const requestHeaders: Record<string, string> = { ...headers, ':method': 'POST', ':path': path }
+      const stream = activeSession.request(requestHeaders)
+      let headersSettled = false
+
+      const timer = setTimeout(() => {
+        if (headersSettled) return
+        headersSettled = true
+        stream.close()
+        rejectResponse(new LlmError(`Cursor request timed out after ${timeoutMs}ms`, 'TIMEOUT'))
+      }, timeoutMs)
+
+      let resolveResponse!: (value: Http2Response) => void
+      let rejectResponse!: (reason: LlmError) => void
+      const response = new Promise<Http2Response>((resolve, reject) => {
+        resolveResponse = resolve
+        rejectResponse = reject
+      })
+
+      const onAbort = () => {
+        clearTimeout(timer)
+        stream.close()
+        if (!headersSettled) {
+          headersSettled = true
+          rejectResponse(abortedError())
+        }
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+      stream.once('close', () => { signal?.removeEventListener('abort', onAbort) })
+
+      stream.on('response', (responseHeaders) => {
+        if (headersSettled) return
+        headersSettled = true
+        clearTimeout(timer)
+        resolveResponse({
+          status: responseHeaders[':status'] ?? 0,
+          headers: responseHeaders,
+          body: stream,
+        })
+      })
+      stream.on('error', (error: Error) => {
+        if (headersSettled) return
+        headersSettled = true
+        clearTimeout(timer)
+        rejectResponse(signal?.aborted === true
+          ? abortedError()
+          : new LlmError(error.message, 'PROVIDER_ERROR', { cause: error }))
+      })
+
+      return {
+        response,
+        write(chunk: Uint8Array): void {
+          stream.write(chunk)
+        },
+        end(chunk?: Uint8Array): void {
+          stream.end(chunk)
+        },
+        close(): void {
+          stream.close()
+        },
+      }
     },
     close(): void {
       closed = true
