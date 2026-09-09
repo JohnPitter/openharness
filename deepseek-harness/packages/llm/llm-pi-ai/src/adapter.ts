@@ -445,21 +445,30 @@ export class PiAiAdapter extends LlmAdapter {
    * them; pay-per-token routes (Anthropic console, OpenAI Platform) do not.
    */
   override async accountUsage(provider: string, signal?: AbortSignal): Promise<LlmAccountUsage | undefined> {
+    const known = provider === 'claude-code' || provider === 'openai-codex' || provider === 'zai'
+    if (!known) return undefined
     const snapshot = this.current()
     const profile = this.profileOf(snapshot, provider)
-    const token = await this.bearerToken(provider, profile)
-    try {
+    const probe = async (): Promise<LlmAccountUsage> => {
+      const token = await this.bearerToken(snapshot, provider, profile)
       if (provider === 'claude-code') {
         return parseClaudeCodeUsage(await fetchUsageJson(CLAUDE_CODE_USAGE_URL, claudeCodeUsageHeaders(token), signal))
       }
       if (provider === 'openai-codex') {
         return parseCodexUsage(await fetchUsageJson(CODEX_USAGE_URL, codexUsageHeaders(token), signal))
       }
-      if (provider === 'zai') {
-        const url = zaiQuotaUrl(profile.baseURL ?? profile.piProvider.baseUrl)
-        return parseZaiUsage(await fetchUsageJson(url, zaiQuotaHeaders(token), signal))
-      }
+      const url = zaiQuotaUrl(profile.baseURL ?? profile.piProvider.baseUrl)
+      return parseZaiUsage(await fetchUsageJson(url, zaiQuotaHeaders(token), signal))
+    }
+    try {
+      return await probe()
     } catch (error: unknown) {
+      // A token rotated or revoked after resolution answers 401 while the plan
+      // still has quota; a refresh by another process has landed in the durable
+      // store by then, so re-resolve and retry exactly once before failing.
+      if (error instanceof LlmError && error.code === 'AUTH' && signal?.aborted !== true) {
+        return probe()
+      }
       if (error instanceof LlmError) throw error
       throw new LlmError(
         error instanceof Error ? error.message : 'Invalid usage response',
@@ -467,11 +476,11 @@ export class PiAiAdapter extends LlmAdapter {
         { cause: error },
       )
     }
-    return undefined
   }
 
-  /** Pasted key, else the stored OAuth access token. */
+  /** Pasted key, else the stored OAuth access token refreshed the way a chat request refreshes it. */
   private async bearerToken(
+    snapshot: PiAiSnapshot,
     provider: string,
     profile: ResolvedPiAiProviderProfile,
   ): Promise<string> {
@@ -481,6 +490,14 @@ export class PiAiAdapter extends LlmAdapter {
     } catch (error: unknown) {
       if (!isMissingCredential(error)) throw error
     }
+    // The same resolution a chat request takes: `Models.getAuth()` refreshes
+    // an expired OAuth credential under its lock and persists the rotation
+    // before answering. Probing with the raw stored token instead answered 401
+    // whenever the access token had aged out, while chat — which refreshes —
+    // kept working.
+    const resolved = await snapshot.models.getAuth(provider).catch(() => undefined)
+    const fresh = resolved?.auth.apiKey
+    if (typeof fresh === 'string' && fresh.length > 0) return fresh
     const stored = await this.config.auth.credentials.read(provider)
     if (stored?.type === 'oauth' && stored.access.length > 0) return stored.access
     throw new LlmError(

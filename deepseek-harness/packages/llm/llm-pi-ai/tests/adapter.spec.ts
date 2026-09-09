@@ -1196,4 +1196,62 @@ describe('PiAiAdapter accountUsage', () => {
     await expect(adapter.accountUsage('openai')).resolves.toBeUndefined()
     expect(vi.isMockFunction(globalThis.fetch)).toBe(false)
   })
+
+  it('refreshes an expired stored OAuth credential before probing usage', async () => {
+    const freshJwt = [
+      Buffer.from('{}').toString('base64url'),
+      Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-1' } })).toString('base64url'),
+      'sig',
+    ].join('.')
+    const calls: Array<{ url: string; headers: Headers }> = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      calls.push({ url, headers: new Headers(init?.headers) })
+      if (url === 'https://auth.openai.com/oauth/token') {
+        return new Response(JSON.stringify({
+          access_token: freshJwt, refresh_token: 'r2', expires_in: 3600,
+        }), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        rate_limit: { primary_window: { used_percent: 25, limit_window_seconds: 18_000 } },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    const auth = memoryAuth({
+      'openai-codex': { type: 'oauth', access: 'stale-jwt', refresh: 'r1', expires: Date.now() - 1000 },
+    })
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles({ 'openai-codex': { apiKeyEnv: 'CODEX_ACCESS_TOKEN' } }),
+      resolveApiKey: () => Promise.resolve(undefined),
+      auth,
+    })
+    const usage = await adapter.accountUsage('openai-codex')
+    expect(usage?.windows[0]?.percent).toBe(25)
+    expect(calls.map(call => call.url)).toEqual([
+      'https://auth.openai.com/oauth/token',
+      'https://chatgpt.com/backend-api/wham/usage',
+    ])
+    expect(calls[1]?.headers.get('authorization')).toBe(`Bearer ${freshJwt}`)
+    expect(auth.stored.get('openai-codex')).toMatchObject({ access: freshJwt, refresh: 'r2' })
+  })
+
+  it('retries the probe once when a rotated token answers 401', async () => {
+    let usageCalls = 0
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      usageCalls += 1
+      if (usageCalls === 1) return new Response('unauthorized', { status: 401 })
+      return new Response(JSON.stringify({
+        rate_limit: { primary_window: { used_percent: 40, limit_window_seconds: 18_000 } },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    const adapter = new PiAiAdapter({
+      profiles: () => resolveProfiles({ 'openai-codex': { apiKeyEnv: 'CODEX_ACCESS_TOKEN' } }),
+      resolveApiKey: () => Promise.resolve(undefined),
+      auth: memoryAuth({
+        'openai-codex': { type: 'oauth', access: 'still-valid-jwt', refresh: 'r1', expires: Date.now() + 3_600_000 },
+      }),
+    })
+    const usage = await adapter.accountUsage('openai-codex')
+    expect(usage?.windows[0]?.percent).toBe(40)
+    expect(usageCalls).toBe(2)
+  })
 })
