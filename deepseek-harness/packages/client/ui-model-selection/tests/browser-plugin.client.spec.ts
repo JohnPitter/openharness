@@ -9,7 +9,7 @@
  * Scope disposal drops the directory (HMR safety).
  */
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createScope, createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
@@ -18,6 +18,7 @@ import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import type { CommandContribution, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { ModelSelectInjected } from '../src/client/slots.ts'
+import type { UsageStatusChipInjected } from '../src/client/usage-slots.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 
@@ -113,6 +114,8 @@ async function bench() {
     locale: string | undefined
   }>()
   const footers: Array<{ id?: string; order?: number; locale?: string }> = []
+  const sections: Array<{ id?: string; order?: number }> = []
+  let usageChipInject: (() => UsageStatusChipInjected) | undefined
   ctx.provide('slots', {
     inject(_name: string, callback: () => () => void) { return callback() },
     register(options: {
@@ -120,7 +123,7 @@ async function bench() {
       id?: string
       order?: number
       locale?: string
-      inject?: (sessionId: SessionId) => ModelSelectInjected
+      inject?: (sessionId?: SessionId) => ModelSelectInjected | UsageStatusChipInjected
     }) {
       if (options.name === 'sidebar.footer.action') {
         footers.push({
@@ -128,8 +131,17 @@ async function bench() {
           ...options.order === undefined ? {} : { order: options.order },
           ...options.locale === undefined ? {} : { locale: options.locale },
         })
+        if (options.id === 'usage-status') {
+          usageChipInject = options.inject as (() => UsageStatusChipInjected) | undefined
+        }
       }
-      seats.set(options.name, { inject: options.inject, locale: options.locale })
+      if (options.name === 'settings.section') {
+        sections.push({
+          ...options.id === undefined ? {} : { id: options.id },
+          ...options.order === undefined ? {} : { order: options.order },
+        })
+      }
+      seats.set(options.name, { inject: options.inject as (sessionId: SessionId) => ModelSelectInjected, locale: options.locale })
       return () => { seats.delete(options.name) }
     },
   })
@@ -149,7 +161,8 @@ async function bench() {
     list,
   })
   new TestRemote(ctx)
-  ctx.provide('settingsNav', { bind: () => () => {}, openSection: () => {} })
+  const openSection = vi.fn()
+  ctx.provide('settingsNav', { bind: () => () => {}, openSection })
   ctx.provide('settingsScope', {
     bind: () => ({
       getSnapshot: () => ({
@@ -180,6 +193,9 @@ async function bench() {
     seat: () => seats.get('conversation.input.model')!,
     footer: () => seats.get('sidebar.footer.action'),
     footers,
+    sections,
+    openSection,
+    usageChip: () => usageChipInject!(),
     hostCurrent: () => current,
     setHostCurrent: (selection: ModelSelection) => { current = selection },
     address: (id: SessionId) => { addressed.add(id) },
@@ -222,6 +238,14 @@ describe('ui-model-selection dual entry', () => {
     expect(b.footers.map(row => row.id)).toEqual(['lan-remote', 'usage-status'])
     expect(b.footers[0]?.order).toBe(-20)
     expect(b.footers[1]?.order).toBe(-10)
+  })
+
+  it('registers Limits then Status and opens quotas from the usage chip', async () => {
+    const b = await bench()
+    expect(b.sections.map(row => row.id)).toEqual(['quotas', 'usages'])
+    expect(b.sections.map(row => row.order)).toEqual([12, 13])
+    b.usageChip().openQuotas()
+    expect(b.openSection).toHaveBeenCalledWith('quotas')
   })
 
   it('popup options mark the host current active with the provider group in the detail', async () => {

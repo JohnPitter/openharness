@@ -1,29 +1,19 @@
 /**
- * Settings → Usages: Host-local daily token history plus coding-plan quotas.
+ * Settings → Status: Host-local daily token history only.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type {
-  AccountUsageView, ConfigurableProviderView, IApiClient, UsageBuckets, UsageDayView, UsagePanelView,
-} from '@deepseek-ai/dsh-api-remotes/client'
+import type { IApiClient, UsageBuckets, UsageDayView, UsagePanelView } from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { formatTokens } from './usage-format.ts'
-import { QuotaBody } from './usage-quota.tsx'
 import css from './UsagesSection.module.css'
-
-/** One provider card on the Usages page. */
-interface ProviderQuotaRow {
-  provider: string
-  displayName: string
-  quota: AccountUsageView | 'loading'
-}
 
 /** Injected dependencies of {@link UsagesSection}. */
 export interface UsagesSectionInjected {
-  /** Wire face used to load the local panel and provider quotas. */
-  api: Pick<IApiClient, 'llm' | 'usage'>
+  /** Wire face used to load the local usage panel. */
+  api: Pick<IApiClient, 'usage'>
 }
 
 export type UsagesSectionProps =
@@ -82,51 +72,6 @@ function sumDays(days: readonly UsageDayView[], fromDate: string): UsageBuckets 
   }, emptyBuckets())
 }
 
-/**
- * Load every configurable provider, then ask each for account usage. Only
- * routes that report `supported: true` (or an error while checking) stay
- * visible — pay-per-token adapters with no plan windows are omitted.
- */
-async function loadQuotaRows(api: Pick<IApiClient, 'llm'>): Promise<ProviderQuotaRow[]> {
-  const listed = await api.llm.providers({})
-  if (!listed.result.ok) {
-    throw new Error(listed.result.error.message)
-  }
-  const providers = listed.result.value.providers
-  const settled = await Promise.all(providers.map(async (entry: ConfigurableProviderView) => {
-    try {
-      const response = await api.llm.accountUsage({ provider: entry.provider })
-      if (!response.result.ok) {
-        return {
-          provider: entry.provider,
-          displayName: entry.displayName,
-          quota: { supported: true, error: response.result.error.message } satisfies AccountUsageView,
-        }
-      }
-      return {
-        provider: entry.provider,
-        displayName: entry.displayName,
-        quota: response.result.value,
-      }
-    } catch (error: unknown) {
-      return {
-        provider: entry.provider,
-        displayName: entry.displayName,
-        quota: {
-          supported: true,
-          error: error instanceof Error ? error.message : String(error),
-        } satisfies AccountUsageView,
-      }
-    }
-  }))
-  return settled.filter((row) => {
-    const quota = row.quota
-    if (!quota.supported) return false
-    if (quota.error !== undefined) return true
-    return (quota.windows?.length ?? 0) > 0 || quota.plan !== undefined
-  })
-}
-
 async function loadPanel(api: Pick<IApiClient, 'usage'>): Promise<UsagePanelView> {
   const response = await api.usage.panel({})
   if (!response.result.ok) throw new Error(response.result.error.message)
@@ -139,32 +84,28 @@ function dayLabel(iso: string): string {
 }
 
 /**
- * Render the Usages settings section.
+ * Render the Status settings section.
  * @param props - inject face + locale seat.
  */
 export function UsagesSection(props: UsagesSectionProps): ReactNode {
   const api = props.api
   const t = props.t
   const [panel, setPanel] = useState<UsagePanelView | 'loading' | 'idle'>('idle')
-  const [rows, setRows] = useState<readonly ProviderQuotaRow[] | 'loading' | 'idle'>('idle')
   const [error, setError] = useState<string | undefined>(undefined)
 
   const refresh = useCallback(() => {
     if (api === undefined || t === undefined) return
     let cancelled = false
     setPanel('loading')
-    setRows('loading')
     setError(undefined)
-    void Promise.all([loadPanel(api), loadQuotaRows(api)]).then(
-      ([nextPanel, nextRows]) => {
+    void loadPanel(api).then(
+      (nextPanel) => {
         if (cancelled) return
         setPanel(nextPanel)
-        setRows(nextRows)
       },
       (err: unknown) => {
         if (cancelled) return
         setPanel({ days: [], models: [], totals: emptyBuckets() })
-        setRows([])
         setError(err instanceof Error ? err.message : String(err))
       },
     )
@@ -186,7 +127,7 @@ export function UsagesSection(props: UsagesSectionProps): ReactNode {
 
   if (api === undefined || t === undefined) return null
 
-  const loading = panel === 'loading' || panel === 'idle' || rows === 'loading' || rows === 'idle'
+  const loading = panel === 'loading' || panel === 'idle'
   const view = panel === 'loading' || panel === 'idle' ? undefined : panel
   const todayBuckets = view === undefined ? emptyBuckets() : (view.days.find(day => day.date === today) ?? emptyBuckets())
   const weekBuckets = view === undefined ? emptyBuckets() : sumDays(view.days, weekFrom)
@@ -216,7 +157,7 @@ export function UsagesSection(props: UsagesSectionProps): ReactNode {
       )}
 
       {loading ? (
-        <p className={css.hint}>{t('usage.quotaLoading')}</p>
+        <p className={css.hint}>{t('usages.loading')}</p>
       ) : (
         <>
           <ul className={css.stats}>
@@ -290,39 +231,6 @@ export function UsagesSection(props: UsagesSectionProps): ReactNode {
                   </li>
                 ))}
               </ol>
-            )}
-          </section>
-
-          <section className={css.block}>
-            <h3 className={css.blockTitle}>{t('usages.quotas')}</h3>
-            {rows.length === 0 ? (
-              <p className={css.hint}>{t('usages.empty')}</p>
-            ) : (
-              <ul className={css.cards}>
-                {rows.map(row => (
-                  <li key={row.provider} className={css.card}>
-                    <div className={css.cardHead}>
-                      <span className={css.providerName}>{row.displayName}</span>
-                      <span className={css.providerId}>{row.provider}</span>
-                    </div>
-                    <QuotaBody
-                      quota={row.quota}
-                      t={t}
-                      styles={{
-                        quota: css.quota,
-                        quotaHint: css.quotaHint,
-                        quotaError: css.quotaError,
-                        rows: css.rows,
-                        row: css.row,
-                        rowMeter: css.rowMeter,
-                        rowDetail: css.rowDetail,
-                        meter: css.meter,
-                        meterFill: css.meterFill,
-                      }}
-                    />
-                  </li>
-                ))}
-              </ul>
             )}
           </section>
         </>

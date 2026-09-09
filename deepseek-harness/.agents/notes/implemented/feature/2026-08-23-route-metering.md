@@ -14,7 +14,7 @@ Each adapter declares `metering?: 'tokens' | 'requests'` on `LlmProviderInfo`. C
 
 A request-metered route does not start the automatic title provider. Local prune still runs. Pressure compact LLM, canonical overflow, and `/compact` still summarize. The [request-route pressure compact note](../bug-fix/2026-08-24-request-route-pressure-compact.md) owns the pressure call and the summarizer-span cap. Token-metered routes keep automatic title and pressure compact behavior.
 
-`parseZaiUsage` maps captured GLM `TIME_LIMIT` (and sibling request-count types) onto `requests` / `requests-weekly` windows. The existing quota chip and Settings → Usages render those ids.
+`parseZaiUsage` maps captured GLM `TIME_LIMIT` (and sibling request-count types) onto `requests` / `requests-weekly` windows. The existing quota chip and Settings → Limits render those ids.
 
 When the parent is Workflow, the planner is request-metered, and no worker chip or requested child provider is set, `resolveChildAgentOptions` throws `WorkflowWorkerRequiredError` instead of inheriting. An explicit worker always wins. A token-metered planner still inherits when the chip is empty. The composer raises `blocked.worker` until a worker is selected; an unroutable planner still wins over that block.
 

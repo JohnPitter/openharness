@@ -14,7 +14,7 @@ Host 报告的 `ModelSelection` 是唯一的选择事实，其中包含提供方
 
 Host 半边还持有 J-space 开关（`ui-jspace.enabled`）。关闭时会省略构建协议提示词段，并调用 `ctx.skills.hideFromModel('j-space')`，因此模型目录和 `skill` 工具不再暴露该名称；`/j-space` 仍可供用户调用。打开时注入协议并恢复模型调用，但 Workflow 规划者（depth 0）永不收到该协议，因为它不能 Read skill 模块。Workflow 的 composer picker 隐藏 J-space 行；Standard 和 Code 仍显示。切换会在下一步重发 skill 目录。
 
-Settings → Usages（`id: usages`）是用量面板：来自 `usage.panel` 的 Host 本地按日请求与 token 历史、按用量排序的模型，以及来自 `llm.accountUsage` 的 coding-plan 配额卡片。侧栏用量 chip 仍打开该分节。
+Settings → Limits（`id: quotas`，order 12）列出 `llm.accountUsage` 的 coding-plan 配额卡片。Settings → Status（`id: usages`，order 13）是来自 `usage.panel` 的 Host 本地按日请求与 token 历史，以及按用量排序的模型。两页各自只加载自己的 API。侧栏用量 chip 的「查看全部配额」打开 Limits。
 
 `/client` 导出面为插件本体（`apply`/`inject`）、`ModelDirectoryResolver`、`ModelDirectory` 及其状态形状、slot 注入面类型。
 

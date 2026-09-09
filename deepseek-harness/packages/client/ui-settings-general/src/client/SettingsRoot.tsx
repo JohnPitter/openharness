@@ -26,7 +26,7 @@ const RECOVERY_CONFIRMATION_MS = 2_000
 /** Nav glyph by section id; unknown ids fall back to the settings gear. */
 function navIcon(id: string) {
   if (id === 'models') return <IconDataOutline16 className={css.navIcon} size={16} />
-  if (id === 'usages') return <IconEnhanceOutline16 className={css.navIcon} size={16} />
+  if (id === 'usages' || id === 'quotas') return <IconEnhanceOutline16 className={css.navIcon} size={16} />
   if (id === 'agent-presets') return <IconAgentPresetOutline16 className={css.navIcon} size={16} />
   if (id === 'plugins') return <IconPersonalizationOutline16 className={css.navIcon} size={16} />
   return <IconSettingsOutline16 className={css.navIcon} size={16} />

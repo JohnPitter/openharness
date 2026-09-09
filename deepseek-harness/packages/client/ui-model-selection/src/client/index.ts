@@ -35,6 +35,8 @@ import { WorkerModelStore } from './worker-store.ts'
 import type { UsageStatusChipInjected } from './usage-slots.ts'
 import { UsageStatusChip } from './UsageStatusChip.tsx'
 import { RemoteChip } from './RemoteChip.tsx'
+import { QuotasSection } from './QuotasSection.tsx'
+import type { QuotasSectionInjected } from './QuotasSection.tsx'
 import { UsagesSection } from './UsagesSection.tsx'
 import type { UsagesSectionInjected } from './UsagesSection.tsx'
 import { currentDirectorySource } from './usage-directory.ts'
@@ -240,7 +242,7 @@ export function apply(ctx: ClientContext): void {
           models.directoryFor(sessionId).load().catch(() => { /* surfaced on the store */ })
         },
         openModels: () => { ctx.settingsNav.openSection('models') },
-        openUsages: () => { ctx.settingsNav.openSection('usages') },
+        openQuotas: () => { ctx.settingsNav.openSection('quotas') },
         loadAccountUsage: async (provider) => {
           const api = (ctx.get('connection') as ConnectionHandle | undefined)?.api.llm
           if (api === undefined) return { supported: false }
@@ -252,19 +254,28 @@ export function apply(ctx: ClientContext): void {
     }, UsageStatusChip))
   })
 
-  // Settings → Usage panel: local daily/token history plus coding-plan quotas.
+  // Settings → Limits (quotas) then Status (local history). Independent
+  // loads: opening one page must not wait on the other API.
   ctx.slots.inject('settings.section', () => {
     const connection = ctx.get('connection') as ConnectionHandle
-    const injected = (): UsagesSectionInjected => ({
-      api: connection.api,
-    })
+    return ctx.slots.register({
+      name: 'settings.section',
+      id: 'quotas',
+      order: 12,
+      label: () => t('quotas.nav'),
+      locale: NS,
+      inject: (): QuotasSectionInjected => ({ api: connection.api }),
+    }, QuotasSection)
+  })
+  ctx.slots.inject('settings.section', () => {
+    const connection = ctx.get('connection') as ConnectionHandle
     return ctx.slots.register({
       name: 'settings.section',
       id: 'usages',
-      order: 12,
+      order: 13,
       label: () => t('usages.nav'),
       locale: NS,
-      inject: injected,
+      inject: (): UsagesSectionInjected => ({ api: connection.api }),
     }, UsagesSection)
   })
 }

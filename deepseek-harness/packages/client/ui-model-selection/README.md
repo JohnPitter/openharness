@@ -14,7 +14,7 @@ Every resident directory refetches directly on forwarded `llm/adapters-updated` 
 
 The Host half also owns the J-space toggle (`ui-jspace.enabled`). Off omits the construction-protocol prompt section and calls `ctx.skills.hideFromModel('j-space')`, so the model catalog and `skill` tool no longer expose that name; `/j-space` stays user-invocable. On injects the protocol and restores model invocation, except on a Workflow planner (depth 0), which never receives the protocol because it cannot Read skill modules. Workflow composer pickers hide the J-space row; Standard and Code keep it. Toggling republishes the skill catalog on the next step.
 
-Settings → Usages (`id: usages`) is the usage panel: Host-local daily request and token history from `usage.panel`, ranked models, and coding-plan quota cards from `llm.accountUsage`. The sidebar usage chip still opens this section.
+Settings → Limits (`id: quotas`, order 12) lists coding-plan quota cards from `llm.accountUsage`. Settings → Status (`id: usages`, order 13) is the Host-local daily request and token history from `usage.panel`, plus ranked models. Each page loads only its own API. The sidebar usage chip "view all quotas" action opens Limits.
 
 The `/client` exports are the plugin body (`apply`/`inject`), `ModelDirectoryResolver`, `ModelDirectory` with its state fields, and the seat's injected face type.
 

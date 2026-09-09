@@ -110,7 +110,7 @@ function QuotaSection({
  */
 export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
   const {
-    wide, useSessions, directory, workerDirectory, ensureDirectory, openModels, openUsages, loadAccountUsage, t,
+    wide, useSessions, directory, workerDirectory, ensureDirectory, openModels, openQuotas, loadAccountUsage, t,
   } = props
   const sessionId = useSessions(state => state.current)
   const usage = useSessions((state): TokenUsageProjection | undefined => {
@@ -262,7 +262,7 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
   }
   const openAllQuotas = (): void => {
     setOpen(false)
-    openUsages()
+    openQuotas()
   }
 
   return (

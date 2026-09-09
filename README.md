@@ -29,7 +29,7 @@ O app consulta as GitHub Releases públicas. Quando há uma tag mais nova, a tit
 | **Workflow** | O planejador só pensa e delega. O trabalhador pesquisa e edita, no modelo do chip da direita; trocar o preset compacta antes do próximo prompt. |
 | **Marcos** | O modelo que fecha o trabalho grava um marco; o trilho à esquerda empilha ticks do topo e rola quando a lista passa da coluna. Clique abre o preview; clique fora volta ao padrão. |
 | **Editar mensagem** | A última mensagem do usuário é revisada na mesma sessão, sem fork. |
-| **Painel de uso** | Settings → Painel: histórico local por dia, tokens e modelos mais usados, além das cotas dos planos. |
+| **Limites e Status** | Settings → Limites: cotas dos planos. Settings → Status: histórico local por dia, tokens e modelos mais usados. |
 | **Busca na web** | DuckDuckGo por padrão, sem chave extra. A busca nativa DeepSeek fica desligada (ela cobra saldo DeepSeek mesmo se o chat for outro). |
 | **Remote** | Opt-in na sidebar. Túnel HTTPS + QR; o celular usa o harness completo enquanto o PC está ligado. |
 | **J-Space** | Protocolo de construção nos modos Standard e Code, e no trabalhador Workflow. O planejador Workflow não carrega a skill. |

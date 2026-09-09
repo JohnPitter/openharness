@@ -14,8 +14,8 @@ export interface UsageStatusChipInjected {
   ensureDirectory: (sessionId: SessionId) => void
   /** Open Settings on the Models section. */
   openModels: () => void
-  /** Open Settings on the Usage section (all provider quotas). */
-  openUsages: () => void
+  /** Open Settings on the Limits section (all provider quotas). */
+  openQuotas: () => void
   /** Account-level quota for the staged provider, using its stored key. */
   loadAccountUsage: (provider: string) => Promise<AccountUsageView>
   /**

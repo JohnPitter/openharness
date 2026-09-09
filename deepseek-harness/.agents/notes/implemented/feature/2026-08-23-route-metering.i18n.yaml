@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-23-route-metering.md
-2026-08-23-route-metering.md: df5b33cd8d2a029b3fd1aef754f1e5a00924f607
-2026-08-23-route-metering.zh.md: c0157eaffc15a31f9c83552d009ae7f8a794559d
+2026-08-23-route-metering.md: aa2d3474e22737295ff662d2566d0fec82f93421
+2026-08-23-route-metering.zh.md: 0acffdf43d83e93e65c9e6c48be70f5247dfd233

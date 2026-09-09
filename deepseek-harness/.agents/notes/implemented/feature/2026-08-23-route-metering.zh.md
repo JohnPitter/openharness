@@ -14,7 +14,7 @@ DeepSeek 按 token 加缓存计费；编码计划（Kimi for Code、Claude Code�
 
 按请求计费的路由不启动自动标题提供方。本地剪枝仍会运行。压力压缩 LLM、规范溢出和 `/compact` 仍会摘要。[按请求路由的压力压缩 note](../bug-fix/2026-08-24-request-route-pressure-compact.zh.md) 拥有压力调用与摘要区间上限。按 token 计费的路由保持自动标题和压力压缩行为。
 
-`parseZaiUsage` 把捕获到的 GLM `TIME_LIMIT`（以及同类请求计数类型）映射为 `requests` / `requests-weekly` 窗口。现有配额 chip 和设置 → 用量会渲染这些 id。
+`parseZaiUsage` 把捕获到的 GLM `TIME_LIMIT`（以及同类请求计数类型）映射为 `requests` / `requests-weekly` 窗口。现有配额 chip 和设置 → 限额会渲染这些 id。
 
 当父会话是 Workflow、规划器按请求计费、且未选择工人 chip 也未在请求里点名 child 提供方时，`resolveChildAgentOptions` 抛出 `WorkflowWorkerRequiredError`，而不是继承。显式工人始终胜出。按 token 计费的规划器在 chip 为空时仍继承。composer 升起 `blocked.worker` 直到选出工人；规划器不可路由时仍优先于该阻塞。
 

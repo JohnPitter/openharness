@@ -80,7 +80,7 @@ function mount(options: {
 } = {}) {
   const ensureDirectory = vi.fn()
   const openModels = vi.fn()
-  const openUsages = vi.fn()
+  const openQuotas = vi.fn()
   const loadAccountUsage = options.loadAccountUsage === undefined
     ? vi.fn((provider: string) => Promise.resolve(
       options.quotaByProvider?.[provider] ?? options.quota ?? { supported: false },
@@ -105,12 +105,12 @@ function mount(options: {
     },
     ensureDirectory,
     openModels,
-    openUsages,
+    openQuotas,
     loadAccountUsage,
     t: interpolate as UsageStatusChipProps['t'],
   }
   const view = render(<UsageStatusChip {...props} />)
-  return { view, ensureDirectory, openModels, openUsages, loadAccountUsage }
+  return { view, ensureDirectory, openModels, openQuotas, loadAccountUsage }
 }
 
 describe('UsageStatusChip', () => {
@@ -135,6 +135,14 @@ describe('UsageStatusChip', () => {
     expect(screen.getByText('1.2K')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en['usage.manageKeys'] }))
     expect(openModels).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('opens the Limits settings section from view-all quotas', () => {
+    const { openQuotas } = mount()
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    fireEvent.click(screen.getByRole('button', { name: en['usages.viewAll'] }))
+    expect(openQuotas).toHaveBeenCalledOnce()
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -345,7 +353,7 @@ describe('UsageStatusChip', () => {
   it('surfaces a rejected worker account-quota load as an error row', async () => {
     const ensureDirectory = vi.fn()
     const openModels = vi.fn()
-    const openUsages = vi.fn()
+    const openQuotas = vi.fn()
     const loadAccountUsage = vi.fn((provider: string) => provider === 'claude-code'
       ? Promise.reject(new Error('rate limited'))
       : Promise.resolve({ supported: false } satisfies AccountUsageView))
@@ -362,7 +370,7 @@ describe('UsageStatusChip', () => {
       workerDirectory: { getSnapshot: () => worker, subscribe: () => () => {} },
       ensureDirectory,
       openModels,
-      openUsages,
+      openQuotas,
       loadAccountUsage,
       t: interpolate as UsageStatusChipProps['t'],
     }
