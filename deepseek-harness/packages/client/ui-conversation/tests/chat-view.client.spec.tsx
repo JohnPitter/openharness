@@ -385,6 +385,9 @@ describe('Chat node rendering', () => {
     expect(formatRunDuration(-500, t)).toBe('0秒')
     expect(formatRunDuration(15_999, t)).toBe('15秒')
     expect(formatRunDuration(125_000, t)).toBe('2分05秒')
+    expect(formatRunDuration(60 * 60 * 1000, t)).toBe('1小时00分00秒')
+    expect(formatRunDuration(4_019_000, t)).toBe('1小时06分59秒')
+    expect(formatRunDuration(2 * 3600 * 1000 + 7 * 60 * 1000 + 3_000, t)).toBe('2小时07分03秒')
   })
 
 })
