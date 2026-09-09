@@ -26,7 +26,8 @@ import {
   routeLabelOf,
   sessionTokens,
 } from './usage-format.ts'
-import { MeterBar, QuotaBody } from './usage-quota.tsx'
+import { leadQuotaWindow, quotaChipSegment, useProviderQuota } from './usage-quota-live.ts'
+import { MeterBar, QuotaBody, Ring } from './usage-quota.tsx'
 import css from './UsageStatusChip.module.css'
 
 /** Idle snapshot used before the worker store's first load and outside Workflow mode. */
@@ -37,8 +38,6 @@ export type UsageStatusChipProps =
   & InjectFace<UsageStatusChipInjected>
   & PropsLocale<'model'>
 
-const RING_RADIUS = 5.5
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 const PANEL_GAP = 8
 const PANEL_MARGIN = 12
 const RAIL_PANEL_WIDTH = 240
@@ -59,22 +58,6 @@ function anchoredPanelStyle(
   if (width > 0) left = Math.min(Math.max(left, PANEL_MARGIN), window.innerWidth - width - PANEL_MARGIN)
   if (height > 0) top = Math.min(Math.max(top, PANEL_MARGIN), window.innerHeight - height - PANEL_MARGIN)
   return { left, top, width }
-}
-
-function Ring({ percent }: { percent: number }) {
-  return (
-    <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden className={css.ring}>
-      <circle className={css.ringTrack} cx="7" cy="7" r={RING_RADIUS} />
-      <circle
-        className={css.ringFill}
-        cx="7"
-        cy="7"
-        r={RING_RADIUS}
-        strokeDasharray={`${RING_CIRCUMFERENCE * percent / 100} ${RING_CIRCUMFERENCE}`}
-        transform="rotate(-90 7 7)"
-      />
-    </svg>
-  )
 }
 
 function QuotaSection({
@@ -134,7 +117,6 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
     () => workerDirectory?.getSnapshot() ?? IDLE_WORKER,
   )
   const [open, setOpen] = useState(false)
-  const [quota, setQuota] = useState<AccountUsageView | 'loading' | null>(null)
   const [workerQuota, setWorkerQuota] = useState<AccountUsageView | 'loading' | null>(null)
   const [panelPos, setPanelPos] = useState<CSSProperties | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -142,31 +124,14 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
   const providerId = directorySnap.current?.provider
   const workerSelection = preset === 'workflow' ? workerState.current : null
   const workerProviderId = workerSelection?.provider
+  // Always-on: the chip meta carries the lead window even with the panel
+  // closed, so the quota probe cannot wait on the panel opening.
+  const quotaView = useProviderQuota(providerId, loadAccountUsage)
+  const quota: AccountUsageView | 'loading' | null = !open ? null : quotaView ?? 'loading'
 
   useEffect(() => {
     if (sessionId !== undefined) ensureDirectory(sessionId)
   }, [ensureDirectory, sessionId])
-
-  useEffect(() => {
-    if (!open || providerId === undefined) {
-      setQuota(null)
-      return
-    }
-    let cancelled = false
-    setQuota('loading')
-    loadAccountUsage(providerId).then(
-      (view) => { if (!cancelled) setQuota(view) },
-      (error: unknown) => {
-        if (!cancelled) {
-          setQuota({
-            supported: true,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-      },
-    )
-    return () => { cancelled = true }
-  }, [loadAccountUsage, open, providerId])
 
   useEffect(() => {
     if (!open || workerProviderId === undefined) {
@@ -176,7 +141,7 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
     // Same provider as the staged route: the account quota is identical, so
     // reuse the already-loading/loaded value instead of a second request.
     if (workerProviderId === providerId) {
-      setWorkerQuota(quota)
+      setWorkerQuota(quotaView ?? 'loading')
       return
     }
     let cancelled = false
@@ -193,7 +158,7 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
       },
     )
     return () => { cancelled = true }
-  }, [loadAccountUsage, open, providerId, quota, workerProviderId])
+  }, [loadAccountUsage, open, providerId, quotaView, workerProviderId])
 
   useLayoutEffect(() => {
     if (!open) {
@@ -247,11 +212,14 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
   const headline = route === undefined
     ? t('usage.idle')
     : t('usage.route', { provider: route.provider, model: route.model })
-  const meta = occupancy !== null
+  const leadWindow = leadQuotaWindow(quotaView)
+  const quotaSegment = leadWindow === undefined ? undefined : quotaChipSegment(leadWindow, t)
+  const baseMeta = occupancy !== null
     ? `${occupancy.percent}% · ${formatTokens(occupancy.contextWindow)}`
     : catalogWindow !== undefined
       ? formatTokens(catalogWindow)
       : t('usage.sessionShort', { tokens: formatTokens(total) })
+  const meta = quotaSegment === undefined ? baseMeta : `${baseMeta} · ${quotaSegment}`
   const occupancyLabel = occupancy === null
     ? (catalogWindow === undefined ? t('usage.contextUnknown') : formatTokens(catalogWindow))
     : `${occupancy.percent}%`
@@ -352,7 +320,9 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
           data-active={open || undefined}
           onClick={() => { setOpen(value => !value) }}
         >
-          {occupancy === null ? <IconDataOutline16 size={wide ? 16 : 18} /> : <Ring percent={occupancy.percent} />}
+          {occupancy === null
+            ? <IconDataOutline16 size={wide ? 16 : 18} />
+            : <Ring percent={occupancy.percent} styles={{ ring: css.ring, ringTrack: css.ringTrack, ringFill: css.ringFill }} />}
           {wide && (
             <span className={css.badgeBody}>
               <span className={css.badgeLabel}>{headline}</span>

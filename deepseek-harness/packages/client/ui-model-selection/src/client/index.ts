@@ -15,7 +15,7 @@
  * history outside the direct-parent continuation path.
  */
 // Type-only: the carrier types, the forwarded Host-event face and the ctx.remote merge.
-import type { ModelSelection, SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AccountUsageView, ModelSelection, SessionModels } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { CommandUiContract, SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
@@ -32,7 +32,8 @@ import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
 import { WorkerModelStore } from './worker-store.ts'
-import type { UsageStatusChipInjected } from './usage-slots.ts'
+import { QuotaRing } from './QuotaRing.tsx'
+import type { QuotaRingInjected, UsageStatusChipInjected } from './usage-slots.ts'
 import { UsageStatusChip } from './UsageStatusChip.tsx'
 import { RemoteChip } from './RemoteChip.tsx'
 import { QuotasSection } from './QuotasSection.tsx'
@@ -223,6 +224,14 @@ export function apply(ctx: ClientContext): void {
     }, ModelSelect))
 
     const directory = currentDirectorySource(sessions, models)
+    const loadAccountUsage = async (provider: string): Promise<AccountUsageView> => {
+      const api = (ctx.get('connection') as ConnectionHandle | undefined)?.api.llm
+      if (api === undefined) return { supported: false }
+      const response = await api.accountUsage({ provider })
+      if (!response.result.ok) return { supported: true, error: response.result.error.message }
+      return response.result.value
+    }
+    const openQuotas = (): void => { ctx.settingsNav.openSection('quotas') }
     scope.slots.inject('sidebar.footer.action', () => scope.slots.register({
       name: 'sidebar.footer.action',
       id: 'lan-remote',
@@ -242,16 +251,19 @@ export function apply(ctx: ClientContext): void {
           models.directoryFor(sessionId).load().catch(() => { /* surfaced on the store */ })
         },
         openModels: () => { ctx.settingsNav.openSection('models') },
-        openQuotas: () => { ctx.settingsNav.openSection('quotas') },
-        loadAccountUsage: async (provider) => {
-          const api = (ctx.get('connection') as ConnectionHandle | undefined)?.api.llm
-          if (api === undefined) return { supported: false }
-          const response = await api.accountUsage({ provider })
-          if (!response.result.ok) return { supported: true, error: response.result.error.message }
-          return response.result.value
-        },
+        openQuotas,
+        loadAccountUsage,
       }),
     }, UsageStatusChip))
+    // The composer mirror of the chip's lead quota window, beside the send
+    // button; ui-conversation owns the seat, this package owns the reading.
+    scope.slots.inject('conversation.input.right', () => scope.slots.register({
+      name: 'conversation.input.right',
+      id: 'account-quota',
+      order: -10,
+      locale: NS,
+      inject: (): QuotaRingInjected => ({ directory, loadAccountUsage, openQuotas }),
+    }, QuotaRing))
   })
 
   // Settings → Limits (quotas) then Status (local history). Independent
