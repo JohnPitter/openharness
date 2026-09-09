@@ -36,6 +36,9 @@
       "path": "../../goal/goal"
     },
     {
+      "path": "../../typert/protocol"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

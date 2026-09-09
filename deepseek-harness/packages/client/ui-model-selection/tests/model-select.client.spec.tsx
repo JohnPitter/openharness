@@ -293,3 +293,48 @@ describe('ModelSelect J-space toggle', () => {
     expect(screen.queryByRole('menuitem', { name: /远程/ })).toBeNull()
   })
 })
+
+describe('ModelSelect catalog filter', () => {
+  it('filters the model pane by name and id without changing the two-level menu', () => {
+    const directory = createSnapshotStore(state({
+      groups: [
+        {
+          id: 'deepseek-official',
+          name: 'DeepSeek',
+          models: [
+            { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' },
+            { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro' },
+          ],
+        },
+        {
+          id: 'kimi-for-coding',
+          name: 'Kimi',
+          models: [{ id: 'kimi-for-coding', name: 'Kimi for Coding' }],
+        },
+      ],
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.getByRole('searchbox', { name: zh['menu.search'] })).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Flash/ })).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: /Kimi for Coding/ })).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: zh['menu.search'] }), { target: { value: 'pro' } })
+    expect(screen.queryByRole('menuitemradio', { name: /Flash/ })).toBeNull()
+    expect(screen.getByRole('menuitemradio', { name: /Pro/ })).toBeTruthy()
+    expect(screen.queryByText('Kimi')).toBeNull()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: zh['menu.search'] }), { target: { value: 'zzz' } })
+    expect(screen.getByText(zh['empty.noMatches'])).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /推理等级/ })).toBeNull()
+  })
+})

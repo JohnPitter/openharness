@@ -180,7 +180,11 @@ export interface SessionModels {
 
 /** A client-requested mutation of one still-pending queue item. */
 export type QueueAction =
-  | { kind: 'edit'; content: ContentBlock[] }
+  | {
+    kind: 'edit'
+    /** Non-empty text-only replacement content. */
+    content: ContentBlock[]
+  }
   | { kind: 'remove' }
   | { kind: 'steer' }
 
@@ -360,6 +364,7 @@ export interface SessionsApi {
 
   /**
    * Sends text and temporary image bytes to an ordinary session Agent after durable host admission.
+   * Content must include non-whitespace text or an image; whitespace-only payloads are refused.
    * Browser callers attach their current IANA zone;
    * the Host validates, canonicalizes, and records it on that exact user message. Omission remains
    * valid for non-browser callers. Session-backed subagents reject with `agent-busy` and use
@@ -368,6 +373,7 @@ export interface SessionsApi {
   prompt(request: RpcRequest<{
     sessionId: SessionId
     mode: 'queue' | 'steer'
+    /** At least one non-whitespace text part or image. */
     content: PromptContentPart[]
     clientTimeZone?: string
   }>):
@@ -379,7 +385,7 @@ export interface SessionsApi {
 
   /**
    * Edits, removes, or strictly steers one pending queued occurrence on an ordinary session.
-   * Session-backed subagents reject with `agent-busy`.
+   * An edit must carry non-whitespace text; Session-backed subagents reject with `agent-busy`.
    */
   updateQueue(request: RpcRequest<{ sessionId: SessionId; itemId: MessageId; action: QueueAction }>):
   Promise<RpcResponse<{ accepted: true }>>

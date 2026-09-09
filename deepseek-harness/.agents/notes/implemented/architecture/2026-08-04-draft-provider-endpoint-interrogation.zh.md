@@ -21,7 +21,7 @@ Status: implemented
 - `LlmDiscoveredModel` 除 `id` 外每个字段都可选，因为大多数列表只公布 id。回复是候选而非 catalog：采纳其中一条的界面仍要补上适配器所需的容量。
 - `llm.discoverModels` 把同一份草稿送过协议层。它的 `apiKey` 是可承载机密的第三个、也是最后一个载荷（另两个是 `settings.update`/`mutate` 与 `credentials.set`），且绝不被存储或回显。它确实会像其他承载机密的载荷一样随客户端外发信封同行，`subscribeEnvelopes()` 观察者看得到；把那个抽头脱敏是整个配置面的改动，不该由这一个方法独自决定。除密钥之外，将它限制为仅可通过回环访问还有第二个理由：它让宿主向调用方选定的 URL 发起 GET 并回报结果，这是匿名 LAN 调用者不该拥有的探测能力。每一种拒绝都折叠为 `model-discovery-failed`，其消息是适配器自己的文本，details 点名被询问的端点，绝不点名所提供的凭据。
 
-`dsh-llm-pi-ai` 的实现只是一次朴素的 `GET {baseURL}/models`，且仅限 OpenAI 兼容协议。它们的列表形状是网关、自建服务与官方端点三方一致认可的那一种，而这正是该动作存在的场景。其余协议一律以 `DISCOVERY_UNSUPPORTED` 回答，让界面回退到手工填写，而不是把猜错的响应形状报成一个空提供方。`baseURL` 按前缀而非待解析 URL 处理，因此 `https://gateway.example/openai/v1` 这类部署路径会保留其路径段。回复在四兆字节上限下读取，且上限落在实际收到的字节上——端点是用户自己填的 URL，因此会先看声明的 `content-length` 作为善意提示，但绝不把它当作边界；这与 `dsh-web-fetch` 面对自己的调用方提供 URL 时所用的两段式形状一致。
+`dsh-llm-pi-ai` 的实现位于 [`src/discovery.ts`](../../../packages/llm/llm-pi-ai/src/discovery.ts)。catalog 路由作答、草稿凭据与体积上限仍按此处决定；当前可读的协议、`models` 映射、Anthropic 原生列表、profile `headers` 以及名称／容量回填，见[模型目录搜索与发现](../feature/2026-09-08-model-catalog-search-and-discovery.zh.md)。
 
 ### 为什么不用 pi-ai 自己的 refresh 机制
 
@@ -35,7 +35,7 @@ pi-ai 提供了 `createProvider({ fetchModels })` 加上 `Models.refresh()` 与 
 
 **让 host 读已存 profile，而不是接受草稿。** 对已配置好的提供方来说，不会有机密跨越协议层。但这样一来新增提供方就必须先保存一份不可用的配置，而端点已改却尚未保存的表单会静默地去询问旧地址。接受草稿让用户看见的与被询问的保持一致——凭据是唯一的例外，因为它是从不向界面展示、因而永远无法放进草稿的那个字段。
 
-**询问 pi-ai 的每一种协议。** Anthropic 的列表恰好与 OpenAI 共用同一层信封，而 Google 的不是。只支持容易的那几种会让覆盖范围变得任意；更糟的是，猜错的响应形状会与「该提供方没有模型」无法区分。一个明说自己无法被询问的协议，会把用户送去手工填写——那正是既定的回退路径。
+**询问 pi-ai 的每一种协议。** Anthropic Messages 现已有原生列表；Google 的没有，Azure 用 `api-key` 标头认证，Codex 走 OAuth。只支持剩下那些看起来容易的协议会让覆盖范围变得任意；更糟的是，猜错的响应形状会与「该提供方没有模型」无法区分。一个明说自己无法被询问的协议，会把用户送去手工填写——那正是既定的回退路径。
 
 **用 `response.text()` 缓冲整个回复再判断长度。** 更简单，但上限会在字节已经到达之后才生效，而端点是用户随手填的任意 URL。
 
@@ -43,7 +43,7 @@ pi-ai 提供了 `createProvider({ fetchModels })` 加上 `Models.refresh()` 与 
 
 接入网关的人可以直接问它服务什么，而不必去翻它的文档；答案以候选形式抵达，由用户自己挑选，而不是被背着写进配置。seam 因此多了一个刻意保持很小的注册表：每个 namespace 一份、不存储、生命周期不超出 fiber。
 
-代价是：协议层多了第三个承载机密的载荷，配置面的只写接口从两个方法变成三个。发现覆盖范围按协议而非按提供方划分——一个 Anthropic 兼容网关即便其列表能被解析，也仍须手工填写。而且由于没有任何环节会重跑该询问，模型列表的新鲜度依旧只到最近一次编辑为止；这与下层刻意做出的取舍是同一个。
+代价是：协议层多了第三个承载机密的载荷，配置面的只写接口从两个方法变成三个。发现覆盖范围仍按协议划分——Azure、Codex 与 Google 仍为 `DISCOVERY_UNSUPPORTED`。而且由于没有任何环节会重跑该询问，模型列表的新鲜度依旧只到最近一次编辑为止；这与下层刻意做出的取舍是同一个。
 
 ## Testing
 

@@ -44,6 +44,9 @@
       "path": "../../settings/settings"
     },
     {
+      "path": "../../goal/goal"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     },
     {

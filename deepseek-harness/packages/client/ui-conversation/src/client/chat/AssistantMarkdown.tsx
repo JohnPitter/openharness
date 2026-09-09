@@ -13,7 +13,7 @@ import { Fragment, memo, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import type { AssistantBlock } from '@deepseek-ai/dsh-client-runtime/client'
 import { JsonBlock, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MarkdownFileMentions, MarkdownPathImages } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
 import css from './AssistantMarkdown.module.css'
@@ -31,6 +31,22 @@ export interface AssistantMarkdownProps {
   t: ChatViewSlotProps['t']
 }
 
+/**
+ * Map one authored media destination to the same-origin workspace-file URL.
+ * @param protocol - `window.location.protocol` at render time.
+ * @param origin - `window.location.origin` at render time.
+ * @param value - The authored markdown destination, exactly as written.
+ * @returns The API URL for an absolute POSIX path on an HTTP(S) page, or
+ * undefined when the destination cannot be a Host-served local file
+ * (non-HTTP transport such as Electron `file://`, protocol-relative or
+ * relative destinations).
+ */
+export function localPathMediaUrl(protocol: string, origin: string, value: string): string | undefined {
+  if (protocol !== 'http:' && protocol !== 'https:') return undefined
+  if (value.length === 0 || !value.startsWith('/') || value.startsWith('//')) return undefined
+  return `${origin}/api/file?path=${encodeURIComponent(value)}`
+}
+
 /** Reasoning block as the Think variant summary row (figma 39:28304). */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
   blocks, streaming, interrupted, renderMessageImages, mentions, t,
@@ -38,6 +54,13 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
   const codeLabels = useMemo(() => ({ copyLabel: t('copy'), copiedLabel: t('copied') }), [t])
+  // Local media paths in the closing prose rewrite to the same-origin file
+  // API (policy re-validation lives host-side). The vocabulary identity is
+  // stable per page load because MarkdownText memoizes on it.
+  const pathImages = useMemo<MarkdownPathImages>(() => {
+    const { protocol, origin } = window.location
+    return { resolve: value => localPathMediaUrl(protocol, origin, value) }
+  }, [])
   const last = blocks.length - 1
   // Tool-call heads render as tool rows in the chat view's grouping pass, so
   // a node that is only those heads (or empty) would paint an empty root
@@ -59,6 +82,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
             streaming={streaming}
             codeLabels={codeLabels}
             fileMentions={mentions}
+            pathImages={pathImages}
           />,
         )
         break

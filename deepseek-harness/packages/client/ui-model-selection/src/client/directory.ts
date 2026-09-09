@@ -146,22 +146,14 @@ export class ModelDirectory {
   }
 
   /**
-   * Drop the previous Host generation's projection and repull it. Clearing
-   * first prevents an unconsumed process-local selection from being displayed
-   * while the restarted Host has restored the last logged model selection.
+   * Repull the Host generation's projection. Last-good `current` and `groups`
+   * stay rendered (stale-while-revalidate) so a reconnect does not empty the
+   * chip; `load` still supersedes in-flight work via the generation counter
+   * and replaces the snapshot with the Host answer.
    */
   resetConnected(): void {
     if (this.disposed) return
     ++this.generation
-    this.store.update((s) => {
-      s.current = null
-      s.routable = null
-      s.currentMetering = null
-      s.groups = []
-      s.failures = []
-      s.status = 'idle'
-      s.error = null
-    })
     if (!this.available()) return
     void this.load().catch(() => { /* the next menu open remains the explicit retry surface */ })
   }

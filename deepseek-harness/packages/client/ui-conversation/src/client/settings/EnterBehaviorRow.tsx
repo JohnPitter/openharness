@@ -1,4 +1,4 @@
-/** General Settings row for the Composer's busy-state Enter preference. */
+/** General Settings row for the Composer's busy-state submission preference. */
 import { useState } from 'react'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -13,7 +13,7 @@ export interface EnterBehaviorRowInjected {
     /** Persisted busy-state preference bound as useBusyEnter. */
     busyEnter: SnapshotStore<BusyEnterBehavior>
   }
-  /** Change the busy-state plain-Enter behavior. */
+  /** Change the busy-state submission behavior. */
   setBusyEnter: (behavior: BusyEnterBehavior) => void
 }
 

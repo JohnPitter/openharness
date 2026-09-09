@@ -47,12 +47,32 @@ class FakeWebSocket extends EventTarget {
   }
 }
 
+type FakeNetworkWindow = {
+  navigator: { onLine: boolean }
+  addEventListener(type: 'online' | 'offline', listener: () => void): void
+  removeEventListener(type: 'online' | 'offline', listener: () => void): void
+}
+
 afterEach(() => {
   delete (globalThis as Win).location
+  delete (globalThis as { window?: FakeNetworkWindow }).window
   sockets.length = 0
   if (originalWebSocket === undefined) delete (globalThis as WebSocketGlobal).WebSocket
   else globalThis.WebSocket = originalWebSocket
 })
+
+function installNetworkWindow(onLine = true): {
+  listeners: Map<string, () => void>
+} {
+  const listeners = new Map<string, () => void>()
+  const browser: FakeNetworkWindow = {
+    navigator: { onLine },
+    addEventListener(type, listener) { listeners.set(type, listener) },
+    removeEventListener(type) { listeners.delete(type) },
+  }
+  ;(globalThis as { window?: FakeNetworkWindow }).window = browser
+  return { listeners }
+}
 
 async function mount(): Promise<ConnectionHandle> {
   const ctx = new Context()
@@ -394,5 +414,44 @@ describe('connection client apply', () => {
     await expect(handle.rpc.call('/other', 'goals/create', {})).rejects.toThrow(/channel.*unavailable/)
     await expect(handle.rpc.call('/api', 'unknown/read', { args: { agentId: 'fx-alpha' } }))
       .rejects.toThrow(/endpoint.*unavailable/)
+  })
+
+  it('does not subscribe to browser online/offline on a loopback page', async () => {
+    ;(globalThis as Win).location = { hostname: 'localhost', search: '?fixture' }
+    const { listeners } = installNetworkWindow()
+    const handle = await mount()
+    const loop = handle.start({})
+    try {
+      await vi.waitFor(() => {
+        expect(handle.hostDescription.getSnapshot()?.canOpenPath).toBe(true)
+      })
+      expect(listeners.size).toBe(0)
+      expect(handle.state.getSnapshot()).toBe('connected')
+    } finally {
+      loop.stop()
+    }
+  })
+
+  it('aborts a non-loopback generation when the browser goes offline', async () => {
+    ;(globalThis as Win).location = { hostname: '192.0.2.20', search: '?fixture' }
+    const { listeners } = installNetworkWindow()
+    const handle = await mount()
+    expect(handle.isLoopback).toBe(false)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const loop = handle.start({})
+    try {
+      await vi.waitFor(() => {
+        expect(handle.hostDescription.getSnapshot()?.canOpenPath).toBe(true)
+      })
+      expect(listeners.has('offline')).toBe(true)
+      listeners.get('offline')!()
+      await vi.waitFor(() => {
+        expect(handle.state.getSnapshot()).toBe('disconnected')
+        expect(handle.hostDescription.getSnapshot()).toBeUndefined()
+      })
+    } finally {
+      loop.stop()
+      warnSpy.mockRestore()
+    }
   })
 })

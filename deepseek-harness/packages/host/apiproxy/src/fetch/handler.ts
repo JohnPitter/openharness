@@ -278,6 +278,11 @@ export function toFetchHandler(api: ApiProxy): { fetch: typeof fetch } {
         await response.body?.cancel()
         return new Response(null, { status: response.status, headers: response.headers })
       }
+      if (path === '/api/file' && (req.method === 'GET' || req.method === 'HEAD')) {
+        const serve = api.downloads.file
+        if (serve === undefined) return new Response('not found', { status: 404 })
+        return serve(req)
+      }
 
       if (req.method !== 'POST' || !path.startsWith('/api/')) {
         return new Response('not found', { status: 404 })

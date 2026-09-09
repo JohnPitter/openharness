@@ -112,6 +112,8 @@ import {
   inspectApiRemoteSession,
 } from '@deepseek-ai/dsh-api-remotes'
 import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-path-opener.ts'
+import { serveFile } from './file-display.ts'
+import type {} from '@deepseek-ai/dsh-fs'
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
@@ -126,6 +128,11 @@ export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 
 /** Conversation message event types (the pagination counting unit). */
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message', 'session/revision'])
+
+/** True when prompt or queue-edit content has non-whitespace text or a non-text part. */
+function hasPromptContent(content: readonly { readonly type: string; readonly text?: string }[]): boolean {
+  return content.some(part => part.type !== 'text' || (part.text ?? '').trim().length > 0)
+}
 
 /** Validate one prompt as a batch before publishing any durable image object. */
 async function durablePromptContent(ctx: Context, content: readonly PromptContentPart[]): Promise<ContentBlock[]> {
@@ -2655,6 +2662,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async prompt(request) {
         const { sessionId, mode, content, clientTimeZone } = request.payload
+        if (!hasPromptContent(content)) {
+          return err(request, {
+            code: 'bad-request',
+            message: 'prompt content must include non-whitespace text or an attachment',
+            details: { issues: [] },
+          })
+        }
         const canonicalTimeZone = clientTimeZone === undefined
           ? undefined
           : canonicalClientTimeZone(clientTimeZone)
@@ -2788,12 +2802,21 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       updateQueue(request) {
         const { sessionId, itemId, action } = request.payload
-        if (action.kind === 'edit' && action.content.some(block => block.type !== 'text')) {
-          return Promise.resolve(err(request, {
-            code: 'attachment-error',
-            message: 'queue edits accept text content only',
-            details: { reason: 'QUEUE_EDIT_NON_TEXT' },
-          }))
+        if (action.kind === 'edit') {
+          if (action.content.some(block => block.type !== 'text')) {
+            return Promise.resolve(err(request, {
+              code: 'attachment-error',
+              message: 'queue edits accept text content only',
+              details: { reason: 'QUEUE_EDIT_NON_TEXT' },
+            }))
+          }
+          if (!hasPromptContent(action.content)) {
+            return Promise.resolve(err(request, {
+              code: 'bad-request',
+              message: 'queue edit content must include non-whitespace text',
+              details: { issues: [] },
+            }))
+          }
         }
         const agent = ctx.agents.get(sessionId)
         if (agent !== undefined && hasSubagentOwner(agent.session, agent)) {
@@ -3978,6 +4001,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             },
           },
         )
+      },
+      async file(request) {
+        const fs = ctx.get('fs')
+        const attachments = ctx.get('attachments')
+        if (fs === undefined) {
+          return new Response('file display is unavailable: missing fs service', { status: 500 })
+        }
+        if (attachments === undefined) {
+          return new Response('file display is unavailable: missing attachments service', { status: 500 })
+        }
+        return serveFile(request, fs, attachments.imageLimits.maxImageBytes)
       },
     },
 

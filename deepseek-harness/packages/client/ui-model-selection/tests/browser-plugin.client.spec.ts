@@ -285,7 +285,7 @@ describe('ui-model-selection dual entry', () => {
     expect(b.ctx.modelDirectories.directoryFor(sid('a')).store).toBe(faceA.directory)
   })
 
-  it('drops an unconsumed local selection and restores the Host target after reconnect', async () => {
+  it('keeps the last-good chip while reconnecting and restores the Host target', async () => {
     const b = await bench()
     b.mint('s1')
     const face = b.seat().inject!(sid('s1'))
@@ -293,7 +293,10 @@ describe('ui-model-selection dual entry', () => {
     b.setHostCurrent({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
 
     b.ctx.emit('connection/reset')
-    expect(face.directory.getSnapshot()).toMatchObject({ current: null, status: 'loading' })
+    expect(face.directory.getSnapshot()).toMatchObject({
+      current: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+      status: 'loading',
+    })
     await Promise.resolve()
     expect(face.directory.getSnapshot()).toMatchObject({
       current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },

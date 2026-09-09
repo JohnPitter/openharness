@@ -147,6 +147,7 @@ export function apply(ctx: Context): void {
   const transport = (globalThis as ClientTransportGlobal).__DSH_TRANSPORT__
   const api: IApiClient = fixtureClient ?? transport?.createApiClient() ?? new WebApiClient()
   const rpc = fixtureClient?.rpc ?? createWebConnectionRpc(transport?.fetch)
+  const loopback = pageLocation === undefined || isLoopbackHostname(pageLocation.hostname)
   let started = false
   let controller: ConnectionController | undefined
   let stopNetworkWatch = (): void => {}
@@ -178,7 +179,7 @@ export function apply(ctx: Context): void {
   }
   const handle: ConnectionHandle = {
     api,
-    isLoopback: pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    isLoopback: loopback,
     hostDescription: {
       getSnapshot: () => description,
       subscribe: (listener) => {
@@ -218,7 +219,10 @@ export function apply(ctx: Context): void {
         },
       }, config ?? {})
       controller = owned
-      stopNetworkWatch = watchBrowserNetwork(owned)
+      // Loopback pages skip WAN online/offline: the sidecar remains reachable when
+      // `navigator.onLine` is false, and aborting the live generation emits
+      // `connection/reset`.
+      stopNetworkWatch = loopback ? () => {} : watchBrowserNetwork(owned)
       owned.start()
       return {
         stop: () => {

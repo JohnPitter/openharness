@@ -100,6 +100,7 @@ function ModelPicker(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  const [modelQuery, setModelQuery] = useState('')
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -124,6 +125,19 @@ function ModelPicker(
           : { reasoningEffort: model.reasoning.defaultEffort },
       } satisfies ModelSelection,
     }))), [state.groups])
+  const normalizedModelQuery = modelQuery.trim().toLowerCase()
+  const visibleGroups = useMemo(() => {
+    if (normalizedModelQuery.length === 0) return state.groups
+    return state.groups.flatMap((group) => {
+      const models = group.models.filter(model =>
+        model.id.toLowerCase().includes(normalizedModelQuery)
+        || model.name.toLowerCase().includes(normalizedModelQuery)
+        || model.description?.toLowerCase().includes(normalizedModelQuery) === true
+      )
+      return models.length === 0 ? [] : [{ ...group, models }]
+    })
+  }, [state.groups, normalizedModelQuery])
+  const visibleModelCount = visibleGroups.reduce((count, group) => count + group.models.length, 0)
   const current = currentOverride !== undefined ? currentOverride : state.current
   const selectedIndex = current === null
     ? -1
@@ -185,6 +199,7 @@ function ModelPicker(
 
   const show = (): void => {
     setPane('root')
+    setModelQuery('')
     setOpen(true)
     reload()
   }
@@ -192,6 +207,7 @@ function ModelPicker(
   const close = (restoreFocus = false): void => {
     setOpen(false)
     setPane('root')
+    setModelQuery('')
     if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
   }
 
@@ -207,8 +223,10 @@ function ModelPicker(
     if (event.key === 'Escape' && open) {
       event.preventDefault()
       // Escape backs out of a drilled pane first, then closes.
-      if (pane !== 'root') setPane('root')
-      else close(true)
+      if (pane !== 'root') {
+        setPane('root')
+        setModelQuery('')
+      } else close(true)
       return
     }
     if (!open) return
@@ -374,8 +392,22 @@ function ModelPicker(
                   <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
                 </div>
               ))}
+              <div className={css.searchRow}>
+                <input
+                  className={css.search}
+                  type="search"
+                  value={modelQuery}
+                  placeholder={t('menu.search')}
+                  aria-label={t('menu.search')}
+                  onChange={(event) => { setModelQuery(event.target.value) }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') return
+                    event.stopPropagation()
+                  }}
+                />
+              </div>
               <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
+                {visibleGroups.map((group) => {
                   const headingId = `${id}-${group.id}`
                   return (
                     <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
@@ -425,6 +457,9 @@ function ModelPicker(
               </div>
               {state.status === 'ready' && choices.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>
+              )}
+              {state.status === 'ready' && choices.length > 0 && visibleModelCount === 0 && (
+                <div className={css.empty}>{t('empty.noMatches')}</div>
               )}
             </>
           )}

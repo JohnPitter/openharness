@@ -224,7 +224,7 @@ describe('InputBar editing indicator', () => {
       addImages: () => null,
       removeImage: () => {},
       draftImages: () => [],
-      resolveSubmitMode: () => 'queue',
+      useBusyEnter: bindSnapshotSelector(createSnapshotStore<'queue' | 'steer'>('queue')),
       toggleCommandMenu: () => {},
       stop: () => {},
       command: () => Promise.resolve(true),

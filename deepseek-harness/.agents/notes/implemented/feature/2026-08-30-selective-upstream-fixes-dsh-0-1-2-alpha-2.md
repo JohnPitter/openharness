@@ -27,7 +27,7 @@ pt/es dictionaries were added wherever the port introduced copy. Items skipped a
 
 ## Consequences
 
-The desktop Settings foot now surfaces Host disconnects with a one-click retry, plugin listing matches the session/global split users already have in presets, and the composer `@`/`/` menu no longer submits a stale row while a refinement is in flight. Future gateway ports must keep this fork's mux+host `ConnectionController` and remap `'reconnecting'` callers to `'connecting'` / `'disconnected'`. Typert Host/remote artifacts for `pluginInventory.list` must be regenerated whenever the snapshot fields change.
+The desktop Settings foot now surfaces Host disconnects with a one-click retry, plugin listing matches the session/global split users already have in presets, and the composer `@`/`/` menu no longer submits a stale row while a refinement is in flight. Loopback pages skip the browser online/offline watch ([loopback ignores browser offline](../bug-fix/2026-09-08-loopback-ignores-browser-offline.md)). Future gateway ports must keep this fork's mux+host `ConnectionController` and remap `'reconnecting'` callers to `'connecting'` / `'disconnected'`. Typert Host/remote artifacts for `pluginInventory.list` must be regenerated whenever the snapshot fields change.
 
 ## Verification
 

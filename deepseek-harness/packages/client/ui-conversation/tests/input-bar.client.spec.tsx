@@ -146,6 +146,7 @@ function bench(over?: BenchOptions) {
   const stop = vi.fn()
   const removeImage = vi.fn((id: DraftAttachmentId) => { shell.removeImage(id) })
   const menuLauncher = createSnapshotStore<string | null>(over?.commandMenuOpen === true ? 'command' : null)
+  const busyEnter = createSnapshotStore<'queue' | 'steer'>(over?.busyEnter ?? 'queue')
   const slotCalls: { key: string; owner: unknown }[] = []
   const renderSlot = ((key: string, owner: object) => {
     slotCalls.push({ key, owner })
@@ -190,11 +191,7 @@ function bench(over?: BenchOptions) {
       const attachment = over?.attachments?.find(candidate => candidate.id === id)
       return attachment === undefined ? [] : [attachment]
     }),
-    resolveSubmitMode: (running, gesture, steeringAvailable) => {
-      if (!running || !steeringAvailable) return 'queue'
-      const preferred = over?.busyEnter ?? 'queue'
-      return gesture === 'enter' ? preferred : preferred === 'queue' ? 'steer' : 'queue'
-    },
+    useBusyEnter: bindSnapshotSelector(busyEnter),
     toggleCommandMenu: over?.toggleCommandMenu ?? vi.fn(),
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
@@ -220,13 +217,24 @@ function bench(over?: BenchOptions) {
   const sendableDraft = (over?.draft?.trim() ?? '') !== '' || (over?.attachments?.length ?? 0) > 0
   const primaryStops = over?.running === true && over.subagent === undefined
     && (!sendableDraft || over.blocked !== undefined)
+  // The mirror models plain-phase drafts only: claimed-command cases query the DOM directly.
+  const steeringAvailable = over?.subagent === undefined
+  const composerLocked = over?.disabled === true || over?.inert === true || over?.blocked !== undefined
+    || (over?.subagent?.address.mode === 'continuable' && over.subagent.parentAvailable === false)
+  const namesMode = over?.running === true && steeringAvailable && !composerLocked && sendableDraft
+    && !(over?.draft?.trimStart().startsWith('/') ?? false)
+  const primaryLabel = primaryStops
+    ? '停止生成'
+    : namesMode
+      ? (over?.busyEnter === 'steer' ? '插话发送' : '排队发送')
+      : '发送消息'
   const button = view.container.querySelector<HTMLButtonElement>(
-    `button[aria-label="${primaryStops ? '停止生成' : '发送消息'}"]`,
+    `button[aria-label="${primaryLabel}"]`,
   )!
   const interruptButton = view.container.querySelector<HTMLButtonElement>('button[aria-label="停止生成"]')
   return {
     view, textarea, button, interruptButton, props, sink, shell, wiring: shell, session, stop, removeImage, slotCalls,
-    menuLauncher,
+    menuLauncher, busyEnter,
     steerQueue: over?.steerQueue,
   }
 }
@@ -637,7 +645,7 @@ describe('Enter semantics', () => {
 })
 
 describe('running and lock semantics', () => {
-  it('running switches the primary between Stop and Queue Send with the draft', async () => {
+  it('running switches the primary between Stop and mode-named Send with the draft', async () => {
     const { textarea, button, stop, sink } = bench({ running: true, busyEnter: 'steer' })
     expect(textarea.disabled).toBe(false)
     expect(button.getAttribute('aria-label')).toBe('停止生成')
@@ -645,13 +653,13 @@ describe('running and lock semantics', () => {
     expect(stop).toHaveBeenCalledTimes(1)
 
     fireEvent.change(textarea, { target: { value: '排队消息' } })
-    expect(button.getAttribute('aria-label')).toBe('发送消息')
+    expect(button.getAttribute('aria-label')).toBe('插话发送')
     fireEvent.change(textarea, { target: { value: '   ' } })
     expect(button.getAttribute('aria-label')).toBe('停止生成')
     fireEvent.change(textarea, { target: { value: '排队消息2' } })
-    expect(button.getAttribute('aria-label')).toBe('发送消息')
+    expect(button.getAttribute('aria-label')).toBe('插话发送')
     fireEvent.click(button)
-    expect(sink).toHaveBeenCalledWith('排队消息2', [], 'queue', expect.any(AbortSignal))
+    expect(sink).toHaveBeenCalledWith('排队消息2', [], 'steer', expect.any(AbortSignal))
     await vi.waitFor(() => { expect(button.getAttribute('aria-label')).toBe('停止生成') })
     expect(stop).toHaveBeenCalledTimes(1)
   })
@@ -664,7 +672,7 @@ describe('running and lock semantics', () => {
       previewUrl: 'blob:pixel',
     }
     const { button, sink } = bench({ running: true, attachments: [attachment] })
-    expect(button.getAttribute('aria-label')).toBe('发送消息')
+    expect(button.getAttribute('aria-label')).toBe('排队发送')
     fireEvent.click(button)
     expect(sink).toHaveBeenCalledWith('', ['draft-1'], 'queue', expect.any(AbortSignal))
     await vi.waitFor(() => { expect(button.getAttribute('aria-label')).toBe('停止生成') })
@@ -700,6 +708,54 @@ describe('running and lock semantics', () => {
     const ctrl = bench({ running: true, busyEnter: 'steer', draft: 'also queue' })
     fireEvent.keyDown(ctrl.textarea, { key: 'Enter', ctrlKey: true })
     expect(ctrl.sink).toHaveBeenCalledWith('also queue', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('running Send follows the busy-state Queue preference and names the mode', () => {
+    const { button, sink } = bench({ running: true, draft: '排队发送' })
+    expect(button.getAttribute('aria-label')).toBe('排队发送')
+    fireEvent.click(button)
+    expect(sink).toHaveBeenCalledWith('排队发送', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('running Send follows the busy-state Steer preference and names the mode', () => {
+    const { button, sink } = bench({ running: true, busyEnter: 'steer', draft: '按钮插话' })
+    expect(button.getAttribute('aria-label')).toBe('插话发送')
+    fireEvent.click(button)
+    expect(sink).toHaveBeenCalledWith('按钮插话', [], 'steer', expect.any(AbortSignal))
+  })
+
+  it('running Send relabels when the busy-state preference changes live', () => {
+    const { button, busyEnter, sink } = bench({ running: true, draft: '跟随设置' })
+    expect(button.getAttribute('aria-label')).toBe('排队发送')
+    act(() => { busyEnter.set('steer') })
+    expect(button.getAttribute('aria-label')).toBe('插话发送')
+    fireEvent.click(button)
+    expect(sink).toHaveBeenCalledWith('跟随设置', [], 'steer', expect.any(AbortSignal))
+  })
+
+  it('idle Send keeps the plain label regardless of the busy-state preference', () => {
+    const { button, sink } = bench({ busyEnter: 'steer', draft: '空闲发送' })
+    expect(button.getAttribute('aria-label')).toBe('发送消息')
+    fireEvent.click(button)
+    expect(sink).toHaveBeenCalledWith('空闲发送', [], 'queue', expect.any(AbortSignal))
+  })
+
+  it('running Send keeps the plain label for a slash line and a claimed command', () => {
+    const slash = bench({ running: true, busyEnter: 'steer', draft: '/goal inspect' })
+    expect(slash.button.getAttribute('aria-label')).toBe('发送消息')
+    expect(slash.button.disabled).toBe(false)
+
+    const claimed = bench({ running: true, busyEnter: 'steer' })
+    act(() => {
+      claimed.shell.setDraft('/goal ')
+      claimed.shell.beginCommand(
+        { token: '/goal ', submit: () => Promise.resolve({ kind: 'success' }) },
+        { start: 0, end: 6, draftRev: claimed.shell.snapshot.draftRev },
+      )
+    })
+    expect(claimed.shell.snapshot.phase).toBe('claimed')
+    expect(claimed.view.container.querySelector('button[aria-label="发送消息"]')).not.toBeNull()
+    expect(claimed.view.container.querySelector('button[aria-label="插话发送"]')).toBeNull()
   })
 
   it('running continuable subagent keeps Send beside an independent Stop', () => {

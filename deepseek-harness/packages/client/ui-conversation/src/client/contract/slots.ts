@@ -18,7 +18,7 @@ import type {
   ComposerKeyboard, DraftAttachmentId, EditSelection, InputActions, InputNotice, InputState,
 } from '../input/contract.ts'
 import type { createChatStore } from '../stores.ts'
-import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
+import type { BusyEnterBehavior } from './composer-submission.ts'
 import type { ChatNode, ChatNodeKind } from './chat-nodes.ts'
 import type { CallId, SelectionTarget, ViewTab } from './views.ts'
 
@@ -569,12 +569,6 @@ export interface ComposerBarInjected {
   removeImage: ((id: DraftAttachmentId) => void) | undefined
   /** Resolve ordered input ids to browser-owned draft images. */
   draftImages: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
-  /** Resolve one keyboard submission gesture against the current running state and persisted preference. */
-  resolveSubmitMode: (
-    running: boolean,
-    gesture: ComposerSubmitGesture,
-    steeringAvailable: boolean,
-  ) => InputSubmitMode
   /** Toggle the shared slash menu with only its command source; absent without ui-input-trigger or a session. */
   toggleCommandMenu: ((selection: EditSelection) => void) | undefined
   /** Cancel the in-flight turn; absent with the session. */
@@ -590,10 +584,15 @@ export interface ComposerBarInjected {
   cancelEdit?: (() => void) | undefined
   /**
    * Registrant hooks compartment: the renderer binds these to
-   * useNotices/useLexicon (static absent sources without a session — hook
+   * useBusyEnter/useNotices/useLexicon (static absent sources without a session — hook
    * order stays constant).
    */
   hooks: {
+    /**
+     * Live busy-state submission preference: the delivery mode plain Enter
+     * and the primary Send button use while the addressed agent is busy.
+     */
+    busyEnter: ObservableSnapshot<BusyEnterBehavior>
     /** Latest surfaced notice (null after none; seq keys re-render of repeats). */
     notices: ObservableSnapshot<InputNotice | null>
     /** Hot plain-text reference lexicon for the decoration scan (plain-text-reference decision;

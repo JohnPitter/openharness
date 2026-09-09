@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-30-selective-upstream-fixes-dsh-0-1-2-alpha-2.md
-2026-08-30-selective-upstream-fixes-dsh-0-1-2-alpha-2.md: c33a4a8d010858ba7e5f2ceefc851485786e0e7c
-2026-08-30-selective-upstream-fixes-dsh-0-1-2-alpha-2.zh.md: 1de9f5754a23c410ac53684b545950269699adaa
+2026-08-30-selective-upstream-fixes-dsh-0-1-2-alpha-2.md: fe5ae76bd9be8e561ecea7de7c7d79c6a77c29f2
+2026-08-30-selective-upstream-fixes-dsh-0-1-2-alpha-2.zh.md: 7e180403f56bc391c3290b792d03a27a6aaf67b8

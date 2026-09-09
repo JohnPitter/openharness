@@ -22,4 +22,11 @@ export interface DownloadsApi {
     request: { sessionId: SessionId; includeDescendants?: boolean },
     signal: AbortSignal,
   ): Promise<Response>
+  /**
+   * Serve one regular file for assistant-message POSIX absolute image display.
+   * Optional: a composition without `ctx.fs` omits this and the GET answers 404.
+   * @param request - GET or HEAD `/api/file?path=` after transport authentication.
+   * @returns the file bytes, or a 4xx/5xx status without echoing host paths.
+   */
+  file?(request: Request): Promise<Response>
 }

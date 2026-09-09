@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-上游 `deepseek-ai/deepseek-harness` 在本 fork 上次取样的 alpha.1 标签之上发布了 `dsh-v0.1.2-alpha.2`。两项架构级变更仍推迟（[alpha.1 择入](2026-08-29-selective-upstream-fixes-dsh-0-1-2-alpha-1.md)）：用 `@Remote` API Gateway 替换 `ApiProxy`，以及会话 UI 的模块拆分。其余变更日志仍有本 fork 可以在不做该迁移的前提下吸收的恢复与列表工作。
+上游 `deepseek-ai/deepseek-harness` 在本 fork 上次取样的 alpha.1 标签之上发布了 `dsh-v0.1.2-alpha.2`。两项架构级变更仍推迟（[alpha.1 择入](2026-08-29-selective-upstream-fixes-dsh-0-1-2-alpha-1.zh.md)）：用 `@Remote` API Gateway 替换 `ApiProxy`，以及会话 UI 的模块拆分。其余变更日志仍有本 fork 可以在不做该迁移的前提下吸收的恢复与列表工作。
 
 ## Decision
 
@@ -27,7 +27,7 @@ Status: implemented
 
 ## Consequences
 
-桌面设置底栏在 Host 断开时给出一键重试，插件列表与用户已有的预设会话/全局划分对齐，作曲器 `@`/`/` 菜单在细化进行中不再提交过期行。后续网关移植必须保留本 fork 的 mux+host `ConnectionController`，并把 `'reconnecting'` 调用方改写为 `'connecting'` / `'disconnected'`。`pluginInventory.list` 快照字段一变，就必须重新生成 Typert Host/remote 产物。
+桌面设置底栏在 Host 断开时给出一键重试，插件列表与用户已有的预设会话/全局划分对齐，作曲器 `@`/`/` 菜单在细化进行中不再提交过期行。回环页不订阅浏览器 online/offline（[回环忽略浏览器离线](../bug-fix/2026-09-08-loopback-ignores-browser-offline.zh.md)）。后续网关移植必须保留本 fork 的 mux+host `ConnectionController`，并把 `'reconnecting'` 调用方改写为 `'connecting'` / `'disconnected'`。`pluginInventory.list` 快照字段一变，就必须重新生成 Typert Host/remote 产物。
 
 ## Verification
 

@@ -320,6 +320,30 @@ describe('connection lifecycle', () => {
     }
   })
 
+  it('setNetworkAvailable(false) aborts a live generation and holds disconnected until true', async () => {
+    const api = new FakeApiClient()
+    const states: ConnectionState[] = []
+    let connected = 0
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const controller = new ConnectionController(api, {
+      onConnected: () => { connected++ },
+      onStateChange: state => states.push(state),
+    }, FAST)
+    controller.start()
+    try {
+      await vi.waitFor(() => { expect(connected).toBe(1) })
+      controller.setNetworkAvailable(false)
+      await vi.waitFor(() => { expect(states).toContain('disconnected') })
+      expect(connected).toBe(1)
+      controller.setNetworkAvailable(true)
+      await vi.waitFor(() => { expect(connected).toBe(2) })
+      expect(states[states.length - 1]).toBe('connected')
+    } finally {
+      controller.stop()
+      warnSpy.mockRestore()
+    }
+  })
+
   it('reconnect() aborts backoff and starts a fresh attempt immediately', async () => {
     const api = new FakeApiClient()
     const gate = deferred<Awaited<ReturnType<FakeApiClient['onDescribe']>>>()

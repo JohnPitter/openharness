@@ -112,7 +112,7 @@ export interface ComposerKeyboard {
   readonly snapshot: InputState
   /** Draft write with the DOM-observed edit shape (narrows occurrence math). */
   setDraft(text: string, editRange?: EditRange): void
-  /** Submit with an explicit delivery mode resolved by the keyboard policy. */
+  /** Submit with an explicit delivery mode resolved by the submission policy (Enter gestures and the primary Send button). */
   submit(mode: InputSubmitMode): void
   /**
    * Steer every still-pending queued message into the running turn (the

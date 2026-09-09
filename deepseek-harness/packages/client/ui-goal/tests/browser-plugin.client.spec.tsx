@@ -20,7 +20,7 @@ import type { GoalProjection } from '@deepseek-ai/dsh-goal/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import type { GoalBarActions } from '../src/client/slots.ts'
+import type { GoalBarActions, GoalBarInjected } from '../src/client/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { GoalDock } from '../src/client/GoalBar.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -62,6 +62,7 @@ async function bench(options: {
   }
   const ref = { id: 'g-1', revision: 3 }
   const goals = (prefix: string) => ({
+    get: answer(`${prefix}/get`, undefined),
     edit: answer(`${prefix}/edit`, { ref }),
     pause: answer(`${prefix}/pause`, { ref }),
     resume: answer(`${prefix}/resume`, { ref }),
@@ -72,9 +73,13 @@ async function bench(options: {
     constructor(serviceCtx: Context) {
       super(serviceCtx, 'remote')
     }
+    $on() {
+      return () => {}
+    }
   }
   new RemoteService(ctx)
   ctx.provide('remote.goals', {
+    get get() { return activeGoals?.get },
     get edit() { return activeGoals?.edit },
     get pause() { return activeGoals?.pause },
     get resume() { return activeGoals?.resume },
@@ -91,10 +96,14 @@ async function bench(options: {
   ctx.provide('sessions', {
     binding: (id: SessionId) => ({
       sessionId: id,
-      session: { projections: { faceOf: (key: string) => ({
-        getSnapshot: () => (key === 'goal' ? options.projection : undefined),
+      session: {
+        getSnapshot: () => ({ running: false }),
         subscribe: () => () => {},
-      }) } },
+        projections: { faceOf: (key: string) => ({
+          getSnapshot: () => (key === 'goal' ? options.projection : undefined),
+          subscribe: () => () => {},
+        }) },
+      },
       ctx,
     }),
   })
@@ -112,7 +121,7 @@ async function bench(options: {
       return {
         ...entry.options,
         locale: entry.locale,
-        inject: entry.inject as unknown as ((sessionId: SessionId) => GoalBarActions) | undefined,
+        inject: entry.inject as unknown as ((sessionId: SessionId) => GoalBarInjected) | undefined,
       }
     },
     chatEntry: () => ctx.slots.entries('conversation.chat.node')[0],
@@ -218,8 +227,9 @@ describe('GoalDock adapter', () => {
       onClear: () => Promise.resolve({ ok: true, value: undefined }),
     }
     const t = makeTranslate(zh, commonZh)
+    const useGoalActivation = vi.fn(() => 'armed' as const)
     const dockProps = (up: () => GoalProjection | null | undefined) =>
-      ({ useProjection: up, ...actions, t }) as unknown as Parameters<typeof GoalDock>[0]
+      ({ useProjection: up, useGoalActivation, ...actions, t }) as unknown as Parameters<typeof GoalDock>[0]
     const shown = render(<GoalDock {...dockProps(useProjection)} />)
     expect(shown.getByText('Ship it')).toBeTruthy()
     cleanup()

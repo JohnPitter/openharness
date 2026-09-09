@@ -668,6 +668,31 @@ describe('endpoint interrogation', () => {
     expect(boxes.map(box => box.checked)).toEqual([true, true, true])
     expect(within_(dialog, en.fetchDeselectAll)).toBeTruthy()
   })
+
+  it('filters discovered candidates by id and display name, and select-all applies to the visible set', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [
+        { id: 'acme-large', name: 'Acme Large' },
+        { id: 'acme-small' },
+        { id: 'other' },
+      ],
+    })))
+    await mountSection({ discover })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    const dialog = await screen.findByRole('dialog')
+    const search = screen.getByRole('searchbox', { name: en.fetchSearch })
+    fireEvent.change(search, { target: { value: 'acme' } })
+    expect(screen.queryByText('other')).toBeNull()
+    expect(dialog.querySelectorAll('input[type="checkbox"]')).toHaveLength(2)
+
+    fireEvent.click(within_(dialog, en.fetchDeselectAll))
+    fireEvent.click(within_(dialog, en.fetchSelectAll))
+    fireEvent.change(search, { target: { value: '' } })
+    const boxes = [...dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+    expect(boxes.map(box => box.checked)).toEqual([true, true, false])
+  })
 })
 
 describe('provider rows', () => {

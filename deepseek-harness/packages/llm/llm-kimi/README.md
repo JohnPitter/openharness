@@ -36,7 +36,7 @@ When `GenerateOptions.sessionId` is set, the request carries `prompt_cache_key` 
 
 ## Cache accounting and request identity
 
-Usage fields are OpenAI-standard: `cacheReadTokens` maps from `prompt_tokens_details.cached_tokens` / `prompt_cache_hit_tokens`, and `prompt_tokens` includes cache hits (subtracted to keep disjoint harness counts). Error responses retain the HTTP status, a valid `Retry-After` delay, and the request id from `x-request-id` or `x-trace-id` when present.
+Usage fields are OpenAI-standard: `cacheReadTokens` maps from `prompt_tokens_details.cached_tokens` / `prompt_cache_hit_tokens`, and `prompt_tokens` includes cache hits (subtracted to keep disjoint harness counts). Error responses retain the HTTP status, a valid `Retry-After` delay, and the request id from `x-request-id` or `x-trace-id` when present. Streamed tool-call `id` and `name` are identity: a continuation delta repeating them empty or null leaves the established value alone.
 
 Dynamic configuration (settings + credentials), error codes, and stream idle-timeout behavior match the DeepSeek adapter this package is forked from; see `packages/llm/llm-deepseek/README.md` for the shared mechanics.
 

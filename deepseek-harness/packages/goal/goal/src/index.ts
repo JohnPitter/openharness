@@ -197,6 +197,7 @@ export class GoalService extends TypertRemoteService {
     }
     ctx.on('agent/session-start', ({ agent }) => {
       this.cache(agent.session).activation = 'disarmed'
+      this.emitActivation(agent.session)
     })
     // The `goal` projection unit: last-wins fold of goal/change whole values
     // (see applyGoalProjection). The unit child activates only when a
@@ -219,6 +220,7 @@ export class GoalService extends TypertRemoteService {
    * @returns a fresh view or `undefined` when no goal is current.
    * @throws {@link GoalError} when the agent is not the registry's live instance.
    */
+  @Remote('get')
   get(agent: Agent): GoalView | undefined {
     this.assertLive(agent)
     const cache = this.cache(agent.session)
@@ -238,6 +240,7 @@ export class GoalService extends TypertRemoteService {
     const cache = this.cache(agent.session)
     this.sync(agent.session, cache)
     cache.activation = 'disarmed'
+    this.emitActivation(agent.session)
     return this.view(cache)
   }
 
@@ -555,6 +558,25 @@ export class GoalService extends TypertRemoteService {
       ...goal === undefined ? {} : { goal },
     }
     agentEvents(this.ctx, agent).emit('goal/changed', { change: notification })
+    this.emitActivation(agent.session)
+  }
+
+  /** Publish process-local activation for Web clients; payload is JSON-safe. */
+  private emitActivation(session: Session): void {
+    const cache = this.caches.get(session)
+    /* v8 ignore next -- emit sites always install the cache before this read. */
+    if (cache === undefined) return
+    const goal = this.view(cache)
+    this.ctx.emit('goal/activation-changed', {
+      sessionId: session.id,
+      ...goal === undefined ? {} : {
+        goal: {
+          id: goal.id,
+          revision: goal.revision,
+          activation: goal.activation,
+        },
+      },
+    })
   }
 
   /** Build a detached current view. */
