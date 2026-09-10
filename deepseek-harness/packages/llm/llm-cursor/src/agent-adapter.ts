@@ -412,7 +412,12 @@ export class CursorAgentAdapter extends LlmAdapter {
       case 'turn-ended':
         this.push(run, {
           type: 'usage',
-          usage: { inputTokens: update.inputTokens ?? 0, outputTokens: update.outputTokens ?? 0 },
+          usage: {
+            inputTokens: update.inputTokens ?? 0,
+            outputTokens: update.outputTokens ?? 0,
+            ...update.cacheReadTokens === undefined ? {} : { cacheReadTokens: update.cacheReadTokens },
+            ...update.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: update.cacheWriteTokens },
+          },
         })
         this.push(run, { type: 'finish', reason: { kind: 'stop' } })
         this.finishRun(run)

@@ -110,8 +110,8 @@ function textDelta(text: string): Uint8Array {
   return dataFrame({ interactionUpdate: { textDelta: { text } } })
 }
 
-const turnEnded = (inputTokens = 10, outputTokens = 3): Uint8Array =>
-  dataFrame({ interactionUpdate: { turnEnded: { inputTokens, outputTokens } } })
+const turnEnded = (inputTokens = 10, outputTokens = 3, cache?: { cacheReadTokens: number; cacheWriteTokens: number }): Uint8Array =>
+  dataFrame({ interactionUpdate: { turnEnded: { inputTokens, outputTokens, ...cache } } })
 
 async function collect(iterable: AsyncIterable<StreamChunk>): Promise<StreamChunk[]> {
   const chunks: StreamChunk[] = []
@@ -141,6 +141,23 @@ describe('CursorAgentAdapter run protocol', () => {
     expect(chunks.at(-1)).toEqual({ type: 'finish', reason: { kind: 'stop' } })
     const messages = clientMessages(run) as Array<{ runRequest?: { action?: { userMessageAction?: { userMessage?: { text?: string } } } } }>
     expect(messages[0]?.runRequest?.action?.userMessageAction?.userMessage?.text).toBe('hi')
+  })
+
+  it('forwards the cache-token buckets a turn reports', async () => {
+    const transport = fakeTransport()
+    const adapter = adapterOf(transport)
+    const runPromise = collect(adapter.stream({
+      ...base,
+      sessionId: 's1' as never,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] } as never],
+    }))
+    await vi.waitFor(() => { expect(transport.runs.length).toBe(1) })
+    transport.runs[0]!.driver.push(turnEnded(11, 4, { cacheReadTokens: 31, cacheWriteTokens: 7 }))
+    const chunks = await runPromise
+    expect(chunks).toContainEqual({
+      type: 'usage',
+      usage: { inputTokens: 11, outputTokens: 4, cacheReadTokens: 31, cacheWriteTokens: 7 },
+    })
   })
 
   it('sends the official client headers and run request fields', async () => {
