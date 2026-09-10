@@ -129,7 +129,13 @@ export type AgentInteractionUpdate =
   | { kind: 'text'; text: string; isServerNotice: boolean }
   | { kind: 'thinking'; text: string }
   | { kind: 'heartbeat' }
-  | { kind: 'turn-ended'; inputTokens?: number | undefined; outputTokens?: number | undefined }
+  | {
+    kind: 'turn-ended'
+    inputTokens?: number | undefined
+    outputTokens?: number | undefined
+    cacheWriteTokens?: number | undefined
+    cacheReadTokens?: number | undefined
+  }
 
 /** One decoded server frame of the run stream. */
 export type AgentServerFrame =
@@ -151,7 +157,12 @@ export function decodeServerFrame(payload: Uint8Array): AgentServerFrame {
       textDelta?: { text?: string; isServerNotice?: boolean }
       thinkingDelta?: { text?: string }
       heartbeat?: unknown
-      turnEnded?: { inputTokens?: number; outputTokens?: number }
+      turnEnded?: {
+        inputTokens?: number
+        outputTokens?: number
+        cacheWriteTokens?: number
+        cacheReadTokens?: number
+      }
     }
     execServerMessage?: {
       id?: number
@@ -197,7 +208,13 @@ export function decodeServerFrame(payload: Uint8Array): AgentServerFrame {
   if (update.turnEnded !== undefined) {
     return {
       kind: 'interaction',
-      update: { kind: 'turn-ended', inputTokens: update.turnEnded.inputTokens, outputTokens: update.turnEnded.outputTokens },
+      update: {
+        kind: 'turn-ended',
+        inputTokens: update.turnEnded.inputTokens,
+        outputTokens: update.turnEnded.outputTokens,
+        cacheWriteTokens: update.turnEnded.cacheWriteTokens,
+        cacheReadTokens: update.turnEnded.cacheReadTokens,
+      },
     }
   }
   return { kind: 'interaction', update: { kind: 'heartbeat' } }

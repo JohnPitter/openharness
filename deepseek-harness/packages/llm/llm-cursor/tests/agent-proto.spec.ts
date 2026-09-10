@@ -45,6 +45,12 @@ describe('decodeServerFrame', () => {
       .toEqual({ kind: 'interaction', update: { kind: 'thinking', text: 'hm' } })
     expect(decodeServerFrame(encodeServerFrame({ interactionUpdate: { turnEnded: { inputTokens: 9, outputTokens: 2 } } })))
       .toEqual({ kind: 'interaction', update: { kind: 'turn-ended', inputTokens: 9, outputTokens: 2 } })
+    expect(decodeServerFrame(encodeServerFrame({
+      interactionUpdate: { turnEnded: { inputTokens: 9, outputTokens: 2, cacheWriteTokens: 4, cacheReadTokens: 31 } },
+    }))).toEqual({
+      kind: 'interaction',
+      update: { kind: 'turn-ended', inputTokens: 9, outputTokens: 2, cacheWriteTokens: 4, cacheReadTokens: 31 },
+    })
   })
 
   it('decodes heartbeats as ignorable updates', () => {
