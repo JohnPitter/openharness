@@ -65,6 +65,7 @@ export function windowHours(window: AccountUsageWindowView): string {
 /** Human label for one quota window id. */
 export function quotaWindowLabel(window: AccountUsageWindowView, t: QuotaTranslate): string {
   if (window.id === 'weekly') return t('usage.quotaWeekly')
+  if (window.id === 'monthly') return t('usage.quotaMonthly')
   if (window.id === 'requests-weekly') return t('usage.quotaRequestsWeekly')
   if (window.id === 'rate') return t('usage.quotaRate', { hours: windowHours(window) })
   if (window.id === 'requests') return t('usage.quotaRequests', { hours: windowHours(window) })

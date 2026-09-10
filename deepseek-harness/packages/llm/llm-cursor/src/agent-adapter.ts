@@ -17,13 +17,15 @@
 import { platform, release } from 'node:os'
 import { CallId, LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
 import type {
-  ContentBlock, GenerateOptions, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, StreamChunk, ToolSchema,
+  ContentBlock, GenerateOptions, LlmAccountUsage, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, StreamChunk,
+  ToolSchema,
 } from '@deepseek-ai/dsh-llm'
 import {
   decodeServerFrame, decodeUsableModelsResponse, encodeMcpResult, encodeRequestContextResult,
   encodeRunRequest, encodeUsableModelsRequest, type AgentToolDefinition,
 } from './agent-proto.ts'
 import { frame, parseFrames, payloadFromConnectBody, decodeTrailer } from './protobuf.ts'
+import { fetchCursorAccountUsage } from './usage.ts'
 import { createHttp2Transport } from './transport.ts'
 import type { CursorHttp2Transport, InteractiveHttp2Stream } from './transport.ts'
 import {
@@ -110,6 +112,21 @@ export class CursorAgentAdapter extends LlmAdapter {
     for (const run of this.runs.values()) run.stream.close()
     this.runs.clear()
     this.transport.close()
+  }
+
+  /**
+   * The Cursor plan's monthly auto-bucket window (the bucket every composer
+   * model of this route draws from), read with the same JWT as generation.
+   * @param _provider - the owned `cursor` route.
+   * @param signal - cancellation for the probe.
+   * @returns the monthly window.
+   */
+  override async accountUsage(_provider: string, signal?: AbortSignal): Promise<LlmAccountUsage> {
+    const token = await this.resolveKey()
+    return fetchCursorAccountUsage(token, {
+      backendURL: this.config.baseURL,
+      ...signal === undefined ? {} : { signal },
+    })
   }
 
   private headers(token: string): Record<string, string> {

@@ -296,6 +296,16 @@ describe('UsageStatusChip', () => {
     expect(await screen.findByText('40% · 100K · 10% weekly')).toBeTruthy()
   })
 
+  it('labels a monthly window as the monthly quota segment', async () => {
+    mount({
+      quota: {
+        supported: true,
+        windows: [{ id: 'monthly', used: 47, limit: 100, percent: 47, resetsAt: Math.floor(Date.now() / 1000) + 864_000 }],
+      },
+    })
+    expect(await screen.findByText('40% · 100K · 47% monthly')).toBeTruthy()
+  })
+
   it('hides the quota section when the provider has no account surface', async () => {
     const { loadAccountUsage } = mount({ quota: { supported: false } })
     fireEvent.click(screen.getByRole('button', { expanded: false }))

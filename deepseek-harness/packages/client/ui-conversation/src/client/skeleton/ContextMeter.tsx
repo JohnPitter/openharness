@@ -5,6 +5,7 @@
  * capacity. */
 
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { UseProjection } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: the `contextPressure` / `contextBreakdown` projection key merges.
 import type {} from '@deepseek-ai/dsh-token-meter/client'
@@ -36,7 +37,7 @@ export interface ContextMeterProps {
   /** The owning bar's locale seat, passed down as a plain prop. */
   t: ComposerBarProps['t']
   /** The `conversation.input.meterCenter` occupant, layered over the ring's center. */
-  center?: ComposerBarProps['meterCenter']
+  center?: ReactNode
 }
 
 export function ContextMeter({ useProjection, t, center }: ContextMeterProps) {

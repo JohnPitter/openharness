@@ -564,8 +564,8 @@ export interface ComposerBarOwnerProps {
   leftItems?: ReactNode
   /** input.right slot entries (tool row, before the primary button). */
   rightItems?: ReactNode
-  /** input.meterCenter entry (inner reading layered over the context ring). */
-  meterCenter?: ReactNode
+  /** The session's input region snapshot, so the bar can render its own `conversation.input.*` children. */
+  inputZone?: InputZone | null
   /** composer.dock entries (stats line), rendered under the card inside the bar's width column. */
   footer?: ReactNode
 }
@@ -627,7 +627,8 @@ export interface InputControlOwnerProps {
 export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
   & PropsRenderSlots<
-    'conversation.input.attachments' | 'conversation.input.plan' | 'conversation.input.model'
+    | 'conversation.input.attachments' | 'conversation.input.plan' | 'conversation.input.model'
+    | 'conversation.input.meterCenter'
   >
   & InjectFace<ComposerBarInjected>
   & PropsLocale<'conversation'>
@@ -665,7 +666,6 @@ export type ConversationSlotProps =
     | 'conversation.input.overlay'
     | 'conversation.input.dock' | 'conversation.composer.dock'
     | 'conversation.input.left' | 'conversation.input.right'
-    | 'conversation.input.meterCenter'
     | 'conversation.hero.brand.mark'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
