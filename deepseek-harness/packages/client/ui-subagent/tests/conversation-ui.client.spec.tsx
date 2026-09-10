@@ -226,13 +226,24 @@ describe('SubagentHeaderLineage', () => {
     expect(screen.queryByRole('tree')).toBeNull()
   })
 
-  it('opens only on hover and preserves the portaled-menu crossing grace', async () => {
-    vi.useFakeTimers()
-    const view = render(<SubagentHeaderLineage {...props(catalog())} />)
+  it('opens the count catalog on click and toggles it closed', () => {
+    const input = props(catalog())
+    render(<SubagentHeaderLineage {...input} />)
     const trigger = screen.getByRole('button', { name: /2 个子代理/ })
 
     fireEvent.click(trigger)
+    expect(screen.getByRole('tree')).toBeTruthy()
+    expect(input.setCatalogOpen).toHaveBeenCalledWith(PARENT, true)
+
+    fireEvent.click(trigger)
     expect(screen.queryByRole('tree')).toBeNull()
+    expect(input.setCatalogOpen).toHaveBeenLastCalledWith(PARENT, false)
+  })
+
+  it('opens on hover after the delay and preserves the portaled-menu crossing grace', async () => {
+    vi.useFakeTimers()
+    const view = render(<SubagentHeaderLineage {...props(catalog())} />)
+    const trigger = screen.getByRole('button', { name: /2 个子代理/ })
 
     fireEvent.mouseEnter(trigger.parentElement!)
     await vi.advanceTimersByTimeAsync(149)

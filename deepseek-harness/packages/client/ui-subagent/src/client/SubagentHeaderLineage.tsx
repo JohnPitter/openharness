@@ -743,13 +743,15 @@ function CatalogDropdown({
             descendants.runningCount > 0 ? runningCountKey : totalCountKey,
             { count: descendants.runningCount > 0 ? descendants.runningCount : descendantCount },
           )}
-        onClick={openTitle === undefined
-          ? undefined
-          : () => {
+        onClick={() => {
+          if (openTitle !== undefined) {
             cancelHoverOpen()
             if (open) changeOpen(false)
             openTitle()
-          }}
+            return
+          }
+          changeOpen(!open)
+        }}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowDown') return
           event.preventDefault()
