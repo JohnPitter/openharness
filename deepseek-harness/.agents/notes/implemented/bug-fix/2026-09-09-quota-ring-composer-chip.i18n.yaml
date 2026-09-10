@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-09-quota-ring-composer-chip.md
-2026-09-09-quota-ring-composer-chip.md: b730198af0a525c12a9c9d71f80d692c57532bff
-2026-09-09-quota-ring-composer-chip.zh.md: f6d44be6e4154bdbe4e9a539bd14553394111b3e
+2026-09-09-quota-ring-composer-chip.md: ac9e7b9a3ff17247158361699da933c524a49d3b
+2026-09-09-quota-ring-composer-chip.zh.md: 6f97f0b5dd87c41646a2da68ba10196b620c1b8c

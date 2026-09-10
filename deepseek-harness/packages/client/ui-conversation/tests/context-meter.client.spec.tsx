@@ -134,6 +134,27 @@ describe('ContextMeter', () => {
     expect(view.container.querySelector('[role="dialog"]')).toBeNull()
   })
 
+  it('layers the meter-center occupant over the ring, inside the same trigger', () => {
+    const view = render(
+      <ContextMeter
+        useProjection={projections({ contextPressure: { pressureTokens: 32_000, contextWindow: 128_000 } })}
+        t={t}
+        center={<span data-testid="inner-ring">inner</span>}
+      />,
+    )
+    const trigger = view.getByRole('button', { name: '上下文已用 25%' })
+    expect(trigger.querySelector('[data-testid="inner-ring"]')?.textContent).toBe('inner')
+    // An inside pointerdown keeps the panel closed-but-live gesture semantics:
+    // the trigger still owns the click.
+    fireEvent.click(trigger.querySelector('[data-testid="inner-ring"]')!)
+    expect(view.container.querySelector('[role="dialog"]')).not.toBeNull()
+  })
+
+  it('draws only the occupancy ring without a meter-center occupant', () => {
+    const view = meter({ contextPressure: { pressureTokens: 32_000, contextWindow: 128_000 } })
+    expect(view.getByRole('button').children).toHaveLength(1)
+  })
+
   it('closes on outside pointerdown and Escape — but not inside clicks', () => {
     const view = meter({
       contextPressure: { pressureTokens: 32_000, contextWindow: 128_000 },

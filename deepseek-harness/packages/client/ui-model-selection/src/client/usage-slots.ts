@@ -26,12 +26,10 @@ export interface UsageStatusChipInjected {
   workerDirectory?: HostObservable<WorkerModelState> | SnapshotStore<WorkerModelState>
 }
 
-/** Injected face of the composer account-quota ring. */
+/** Injected face of the composer account-quota inner ring. */
 export interface QuotaRingInjected {
   /** Current-session shared model directory, the provider source. */
   directory: HostObservable<ModelDirectoryState> | SnapshotStore<ModelDirectoryState>
   /** Account-level quota for the staged provider, using its stored key. */
   loadAccountUsage: (provider: string) => Promise<AccountUsageView>
-  /** Open Settings on the Limits section (all provider quotas). */
-  openQuotas: () => void
 }

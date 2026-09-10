@@ -35,9 +35,11 @@ export interface ContextMeterProps {
   useProjection: UseProjection
   /** The owning bar's locale seat, passed down as a plain prop. */
   t: ComposerBarProps['t']
+  /** The `conversation.input.meterCenter` occupant, layered over the ring's center. */
+  center?: ComposerBarProps['meterCenter']
 }
 
-export function ContextMeter({ useProjection, t }: ContextMeterProps) {
+export function ContextMeter({ useProjection, t, center }: ContextMeterProps) {
   const pressure = useProjection('contextPressure')
   const breakdown = useProjection('contextBreakdown')
   const [open, setOpen] = useState(false)
@@ -110,6 +112,7 @@ export function ContextMeter({ useProjection, t }: ContextMeterProps) {
               transform="rotate(-90 7 7)"
             />
           </svg>
+          {center !== undefined && center !== null && <span className={css.center} aria-hidden>{center}</span>}
         </button>
       </Tooltip>
       {open && (

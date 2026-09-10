@@ -8,6 +8,7 @@
 
 /* Same 28px circular hit target family as the composer's attach button. */
 .trigger {
+  position: relative;
   display: grid;
   place-items: center;
   flex: none;
@@ -22,6 +23,16 @@
 
 .trigger:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The meterCenter occupant (inner quota ring), centered over the arc. Clicks
+   still reach the trigger through bubbling; the occupant's own hover (native
+   title) works over the ring itself. */
+.center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
 }
 
 .track {

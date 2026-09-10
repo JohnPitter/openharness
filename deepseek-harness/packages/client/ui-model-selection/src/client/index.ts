@@ -255,14 +255,13 @@ export function apply(ctx: ClientContext): void {
         loadAccountUsage,
       }),
     }, UsageStatusChip))
-    // The composer mirror of the chip's lead quota window, beside the send
-    // button; ui-conversation owns the seat, this package owns the reading.
-    scope.slots.inject('conversation.input.right', () => scope.slots.register({
-      name: 'conversation.input.right',
-      id: 'account-quota',
-      order: -10,
+    // The composer mirror of the chip's lead quota window, layered inside the
+    // context meter beside the send button; ui-conversation owns the seat,
+    // this package owns the reading.
+    scope.slots.inject('conversation.input.meterCenter', () => scope.slots.register({
+      name: 'conversation.input.meterCenter',
       locale: NS,
-      inject: (): QuotaRingInjected => ({ directory, loadAccountUsage, openQuotas }),
+      inject: (): QuotaRingInjected => ({ directory, loadAccountUsage }),
     }, QuotaRing))
   })
 
