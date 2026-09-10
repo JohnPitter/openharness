@@ -83,7 +83,7 @@ export function InputBar({
   renderSlot, useBusyEnter, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
-  placeholder, accessory, overlay, leftItems, rightItems, footer,
+  placeholder, accessory, overlay, leftItems, rightItems, meterCenter, footer,
 }: InputBarProps) {
   const input = useInput(s => s)
   const notice = useNotices(s => s)
@@ -834,7 +834,7 @@ export function InputBar({
           </div>
           <div className={css.trailing}>
             {rightItems}
-            <ContextMeter useProjection={useProjection} t={t} />
+            <ContextMeter useProjection={useProjection} t={t} center={meterCenter} />
             {interruptible && (
               <Tooltip label={t('input.stop')} side="top" delayMs={500}>
                 <button

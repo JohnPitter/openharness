@@ -1,4 +1,4 @@
-# Agent Note: Lead quota window on the sidebar chip and a composer ring
+# Agent Note: Lead quota window on the sidebar chip and inside the composer meter
 
 Status: implemented
 
@@ -10,18 +10,20 @@ Coding-plan quota lived only behind two clicks: the sidebar chip showed context 
 
 ## Decision
 
-`ui-model-selection` gains a shared live-quota module (`usage-quota-live.ts`): `useProviderQuota` loads the staged provider's account windows on mount, on provider change, and every 60 seconds (the Limits panel still reloads on open); `pickLeadWindow` leads with the shortest disclosed window — the 5-hour-style limit — and falls back to the earliest-resetting (weekly-style) window; `quotaChipSegment` renders the compact `42% 5h` / `42% weekly` segment. The sidebar chip's meta line appends that segment, so its quota probe is no longer gated on the panel opening. A new `QuotaRing` component registers into ui-conversation's existing, previously unoccupied `conversation.input.right` slot: a ring beside the send button with the lead window's percent, a tooltip naming the window and its reset, and a click through to Settings → Limits. Both surfaces hide when the provider exposes no quota surface or the last probe failed. The shared `Ring` meter moved into `usage-quota.tsx` with caller-supplied classes.
+`ui-model-selection` gains a shared live-quota module (`usage-quota-live.ts`): `useProviderQuota` loads the staged provider's account windows on mount, on provider change, and every 60 seconds (the Limits panel still reloads on open); `pickLeadWindow` leads with the shortest disclosed window — the 5-hour-style limit — and falls back to the earliest-resetting (weekly-style) window; `quotaChipSegment` renders the compact `42% 5h` / `42% weekly` segment. The sidebar chip's meta line appends that segment, so its quota probe is no longer gated on the panel opening.
+
+In the composer the two meters stack concentrically, like layers of one dial: ui-conversation declares a new `conversation.input.meterCenter` slot rendered inside the context meter's trigger, and ui-model-selection's `QuotaRing` occupies it with the lead window as the INNER arc — the outer arc stays context occupancy. The trigger keeps the context breakdown's click and tooltip; the ring is a non-interactive visual whose SVG title carries the window label and reset. Both surfaces hide when the provider exposes no quota surface or the last probe failed. The shared `Ring` meter moved into `usage-quota.tsx` with caller-supplied classes.
 
 ## Alternatives considered
 
-**Edit ui-conversation's InputBar to fetch quota itself.** Rejected: quota knowledge (provider directory, `loadAccountUsage`, Limits navigation) lives in ui-model-selection, and cross-package imports are forbidden; the declared `conversation.input.right` seat exists precisely for a small control in that row.
+**A separate quota button beside the context ring (`conversation.input.right`).** Rejected by the product call: two adjacent dials read as two unrelated controls; the layered single dial keeps one affordance with two readings.
 
-**Gate the ring on the context ring's visibility.** Rejected: quota is account-level and meaningful even before the first provider reply reports context pressure.
+**Edit ui-conversation's InputBar to fetch quota itself.** Rejected: quota knowledge (provider directory, `loadAccountUsage`) lives in ui-model-selection, and cross-package imports are forbidden; the slot hand-off keeps each side owning its half.
 
 ## Consequences
 
-Every configured coding plan's lead window is visible at a glance in both the sidebar foot and the composer; the quota endpoint receives one probe per minute per mounted surface instead of one per panel opening. Pay-per-token routes (no quota surface) render exactly what they rendered before.
+Every configured coding plan's lead window is visible at a glance in both the sidebar foot and the composer; the quota endpoint receives one probe per minute per mounted surface instead of one per panel opening. Pay-per-token routes (no quota surface) render exactly what they rendered before. The context meter's trigger gained `position: relative` and a center overlay container.
 
 ## Verification
 
-`usage-status-chip.client.spec.tsx` pins the meta segment (`40% · 100K · 70% 5h`), the weekly fallback, and the unchanged panel behavior; `quota-ring.client.spec.tsx` pins the 5-hour lead, weekly fallback, reset tooltip, click-through to Limits, and the three hidden states.
+`usage-status-chip.client.spec.tsx` pins the meta segment (`40% · 100K · 70% 5h`), the weekly fallback, and the unchanged panel behavior; `quota-ring.client.spec.tsx` pins the 5-hour lead, weekly fallback, reset label, and the three hidden states; `context-meter.client.spec.tsx` pins the occupant layered inside the trigger with clicks still opening the context panel, and the occupant-free render unchanged.

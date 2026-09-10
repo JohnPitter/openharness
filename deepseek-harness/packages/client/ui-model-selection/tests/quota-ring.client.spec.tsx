@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** Composer account-quota ring: lead-window readout beside the send button. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import type { AccountUsageView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import type { QuotaRingProps } from '../src/client/QuotaRing.tsx'
@@ -39,22 +39,20 @@ function mount(options: {
   directory?: ModelDirectoryState
   loadAccountUsage?: (provider: string) => Promise<AccountUsageView>
 } = {}) {
-  const openQuotas = vi.fn()
   const loadAccountUsage = vi.fn(options.loadAccountUsage ?? (() => Promise.resolve(options.quota ?? { supported: false })))
   const dir = options.directory ?? directory()
   const props = {
     directory: { getSnapshot: () => dir, subscribe: () => () => {} },
     loadAccountUsage,
-    openQuotas,
     t: interpolate as QuotaRingProps['t'],
   } as unknown as QuotaRingProps
   const view = render(<QuotaRing {...props} />)
-  return { view, openQuotas, loadAccountUsage }
+  return { view, loadAccountUsage }
 }
 
 describe('QuotaRing', () => {
-  it('shows the 5-hour lead window with its percent and opens Limits on click', async () => {
-    const { openQuotas, loadAccountUsage } = mount({
+  it('shows the 5-hour lead window as the inner ring of the meter', async () => {
+    const { loadAccountUsage } = mount({
       quota: {
         supported: true,
         windows: [
@@ -66,11 +64,8 @@ describe('QuotaRing', () => {
     const tip = en['usage.quotaRingTip']
       .replace('{label}', en['usage.quotaRate'].replace('{hours}', '5'))
       .replace('{percent}', '35')
-    const trigger = await screen.findByRole('button', { name: tip })
-    expect(trigger.textContent).toContain('35%')
+    expect(await screen.findByRole('img', { name: tip })).toBeTruthy()
     expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding')
-    fireEvent.click(trigger)
-    expect(openQuotas).toHaveBeenCalledOnce()
   })
 
   it('leads with the weekly window when no short window is disclosed', async () => {
@@ -83,10 +78,10 @@ describe('QuotaRing', () => {
     const tip = en['usage.quotaRingTip']
       .replace('{label}', en['usage.quotaWeekly'])
       .replace('{percent}', '10')
-    expect(await screen.findByRole('button', { name: tip })).toBeTruthy()
+    expect(await screen.findByRole('img', { name: tip })).toBeTruthy()
   })
 
-  it('names the reset in the tooltip when the window discloses one', async () => {
+  it('names the reset in the ring label when the window discloses one', async () => {
     mount({
       quota: {
         supported: true,
@@ -95,22 +90,22 @@ describe('QuotaRing', () => {
         ],
       },
     })
-    const trigger = await screen.findByRole('button')
-    expect(trigger.getAttribute('aria-label')).toContain(en['usage.quotaReset'].replace('{when}', '3h'))
+    const ring = await screen.findByRole('img')
+    expect(ring.getAttribute('aria-label')).toContain(en['usage.quotaReset'].replace('{when}', '3h'))
   })
 
   it('renders nothing while the provider exposes no quota surface', () => {
     mount({ quota: { supported: false } })
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('img')).toBeNull()
   })
 
   it('renders nothing when the probe failed', () => {
     mount({ quota: { supported: true, error: 'usage error (HTTP 401)' } })
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('img')).toBeNull()
   })
 
   it('renders nothing without a staged provider', () => {
     mount({ directory: directory({ current: null, groups: [] }) })
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('img')).toBeNull()
   })
 })

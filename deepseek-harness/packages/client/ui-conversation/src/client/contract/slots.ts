@@ -230,6 +230,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.input.right': { kind: 'list'; scope: 'session'; owner: InputZone }
     /**
+     * The center of the context meter's ring beside the send button — the
+     * seat for a second, inner reading layered over the occupancy arc (the
+     * shipped account-quota ring lives here). Rendered inside the meter's
+     * trigger button, so occupants draw a non-interactive visual only: the
+     * trigger keeps the meter's own click and tooltip. Same {@link InputZone}
+     * owner share as the other regions.
+     */
+    'conversation.input.meterCenter': { kind: 'single'; scope: 'session'; owner: InputZone }
+    /**
      * The default composer body: a single slot rendered as the composer
      * chain's fallback (a real entry, not a chain rider, so a
      * takeover election hides rather than unmounts it and the textarea DOM
@@ -555,6 +564,8 @@ export interface ComposerBarOwnerProps {
   leftItems?: ReactNode
   /** input.right slot entries (tool row, before the primary button). */
   rightItems?: ReactNode
+  /** input.meterCenter entry (inner reading layered over the context ring). */
+  meterCenter?: ReactNode
   /** composer.dock entries (stats line), rendered under the card inside the bar's width column. */
   footer?: ReactNode
 }
@@ -654,6 +665,7 @@ export type ConversationSlotProps =
     | 'conversation.input.overlay'
     | 'conversation.input.dock' | 'conversation.composer.dock'
     | 'conversation.input.left' | 'conversation.input.right'
+    | 'conversation.input.meterCenter'
     | 'conversation.hero.brand.mark'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
