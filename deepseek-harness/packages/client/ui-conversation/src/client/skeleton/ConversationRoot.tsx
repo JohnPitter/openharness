@@ -151,7 +151,7 @@ export function ConversationRoot({
     overlay: renderSlot('conversation.input.overlay', {}),
     leftItems: zone === undefined ? null : renderSlot('conversation.input.left', zone),
     rightItems: zone === undefined ? null : renderSlot('conversation.input.right', zone),
-    meterCenter: zone === undefined ? null : renderSlot('conversation.input.meterCenter', zone),
+    inputZone: zone ?? null,
     // Stats band under the card, inside the bar's width column so both
     // share one constraint (composer.dock = stats-line family).
     footer: !hero && zone !== undefined ? renderSlot('conversation.composer.dock', zone) : null,

@@ -79,15 +79,15 @@ export function leadQuotaWindow(quota: AccountUsageView | undefined): AccountUsa
 }
 
 /**
- * Compact ambient segment for one lead window: `42% 5h` or the weekly
- * variant in the active locale.
+ * Compact ambient segment for one lead window: `42% 5h`, or the weekly and
+ * monthly variants in the active locale.
  * @param window - the lead window.
  * @param t - model-namespace translate.
  * @returns the chip segment.
  */
 export function quotaChipSegment(window: AccountUsageWindowView, t: QuotaTranslate): string {
   const percent = String(window.percent)
-  return window.id === 'weekly' || window.id === 'requests-weekly'
-    ? t('usage.quotaChipWeekly', { percent })
-    : t('usage.quotaChipRate', { percent, hours: windowHours(window) })
+  if (window.id === 'weekly' || window.id === 'requests-weekly') return t('usage.quotaChipWeekly', { percent })
+  if (window.id === 'monthly') return t('usage.quotaChipMonthly', { percent })
+  return t('usage.quotaChipRate', { percent, hours: windowHours(window) })
 }
