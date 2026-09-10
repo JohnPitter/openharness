@@ -222,7 +222,7 @@ describe('UsageStatusChip', () => {
       },
     })
     fireEvent.click(screen.getByRole('button', { expanded: false }))
-    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding')
+    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding', expect.any(AbortSignal))
     await waitFor(() => {
       expect(screen.getByText(en['usage.quota'])).toBeTruthy()
     })
@@ -264,7 +264,7 @@ describe('UsageStatusChip', () => {
       expect(screen.getByText(en['usage.quotaPercent'].replace('{percent}', '35'))).toBeTruthy()
     })
     expect(loadAccountUsage).toHaveBeenCalledTimes(1)
-    expect(loadAccountUsage).toHaveBeenCalledWith('claude-code')
+    expect(loadAccountUsage).toHaveBeenCalledWith('claude-code', expect.any(AbortSignal))
     expect(screen.queryByText('Codex')).toBeNull()
     expect(screen.getAllByText(en['usage.quotaWeekly'])).toHaveLength(1)
   })
@@ -280,7 +280,7 @@ describe('UsageStatusChip', () => {
       },
     })
     await waitFor(() => {
-      expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding')
+      expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding', expect.any(AbortSignal))
     })
     expect(await screen.findByText('40% · 100K · 70% 5h')).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -309,7 +309,7 @@ describe('UsageStatusChip', () => {
   it('hides the quota section when the provider has no account surface', async () => {
     const { loadAccountUsage } = mount({ quota: { supported: false } })
     fireEvent.click(screen.getByRole('button', { expanded: false }))
-    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding')
+    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding', expect.any(AbortSignal))
     await waitFor(() => {
       expect(screen.queryByText(en['usage.quotaLoading'])).toBeNull()
     })
@@ -351,9 +351,9 @@ describe('UsageStatusChip', () => {
     expect(screen.getByText(en['role.worker'])).toBeTruthy()
     expect(screen.getByText('Claude Sonnet 5')).toBeTruthy()
     await waitFor(() => {
-      expect(loadAccountUsage).toHaveBeenCalledWith('claude-code')
+      expect(loadAccountUsage).toHaveBeenCalledWith('claude-code', expect.any(AbortSignal))
     })
-    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding')
+    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding', expect.any(AbortSignal))
     await waitFor(() => {
       expect(screen.getByText('Moderato')).toBeTruthy()
       expect(screen.getByText('Pro')).toBeTruthy()
@@ -432,5 +432,37 @@ describe('UsageStatusChip', () => {
     await waitFor(() => {
       expect(screen.getByText('quota endpoint gone')).toBeTruthy()
     })
+  })
+
+  it('surfaces an aborted worker account-quota load as an error row', async () => {
+    const loadAccountUsage = vi.fn((provider: string) => provider === 'claude-code'
+      ? Promise.reject(new DOMException('The operation was aborted', 'AbortError'))
+      : Promise.resolve({ supported: false } satisfies AccountUsageView))
+    mount({
+      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } }),
+      worker: { current: { provider: 'claude-code', model: 'claude-sonnet-4-5' }, status: 'ready', error: null },
+      loadAccountUsage,
+    })
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    await waitFor(() => {
+      expect(screen.getByText(en['usage.quotaTimeout'])).toBeTruthy()
+    })
+  })
+
+  it('keeps the quota segment hidden when the probe aborts', async () => {
+    const { loadAccountUsage } = mount({
+      loadAccountUsage: () => Promise.reject(new DOMException('The operation was aborted', 'AbortError')),
+    })
+    await waitFor(() => {
+      expect(loadAccountUsage).toHaveBeenCalled()
+    })
+    expect(screen.getByText('40% · 100K')).toBeTruthy()
+    expect(screen.queryByText(/5h/)).toBeNull()
+  })
+
+  it('keeps the quota segment hidden while the probe never settles', () => {
+    mount({ loadAccountUsage: () => new Promise(() => {}) })
+    expect(screen.getByText('40% · 100K')).toBeTruthy()
+    expect(screen.queryByText(/5h/)).toBeNull()
   })
 })

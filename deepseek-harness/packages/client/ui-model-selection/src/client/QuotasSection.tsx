@@ -2,13 +2,18 @@
  * Settings → Limits: coding-plan account quotas only.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   AccountUsageView, ConfigurableProviderView, IApiClient,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import {
+  awaitWithAbort,
+  createUsageProbeSignal,
+  quotaProbeErrorText,
+} from './usage-quota-live.ts'
 import { QuotaBody } from './usage-quota.tsx'
 import css from './UsagesSection.module.css'
 
@@ -29,78 +34,95 @@ export type QuotasSectionProps =
   Partial<InjectFace<QuotasSectionInjected>>
   & Partial<PropsLocale<'model'>>
 
-/**
- * Load every configurable provider, then ask each for account usage. Only
- * routes that report `supported: true` (or an error while checking) stay
- * visible — pay-per-token adapters with no plan windows are omitted.
- */
-async function loadQuotaRows(api: Pick<IApiClient, 'llm'>): Promise<ProviderQuotaRow[]> {
-  const listed = await api.llm.providers({})
-  if (!listed.result.ok) {
-    throw new Error(listed.result.error.message)
-  }
-  const providers = listed.result.value.providers
-  const settled = await Promise.all(providers.map(async (entry: ConfigurableProviderView) => {
-    try {
-      const response = await api.llm.accountUsage({ provider: entry.provider })
-      if (!response.result.ok) {
-        return {
-          provider: entry.provider,
-          displayName: entry.displayName,
-          quota: { supported: true, error: response.result.error.message } satisfies AccountUsageView,
-        }
-      }
-      return {
-        provider: entry.provider,
-        displayName: entry.displayName,
-        quota: response.result.value,
-      }
-    } catch (error: unknown) {
-      return {
-        provider: entry.provider,
-        displayName: entry.displayName,
-        quota: {
-          supported: true,
-          error: error instanceof Error ? error.message : String(error),
-        } satisfies AccountUsageView,
-      }
-    }
-  }))
-  return settled.filter((row) => {
-    const quota = row.quota
-    if (!quota.supported) return false
-    if (quota.error !== undefined) return true
-    return (quota.windows?.length ?? 0) > 0 || quota.plan !== undefined
-  })
+function quotaRowVisible(quota: AccountUsageView | 'loading'): boolean {
+  if (quota === 'loading') return true
+  if (!quota.supported) return false
+  if (quota.error !== undefined) return true
+  return (quota.windows?.length ?? 0) > 0 || quota.plan !== undefined
+}
+
+function quotaFromFailure(error: unknown, timeoutLabel: string): AccountUsageView {
+  return { supported: true, error: quotaProbeErrorText(error, timeoutLabel) }
 }
 
 /**
- * Render the Limits settings section.
+ * Render the Limits settings section. Cards appear as each provider probe
+ * settles; a hung probe cannot blank the rest of the page.
  * @param props - inject face + locale seat.
  */
 export function QuotasSection(props: QuotasSectionProps): ReactNode {
   const api = props.api
   const t = props.t
-  const [rows, setRows] = useState<readonly ProviderQuotaRow[] | 'loading' | 'idle'>('idle')
+  const [rows, setRows] = useState<readonly ProviderQuotaRow[] | 'listing' | 'idle'>('idle')
   const [error, setError] = useState<string | undefined>(undefined)
+  const [pending, setPending] = useState(0)
+  const probeAbort = useRef<AbortController | undefined>(undefined)
 
   const refresh = useCallback(() => {
     if (api === undefined || t === undefined) return
-    let cancelled = false
-    setRows('loading')
+    probeAbort.current?.abort()
+    const ac = new AbortController()
+    probeAbort.current = ac
+    setRows('listing')
     setError(undefined)
-    void loadQuotaRows(api).then(
-      (nextRows) => {
-        if (cancelled) return
-        setRows(nextRows)
-      },
-      (err: unknown) => {
-        if (cancelled) return
+    setPending(0)
+
+    const run = async (): Promise<void> => {
+      try {
+        const listed = await api.llm.providers({})
+        if (ac.signal.aborted) return
+        if (!listed.result.ok) {
+          setRows([])
+          setError(listed.result.error.message)
+          return
+        }
+        const providers = listed.result.value.providers
+        setRows(providers.map((entry: ConfigurableProviderView) => ({
+          provider: entry.provider,
+          displayName: entry.displayName,
+          quota: 'loading' as const,
+        })))
+        setPending(providers.length)
+        if (providers.length === 0) return
+        await Promise.all(providers.map(async (entry: ConfigurableProviderView) => {
+          const probe = createUsageProbeSignal(ac.signal)
+          let quota: AccountUsageView
+          try {
+            const response = await awaitWithAbort(
+              api.llm.accountUsage({ provider: entry.provider }, probe.signal),
+              probe.signal,
+            )
+            quota = !response.result.ok
+              ? { supported: true, error: response.result.error.message }
+              : response.result.value
+          } catch (caught: unknown) {
+            quota = quotaFromFailure(caught, t('usage.quotaTimeout'))
+          } finally {
+            probe.dispose()
+          }
+          if (ac.signal.aborted) return
+          setRows((current) => {
+            const base = Array.isArray(current)
+              ? current
+              : providers.map((item: ConfigurableProviderView) => ({
+                provider: item.provider,
+                displayName: item.displayName,
+                quota: 'loading' as const,
+              }))
+            return base
+              .map(row => row.provider === entry.provider ? { ...row, quota } : row)
+              .filter(row => quotaRowVisible(row.quota))
+          })
+          setPending(count => Math.max(0, count - 1))
+        }))
+      } catch (err: unknown) {
+        if (ac.signal.aborted) return
         setRows([])
         setError(err instanceof Error ? err.message : String(err))
-      },
-    )
-    return () => { cancelled = true }
+      }
+    }
+    void run()
+    return () => { ac.abort() }
   }, [api, t])
 
   useEffect(() => {
@@ -110,7 +132,10 @@ export function QuotasSection(props: QuotasSectionProps): ReactNode {
 
   if (api === undefined || t === undefined) return null
 
-  const loading = rows === 'loading' || rows === 'idle'
+  const listing = rows === 'listing' || rows === 'idle'
+  const cards = rows === 'listing' || rows === 'idle' ? [] : rows
+  const loading = listing && cards.length === 0
+  const busy = listing || pending > 0
 
   return (
     <div className={css.section}>
@@ -124,7 +149,7 @@ export function QuotasSection(props: QuotasSectionProps): ReactNode {
           variant="outline"
           size="sm"
           icon={<IconRefreshOutline16 size={14} />}
-          disabled={loading}
+          disabled={busy}
           onClick={() => { refresh() }}
         >
           {t('usages.refresh')}
@@ -137,11 +162,11 @@ export function QuotasSection(props: QuotasSectionProps): ReactNode {
 
       {loading ? (
         <p className={css.hint}>{t('usage.quotaLoading')}</p>
-      ) : rows.length === 0 ? (
+      ) : cards.length === 0 ? (
         <p className={css.hint}>{t('usages.empty')}</p>
       ) : (
         <ul className={css.cards}>
-          {rows.map(row => (
+          {cards.map(row => (
             <li key={row.provider} className={css.card}>
               <div className={css.cardHead}>
                 <span className={css.providerName}>{row.displayName}</span>

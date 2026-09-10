@@ -224,10 +224,13 @@ export function apply(ctx: ClientContext): void {
     }, ModelSelect))
 
     const directory = currentDirectorySource(sessions, models)
-    const loadAccountUsage = async (provider: string): Promise<AccountUsageView> => {
+    const loadAccountUsage = async (
+      provider: string,
+      signal?: AbortSignal,
+    ): Promise<AccountUsageView> => {
       const api = (ctx.get('connection') as ConnectionHandle | undefined)?.api.llm
       if (api === undefined) return { supported: false }
-      const response = await api.accountUsage({ provider })
+      const response = await api.accountUsage({ provider }, signal)
       if (!response.result.ok) return { supported: true, error: response.result.error.message }
       return response.result.value
     }

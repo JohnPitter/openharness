@@ -274,6 +274,106 @@ describe('QuotasSection', () => {
     expect(screen.getByText('nope')).toBeTruthy()
   })
 
+  it('paints settled cards while one provider never returns', async () => {
+    const api = {
+      llm: {
+        providers: vi.fn(async () => ({
+          result: {
+            ok: true as const,
+            value: {
+              providers: [
+                {
+                  provider: 'kimi-for-coding',
+                  displayName: 'Kimi for Code',
+                  settingsNs: 'llm-kimi',
+                  settingsPath: [],
+                  active: true,
+                },
+                {
+                  provider: 'cursor',
+                  displayName: 'Cursor',
+                  settingsNs: 'llm-cursor',
+                  settingsPath: [],
+                  active: true,
+                },
+              ],
+            },
+          },
+        })),
+        accountUsage: vi.fn(async (request: { provider: string }) => {
+          if (request.provider === 'cursor') return hanging()
+          return {
+            result: {
+              ok: true as const,
+              value: {
+                supported: true,
+                plan: 'Moderato',
+                windows: [{ id: 'weekly', used: 10, limit: 100, percent: 10 }],
+              },
+            },
+          }
+        }),
+      },
+    }
+    render(<QuotasSection api={api as unknown as QuotasSectionInjected['api']} t={interpolate as never} />)
+    await waitFor(() => {
+      expect(screen.getByText('Kimi for Code')).toBeTruthy()
+    })
+    expect(screen.getByText('Moderato')).toBeTruthy()
+    expect(screen.getByText('Cursor')).toBeTruthy()
+  })
+
+  it('keeps a timed-out provider as an error card beside settled plans', async () => {
+    const api = {
+      llm: {
+        providers: vi.fn(async () => ({
+          result: {
+            ok: true as const,
+            value: {
+              providers: [
+                {
+                  provider: 'kimi-for-coding',
+                  displayName: 'Kimi for Code',
+                  settingsNs: 'llm-kimi',
+                  settingsPath: [],
+                  active: true,
+                },
+                {
+                  provider: 'cursor',
+                  displayName: 'Cursor',
+                  settingsNs: 'llm-cursor',
+                  settingsPath: [],
+                  active: true,
+                },
+              ],
+            },
+          },
+        })),
+        accountUsage: vi.fn(async (request: { provider: string }) => {
+          if (request.provider === 'cursor') {
+            throw new DOMException('The operation was aborted', 'TimeoutError')
+          }
+          return {
+            result: {
+              ok: true as const,
+              value: {
+                supported: true,
+                plan: 'Moderato',
+                windows: [{ id: 'weekly', used: 10, limit: 100, percent: 10 }],
+              },
+            },
+          }
+        }),
+      },
+    }
+    render(<QuotasSection api={api as unknown as QuotasSectionInjected['api']} t={interpolate as never} />)
+    await waitFor(() => {
+      expect(screen.getByText('Kimi for Code')).toBeTruthy()
+    })
+    expect(screen.getByText('Cursor')).toBeTruthy()
+    expect(screen.getByText(en['usage.quotaTimeout'])).toBeTruthy()
+  })
+
   it('does not apply a load that settles after unmount', async () => {
     let settleSuccess!: () => void
     const successGate = new Promise<void>(resolve => { settleSuccess = resolve })

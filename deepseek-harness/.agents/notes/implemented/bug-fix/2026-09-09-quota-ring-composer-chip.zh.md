@@ -22,7 +22,7 @@ coding plan 的配额过去要点两次才能看到：侧栏徽章只显示上�
 
 ## 影响
 
-每个已配置 coding plan 的首要窗口在侧栏底部和 composer 都一目了然；配额端点从每次打开面板一次变为每个挂载表面每分钟一次探测。无配额表面的按 token 计费路由渲染与之前完全一致。上下文仪表的触发按钮新增 `position: relative` 与居中覆盖容器。
+每个已配置 coding plan 的首要窗口在侧栏底部和 composer 都一目了然；徽章与圆环通过 60 秒缓存每提供方每分钟共享一次探测（[探测超时](2026-09-10-quota-probe-timeout-and-progressive-limits.zh.md)）。无配额表面的按 token 计费路由渲染与之前完全一致。上下文仪表的触发按钮新增 `position: relative` 与居中覆盖容器。
 
 ## 验证
 

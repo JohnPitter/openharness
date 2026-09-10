@@ -22,7 +22,7 @@ The client quota surfaces learned the window: `quotaWindowLabel`/`quotaChipSegme
 
 ## Consequences
 
-Cursor joins the quota surfaces with its real monthly window; `fetchCursorAccountUsage` throws `AUTH` on 401/403 so the panel renders the same "usage error" recovery path as the other providers. Probe cost is one unary JSON POST per surface per minute.
+Cursor joins the quota surfaces with its real monthly window; `fetchCursorAccountUsage` throws `AUTH` on 401/403 so the panel renders the same "usage error" recovery path as the other providers. Probe cost is one unary JSON POST per provider per minute, with a 2.5s hang bound ([timeout](2026-09-10-quota-probe-timeout-and-progressive-limits.md)).
 
 ## Verification
 

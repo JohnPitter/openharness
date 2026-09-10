@@ -22,7 +22,7 @@ In the composer the two meters stack concentrically, like layers of one dial: ui
 
 ## Consequences
 
-Every configured coding plan's lead window is visible at a glance in both the sidebar foot and the composer; the quota endpoint receives one probe per minute per mounted surface instead of one per panel opening. Pay-per-token routes (no quota surface) render exactly what they rendered before. The context meter's trigger gained `position: relative` and a center overlay container.
+Every configured coding plan's lead window is visible at a glance in both the sidebar foot and the composer; chip and ring share one probe per provider per minute via a 60s cache ([probe timeout](2026-09-10-quota-probe-timeout-and-progressive-limits.md)). Pay-per-token routes (no quota surface) render exactly what they rendered before. The context meter's trigger gained `position: relative` and a center overlay container.
 
 ## Verification
 

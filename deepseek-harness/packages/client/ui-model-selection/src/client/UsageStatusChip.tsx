@@ -26,7 +26,7 @@ import {
   routeLabelOf,
   sessionTokens,
 } from './usage-format.ts'
-import { leadQuotaWindow, quotaChipSegment, useProviderQuota } from './usage-quota-live.ts'
+import { leadQuotaWindow, quotaChipSegment, loadAccountUsageCached, quotaProbeErrorText, useProviderQuota } from './usage-quota-live.ts'
 import { MeterBar, QuotaBody, Ring } from './usage-quota.tsx'
 import css from './UsageStatusChip.module.css'
 
@@ -145,19 +145,23 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
       return
     }
     let cancelled = false
+    const ac = new AbortController()
     setWorkerQuota('loading')
-    loadAccountUsage(workerProviderId).then(
+    loadAccountUsageCached(workerProviderId, loadAccountUsage, ac.signal).then(
       (view) => { if (!cancelled) setWorkerQuota(view) },
       (error: unknown) => {
         if (!cancelled) {
           setWorkerQuota({
             supported: true,
-            error: error instanceof Error ? error.message : String(error),
+            error: quotaProbeErrorText(error, t('usage.quotaTimeout')),
           })
         }
       },
     )
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      ac.abort()
+    }
   }, [loadAccountUsage, open, providerId, quotaView, workerProviderId])
 
   useLayoutEffect(() => {

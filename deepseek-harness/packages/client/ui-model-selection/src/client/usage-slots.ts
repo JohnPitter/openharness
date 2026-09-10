@@ -17,7 +17,7 @@ export interface UsageStatusChipInjected {
   /** Open Settings on the Limits section (all provider quotas). */
   openQuotas: () => void
   /** Account-level quota for the staged provider, using its stored key. */
-  loadAccountUsage: (provider: string) => Promise<AccountUsageView>
+  loadAccountUsage: (provider: string, signal?: AbortSignal) => Promise<AccountUsageView>
   /**
    * Workflow-mode worker chip, present only while a worker store is mounted.
    * The panel adds a compact worker route + quota block only while the
@@ -31,5 +31,5 @@ export interface QuotaRingInjected {
   /** Current-session shared model directory, the provider source. */
   directory: HostObservable<ModelDirectoryState> | SnapshotStore<ModelDirectoryState>
   /** Account-level quota for the staged provider, using its stored key. */
-  loadAccountUsage: (provider: string) => Promise<AccountUsageView>
+  loadAccountUsage: (provider: string, signal?: AbortSignal) => Promise<AccountUsageView>
 }

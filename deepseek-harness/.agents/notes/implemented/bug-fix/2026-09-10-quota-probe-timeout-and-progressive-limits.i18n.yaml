@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-10-quota-probe-timeout-and-progressive-limits.md
+2026-09-10-quota-probe-timeout-and-progressive-limits.md: 47db428e0d64282e12e448b09060a5988c1a9dcb
+2026-09-10-quota-probe-timeout-and-progressive-limits.zh.md: 3a1748d3406f5cbedfd6a4eb76d157cf35e17b96

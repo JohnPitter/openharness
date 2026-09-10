@@ -22,7 +22,7 @@ Cursor 路由没有任何配额表面：设置 → 限额、侧栏徽章的配�
 
 ## 影响
 
-Cursor 以真实的月度窗口加入各配额表面；`fetchCursorAccountUsage` 在 401/403 抛出 `AUTH`，面板因此走上与其他提供方一致的"usage error"恢复路径。探测成本为每个表面每分钟一次一元 JSON POST。
+Cursor 以真实的月度窗口加入各配额表面；`fetchCursorAccountUsage` 在 401/403 抛出 `AUTH`，面板因此走上与其他提供方一致的"usage error"恢复路径。探测成本为每个提供方每分钟一次一元 JSON POST，挂起上限 2.5 秒（[超时](2026-09-10-quota-probe-timeout-and-progressive-limits.zh.md)）。
 
 ## 验证
 

@@ -65,7 +65,7 @@ describe('QuotaRing', () => {
       .replace('{label}', en['usage.quotaRate'].replace('{hours}', '5'))
       .replace('{percent}', '35')
     expect(await screen.findByRole('img', { name: tip })).toBeTruthy()
-    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding')
+    expect(loadAccountUsage).toHaveBeenCalledWith('kimi-for-coding', expect.any(AbortSignal))
   })
 
   it('leads with the weekly window when no short window is disclosed', async () => {
@@ -101,6 +101,35 @@ describe('QuotaRing', () => {
 
   it('renders nothing when the probe failed', () => {
     mount({ quota: { supported: true, error: 'usage error (HTTP 401)' } })
+    expect(screen.queryByRole('img')).toBeNull()
+  })
+
+  it('renders nothing when the probe aborts or times out', async () => {
+    const { view } = mount({
+      loadAccountUsage: () => Promise.reject(new DOMException('The operation was aborted', 'AbortError')),
+    })
+    await Promise.resolve()
+    expect(screen.queryByRole('img')).toBeNull()
+    view.unmount()
+  })
+
+  it('renders nothing when the probe throws', async () => {
+    mount({ loadAccountUsage: () => Promise.reject(new Error('network')) })
+    await Promise.resolve()
+    expect(screen.queryByRole('img')).toBeNull()
+  })
+
+  it('renders nothing when the probe rejects a non-Error', async () => {
+    mount({
+      // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error rejection is the case under test
+      loadAccountUsage: () => Promise.reject('quota endpoint gone'),
+    })
+    await Promise.resolve()
+    expect(screen.queryByRole('img')).toBeNull()
+  })
+
+  it('renders nothing while the probe never settles', () => {
+    mount({ loadAccountUsage: () => new Promise(() => {}) })
     expect(screen.queryByRole('img')).toBeNull()
   })
 

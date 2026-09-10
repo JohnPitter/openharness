@@ -18,6 +18,13 @@ import { DEFAULT_BACKEND_URL } from './auth.ts'
 
 const PERIOD_USAGE_PATH = '/aiserver.v1.DashboardService/GetCurrentPeriodUsage'
 
+/**
+ * Bound on GetCurrentPeriodUsage when the caller omits a signal. Same
+ * order as the picker catalog listing timeout so a hung HTTP/2 connect
+ * cannot stall Settings → Limits.
+ */
+export const ACCOUNT_USAGE_PROBE_TIMEOUT_MS = 2_500
+
 /** Options for {@link fetchCursorAccountUsage}. */
 export interface CursorUsageTransport {
   /** API origin (no trailing slash required); defaults to {@link DEFAULT_BACKEND_URL}. */
@@ -30,6 +37,12 @@ export interface CursorUsageTransport {
 interface PeriodUsageResponse {
   billingCycleEnd?: string
   planUsage?: { autoPercentUsed?: number }
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('The operation was aborted', 'AbortError')
 }
 
 /**
@@ -45,9 +58,17 @@ export async function fetchCursorAccountUsage(
 ): Promise<LlmAccountUsage> {
   const backendURL = (options.backendURL ?? DEFAULT_BACKEND_URL).replace(/\/$/, '')
   const url = new URL(backendURL)
+  const timeout = new AbortController()
+  const timer = options.signal === undefined
+    ? setTimeout(() => {
+      timeout.abort(new DOMException('The operation was aborted', 'TimeoutError'))
+    }, ACCOUNT_USAGE_PROBE_TIMEOUT_MS)
+    : undefined
+  const signal = options.signal ?? timeout.signal
   const client = connect(url.origin)
   try {
     const response = await new Promise<{ status: number; body: Buffer }>((resolve, reject) => {
+      let settled = false
       const chunks: Buffer[] = []
       const body = Buffer.from('{}')
       const request = client.request({
@@ -59,22 +80,31 @@ export async function fetchCursorAccountUsage(
         'connect-protocol-version': '1',
         'content-length': String(body.length),
       })
+      const finish = (error: unknown, value?: { status: number; body: Buffer }): void => {
+        if (settled) return
+        settled = true
+        signal.removeEventListener('abort', onAbort)
+        if (error !== undefined) reject(error)
+        else resolve(value!)
+      }
       const onAbort = (): void => {
         request.destroy()
-        reject(new DOMException('The operation was aborted', 'AbortError'))
+        finish(abortReason(signal))
       }
-      if (options.signal?.aborted === true) {
+      if (signal.aborted) {
         onAbort()
         return
       }
-      options.signal?.addEventListener('abort', onAbort, { once: true })
+      signal.addEventListener('abort', onAbort, { once: true })
       request.on('response', (headers) => {
         request.on('data', (chunk: Uint8Array) => { chunks.push(Buffer.from(chunk)) })
         request.on('end', () => {
-          resolve({ status: headers[':status'] ?? 0, body: Buffer.concat(chunks) })
+          finish(undefined, { status: headers[':status'] ?? 0, body: Buffer.concat(chunks) })
         })
       })
-      request.on('error', reject)
+      request.on('error', (error: unknown) => {
+        finish(signal.aborted ? abortReason(signal) : error)
+      })
       request.end(body)
     })
     if (response.status === 401 || response.status === 403) {
@@ -101,10 +131,13 @@ export async function fetchCursorAccountUsage(
     }
   } catch (error) {
     if (error instanceof LlmError) throw error
-    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+      throw error
+    }
     throw new LlmError(
       error instanceof Error ? error.message : 'Cursor usage probe failed', 'PROVIDER_ERROR', { cause: error })
   } finally {
+    if (timer !== undefined) clearTimeout(timer)
     client.close()
   }
 }
