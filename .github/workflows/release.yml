@@ -1,32 +1,108 @@
 name: Release
 
+# A `v*.*.*` tag builds openharness.exe on Windows (embedded harness runtime +
+# node.exe + Wails shell) and publishes it on the GitHub Release under the
+# exact asset name the auto-updater looks for. Pull requests that touch the
+# packaging pipeline, and manual runs, build the exe as an artifact only.
 on:
   push:
     tags:
       - "v*.*.*"
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/stage-runtime.mjs"
+      - "tools/zipruntime/**"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  build-exe:
+    name: Build openharness.exe
+    runs-on: windows-latest
+    timeout-minutes: 150
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      LEFTHOOK: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          # Release artifacts must not restore caches other runs could poison.
+          cache: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="0.0.0-ci.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Stage the embedded runtime
+        run: node scripts/stage-runtime.mjs --node "$((Get-Command node).Source)"
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+      - name: Build exe
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          wails generate module
+          Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
+          wails build -ldflags "-X openharness/internal/update.Version=$env:VERSION"
+          Get-Item build\bin\openharness.exe | Format-List Name, Length
+      - name: Upload exe
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openharness-exe
+          path: build/bin/openharness.exe
+          if-no-files-found: error
+
   github-release:
     name: GitHub Release
+    needs: build-exe
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Create release
+      - name: Download exe
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: openharness-exe
+          path: dist
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          gh release view "${tag}" >/dev/null 2>&1 && exit 0
-          gh release create "${tag}" --verify-tag --generate-notes --title "OpenHarness ${tag}"
+          if ! gh release view "${tag}" >/dev/null 2>&1; then
+            gh release create "${tag}" --verify-tag --generate-notes --title "OpenHarness ${tag}"
+          fi
+          gh release upload "${tag}" dist/openharness.exe --clobber

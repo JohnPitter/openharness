@@ -94,12 +94,11 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | Workflow | Quando | O que faz |
 | --- | --- | --- |
 | [CI](.github/workflows/ci.yml) | push/PR | `go test` / `go vet` |
-| [Release](.github/workflows/release.yml) | tag `v*.*.*` | cria a GitHub Release |
+| [Release](.github/workflows/release.yml) | tag `v*.*.*` | builda o `openharness.exe` no Windows (runtime embutido + `node.exe` + Wails) e publica na GitHub Release |
 
 ```powershell
 git tag v0.2.0
-git push origin v0.2.0
-gh release upload v0.2.0 build/bin/openharness.exe
+git push origin v0.2.0   # o workflow builda e anexa o openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.
