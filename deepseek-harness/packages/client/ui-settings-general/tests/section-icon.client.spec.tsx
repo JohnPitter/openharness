@@ -47,8 +47,9 @@ it('renders a contributed section icon and restores the default after its plugin
   const c = await start()
   const plugin = c.ctx.plugin(contribution)
   await act(async () => { await plugin })
-  fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }))
+  // OpenHarness ships the web composition without ui-settings-account, so the
+  // sidebar shows the shell's own Settings trigger instead of the Account menu.
+  fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
   const row = screen.getByRole('button', { name: 'Custom' })
   const icon = screen.getByTestId('section-icon')
   expect(row.contains(icon)).toBe(true)

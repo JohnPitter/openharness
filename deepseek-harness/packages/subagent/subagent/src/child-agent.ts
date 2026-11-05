@@ -352,8 +352,10 @@ export const WORKFLOW_ORCHESTRATOR_WORK_TOOLS = [
  * @param agent - the agent that just published.
  */
 export function restrictWorkflowOrchestrator(agent: Agent): void {
-  if (delegationDepthOf(agent) !== 0) return
+  // Preset first: every non-Workflow agent returns before the depth read, so
+  // this listener never vetoes an unrelated publication.
   if (agent.ctx.get('agentPresets')?.composedPreset(agent.ctx) !== 'workflow') return
+  if (delegationDepthOf(agent) !== 0) return
   const tools = agent.ctx.get('tools')
   if (tools === undefined) return
   const visible = new Set(tools.schemas(agent).map(schema => schema.name))

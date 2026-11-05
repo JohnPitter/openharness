@@ -455,7 +455,9 @@ describe('WorkspaceBrowser', () => {
         useSessions: hook(sessionState([summary('alive', 2), summary('gone', 1)])),
         useWorkspaces: hook(workspaceState([workspace('alpha', ['alive', 'gone'])], [sid('gone')])),
       })
-      expect(b.store.getSnapshot().archivedFilter).toBeUndefined()
+      // OpenHarness: rehydration merges the persisted view over init defaults,
+      // so the missing field reads as the default filter (archived hidden).
+      expect(b.store.getSnapshot().archivedFilter).toBe('default')
       expect(screen.getByText('alive')).toBeTruthy()
       expect(screen.queryByText('gone')).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: '视图选项' }))

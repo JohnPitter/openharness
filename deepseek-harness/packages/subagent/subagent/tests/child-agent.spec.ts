@@ -15,7 +15,9 @@ function parentAgent(): Agent {
       maxTokens: 512,
     },
     session: Session.create(id),
-  } as Agent
+    // No composed preset: the Workflow worker route and planner metering checks stay inert.
+    ctx: { get: () => undefined },
+  } as unknown as Agent
 }
 
 describe('child Agent options', () => {

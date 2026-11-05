@@ -1045,6 +1045,13 @@ registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHa
 @Remote listProviders(): LlmProviderInfo[]
 
 /**
+ * Charged unit for one registered provider route.
+ * @param provider - route id passed to {@link GenerateOptions.provider}.
+ * @returns the adapter-declared metering, or `tokens` when the route is unregistered or undeclared.
+ */
+providerMetering(provider: string): LlmMetering
+
+/**
  * Declare provider routes an adapter plugin can activate through
  * configuration. Registration is all-or-nothing: an empty list, invalid
  * entry, or a provider already declared by any registration throws
@@ -1128,6 +1135,22 @@ imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): 
  * @returns the same deterministic handle text used at adapter dispatch.
  */
 fileRequestText(ref: FileAttachmentRef): string
+
+/**
+ * Report account-level quota for one registered provider, when its adapter
+ * can read it from the same credentials used for generation.
+ * @param provider - registered provider route to inspect.
+ * @param signal - optional cancellation for the adapter lookup.
+ * @returns quota windows, or `undefined` when the adapter has no quota surface.
+ */
+async accountUsage(provider: string, signal?: AbortSignal): Promise<LlmAccountUsage | undefined>
+
+/**
+ * Whether the advisory picker should list one registered provider's models.
+ * @param provider - registered provider route to inspect.
+ * @returns whether the picker should list this route's models.
+ */
+async advertiseModels(provider: string): Promise<boolean>
 
 /**
  * Discover models advertised by one registered provider. Catalog membership

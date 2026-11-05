@@ -580,6 +580,14 @@ pinSession(sessionId: SessionId): Promise<void>
 unpinSession(sessionId: SessionId): Promise<void>
 
 /**
+ * Drop one session from archive membership, every workspace account, and
+ * the header index. Persistence deletion is the caller's job; this only
+ * forgets registry bookkeeping after the log is gone.
+ * @param sessionId - The session identity that persistence no longer holds.
+ */
+forgetSession(sessionId: SessionId): Promise<void>
+
+/**
  * Resolve by canonical directory path without creating or mutating a
  * workspace. A missing path rejects during `realpath`; an existing unowned
  * directory returns `undefined`.

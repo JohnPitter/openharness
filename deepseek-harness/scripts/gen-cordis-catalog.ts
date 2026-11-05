@@ -123,6 +123,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   forgePanel: 'forge.md',
   forgeSession: 'forge.md',
   sessionController: 'session.md',
+  sessionUsage: 'session.md',
   sessionSkillCatalog: 'skills.md',
   sessions: 'session.md',
   sessionLogDeepSeek: 'session.md',
@@ -179,6 +180,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  settingsNav: 'client-side Settings navigation seam (OpenHarness) — packages/client/ui-settings/src/client/settings-nav.ts owns the API',
   contextMenus: 'client-side interface-typed menu registry — packages/client/ui-context-menu/README.md owns the API',
   fileActions: 'client-side interface-typed file actions — packages/client/ui-file-actions/README.md owns the API',
   invocation: 'not a service: per-call accessor (RemoteInvocation | undefined) the Gateway derives for each Remote call — packages/api/gateway/README.md owns the contract',
@@ -232,6 +234,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
  */
 export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'app-boot': 'boot.md',
+  'session-persistence': 'persistence.md',
   hmr: 'boot.md',
   'plugin-manager': 'boot.md',
   'plugin-market': 'boot.md',
@@ -988,6 +991,17 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
+  // OpenHarness fork surfaces, documented beside their owning packages.
+  SessionReviseRequest: 'packages/api/session-controller/README.md',
+  SessionReviseValue: 'packages/api/session-controller/README.md',
+  SessionDeleteRequest: 'packages/api/session-controller/README.md',
+  SessionDeleteValue: 'packages/api/session-controller/README.md',
+  UsagePanelView: 'packages/api/session-controller/README.md',
+  AccountUsageRequest: 'packages/api/session-controller/README.md',
+  AccountUsageView: 'packages/api/session-controller/README.md',
+  LlmMetering: 'packages/llm/llm/README.md',
+  LlmAccountUsage: 'packages/llm/llm/README.md',
+  SessionPersistenceDeleteOptions: 'packages/session/session-persistence/README.md',
   ActionCardDecision: 'packages/experimental/action-cards/README.md',
   ActionCardKind: 'packages/experimental/action-cards/README.md',
   ActionCardResult: 'packages/experimental/action-cards/README.md',

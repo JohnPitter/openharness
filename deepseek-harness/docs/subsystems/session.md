@@ -961,6 +961,23 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 @Remote('prompt') async prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>
 
 /**
+ * Edit the latest completed user message in the same Session (no fork):
+ * a durable revision cut hides the superseded tail and the replacement
+ * dispatches once. Retries with the same `operationId` never dispatch again.
+ * @param request - Session, anchor seq and message id, idempotency key, and replacement text.
+ * @param signal - caller cancellation; aborting after dispatch cancels the replacement turn.
+ * @returns the committed revision identity.
+ */
+@Remote('revise') revise(request: SessionReviseRequest, signal: AbortSignal): Promise<SessionReviseValue>
+
+/**
+ * Permanently delete one ordinary Session and its origin-subagent descendants.
+ * @param request - Session identity to delete.
+ * @returns every deleted identity, descendants first.
+ */
+@Remote('delete') delete(request: SessionDeleteRequest): Promise<SessionDeleteValue>
+
+/**
  * Read one image from the attachment store after gateway authorization.
  * @param request - image reference and gateway permission scope; Session existence is not checked.
  * @returns the durable attachment reference and base64-encoded bytes.
@@ -1192,6 +1209,18 @@ announce(session: Session): void
 async flush(session: Session): Promise<boolean>
 
 /**
+ * Append one durable revision event and await its durability barrier.
+ * @param session - live session to revise.
+ * @param anchorSeq - latest user-message surface sequence being revised.
+ * @param anchorMessageId - identity of the anchor message.
+ * @param replacement - replacement user message.
+ * @param operationId - idempotency key for this revision request.
+ * @param signal - optional cancellation signal checked before and after append.
+ * @returns revision identity and whether an existing operation was reused.
+ */
+async replaceLatestUserMessage( session: Session, anchorSeq: number, anchorMessageId: MessageId, replacement: UserMessage, operationId: string, signal?: AbortSignal, ): Promise<{ revision: number; eventSeq: number; operationId: string; existing: boolean }>
+
+/**
  * Look up a live session.
  * @param id - the session id to look up.
  * @returns the session, or undefined when no live session has that id.
@@ -1223,9 +1252,37 @@ list(): Session[]
 fork(source: SessionForkSource, boundary?: SessionSeq, childSessionId?: SessionId): Session
 ```
 
-Types: [CreateSessionOptions](persistence.md) · [PrepareSessionOptions](persistence.md) · [SessionId](core.md)
+Types: [CreateSessionOptions](persistence.md) · [MessageId](llm-streaming.md) · [PrepareSessionOptions](persistence.md) · [SessionId](core.md)
 
 Source: [`packages/core/session/src/index.ts`](../../packages/core/session/src/index.ts)
+
+<a id="ctxsessionusage--sessionusagecontroller"></a>
+
+### `ctx.sessionUsage` — `SessionUsageController`
+
+Host service backing `ctx.remote.usage`.
+
+```ts cordis-catalog
+/**
+ * Host-local request and token history folded from Session logs and live
+ * `session/event` ingest. Empty when nothing has reported usage.
+ * @returns days newest first, models by token total, and all-time totals.
+ */
+@Remote('panel') async panel(): Promise<UsagePanelView>
+
+/**
+ * Account-level quota for one provider route, using the credentials already
+ * configured for generation. `supported: false` when the adapter has no
+ * quota surface or the route is unregistered; read failures (missing key,
+ * AUTH, transport) stay on `error` instead of failing the call.
+ * @param request - provider route to inspect.
+ * @param signal - caller cancellation for the adapter lookup.
+ * @returns the quota view.
+ */
+@Remote('accountUsage') async accountUsage(request: AccountUsageRequest, signal: AbortSignal): Promise<AccountUsageView>
+```
+
+Source: [`packages/api/session-controller/src/usage.ts`](../../packages/api/session-controller/src/usage.ts)
 
 <a id="api-session-events"></a>
 
@@ -1266,6 +1323,27 @@ A Session became visible or its Agent was created or disposed. Consumers upsert 
  */
 'api-session/added'(summary: SessionSummary): void
 ```
+
+Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/session-controller/src/types.ts)
+
+<a id="api-sessiondeleted--emit"></a>
+
+#### `api-session/deleted` — emit
+
+A Session was permanently deleted (`session.delete`). Unlike `api-session/removed`, Clients drop the row outright, including origin-subagent rows that removal keeps as idle activations.
+
+```ts cordis-catalog
+/**
+ * A Session was permanently deleted (`session.delete`). Unlike
+ * `api-session/removed`, Clients drop the row outright, including
+ * origin-subagent rows that removal keeps as idle activations.
+ * @mode emit
+ * @param sessionId - deleted Session identity.
+ */
+'api-session/deleted'(sessionId: SessionId): void
+```
+
+Types: [SessionId](core.md)
 
 Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/session-controller/src/types.ts)
 

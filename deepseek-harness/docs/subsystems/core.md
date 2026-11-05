@@ -527,6 +527,20 @@ currentSelection(): ModelSelection
  * @returns fulfillment after the optional profile write settles.
  */
 async saveSelection(next: ModelSelection): Promise<void>
+
+/**
+ * Read the worker model for Workflow-mode subagents and construction.
+ * @returns a selection when one is stored, otherwise `undefined` (inherit parent).
+ */
+currentWorkerSelection(): ModelSelection | undefined
+
+/**
+ * Save the worker model used by Workflow-mode subagents and construction,
+ * through the same owning profile entry as {@link saveSelection}.
+ * @param next - resolved selection accepted by the Workflow picker.
+ * @returns fulfillment after the optional profile write settles.
+ */
+async saveWorkerSelection(next: ModelSelection): Promise<void>
 ```
 
 Source: [`packages/core/agent-default-model/src/index.ts`](../../packages/core/agent-default-model/src/index.ts)
@@ -646,15 +660,18 @@ composedPreset(ctx: Context): string | undefined
  */
 serviceFor<K extends string & keyof Context>(agent: { ctx: Context }, name: K): Context[K] | undefined
 
-/** Rebind a blank Agent; the caller owns the blank-session check.
+/** Rebind an Agent; the caller owns whether it is idle enough to swap.
  * @param ctx Agent context.
  * @param id Requested preset.
  * @returns The bound identity.
  */
 async recompose(ctx: Context, id: string): Promise<AgentPreset>
 
-/** Select a preset before a session starts its first turn. A Session whose
- * log records the preset and whose Agent runs its current revision keeps its
+/** Select a preset for a Session, blank or live. A live Session recomposes
+ * between turns: historical tool calls stay in the log and later turns use
+ * the new composition. A turn in flight still holds the previous tool set,
+ * so the switch is refused while the Agent runs. A Session whose log records
+ * the preset and whose Agent runs its current revision keeps its
  * composition; nothing is logged or announced.
  * @param agent Target Agent.
  * @param agentPreset Requested identity.

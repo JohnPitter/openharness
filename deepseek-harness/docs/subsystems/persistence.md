@@ -420,6 +420,44 @@ abstract stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<S
  * @returns one snapshot per stored session.
  */
 abstract list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]>
+
+/**
+ * Durably remove one stored session: its header, events, and every
+ * per-session artifact go together, and `session-persistence/deleted`
+ * fires once the removal committed. Write ownership is claimed for the
+ * duration, so an active write handle (a live Session) must close first.
+ * Unknown ids resolve without writing or emitting. Backends that cannot
+ * delete keep this default refusal.
+ * @param _id - the stored session to delete.
+ * @param options - optional cancellation.
+ * @throws {SessionAlreadyOwnedError} when a write handle owns the session.
+ */
+delete(_id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<void>
+```
+
+Types: [SessionId](core.md)
+
+Source: [`packages/session/session-persistence/src/index.ts`](../../packages/session/session-persistence/src/index.ts)
+
+<a id="session-persistence-events"></a>
+
+### `session-persistence/*` events
+
+<a id="session-persistencedeleted--emit"></a>
+
+#### `session-persistence/deleted` — emit
+
+A persisted session identity was durably removed. Live disposal still emits `session/disposed`; this fires for cold deletes and after a disposed identity's artifact is dropped.
+
+```ts cordis-catalog
+/**
+ * A persisted session identity was durably removed. Live disposal still
+ * emits `session/disposed`; this fires for cold deletes and after a
+ * disposed identity's artifact is dropped.
+ * @param sessionId - the deleted session identity.
+ * @mode emit
+ */
+'session-persistence/deleted'(sessionId: SessionId): void
 ```
 
 Types: [SessionId](core.md)

@@ -138,9 +138,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async saveWorkerSelection(next: ModelSelection): Promise<void>',
-        description: 'Save the worker model used by Workflow-mode subagents and construction.',
+        description: 'Save the worker model used by Workflow-mode subagents and construction, through the same owning profile entry as saveSelection.',
         parameters: [{ name: 'next', description: 'resolved selection accepted by the Workflow picker.' }],
-        returns: 'fulfillment after the optional settings write settles.',
+        returns: 'fulfillment after the optional profile write settles.',
       },
     ],
   },
@@ -247,13 +247,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async recompose(ctx: Context, id: string): Promise<AgentPreset>',
-        description: 'Rebind a blank Agent; the caller owns the blank-session check.',
+        description: 'Rebind an Agent; the caller owns whether it is idle enough to swap.',
         parameters: [{ name: 'ctx', description: 'Agent context.' }, { name: 'id', description: 'Requested preset.' }],
         returns: 'The bound identity.',
       },
       {
         signature: '@Remote(\'select\') async select(agent: Agent, agentPreset: string): Promise<string>',
-        description: 'Select a preset before a session starts its first turn. A Session whose log records the preset and whose Agent runs its current revision keeps its composition; nothing is logged or announced.',
+        description: 'Select a preset for a Session, blank or live. A live Session recomposes between turns: historical tool calls stay in the log and later turns use the new composition. A turn in flight still holds the previous tool set, so the switch is refused while the Agent runs. A Session whose log records the preset and whose Agent runs its current revision keeps its composition; nothing is logged or announced.',
         parameters: [{ name: 'agent', description: 'Target Agent.' }, { name: 'agentPreset', description: 'Requested identity.' }],
         returns: 'Committed preset identity.',
       },
@@ -2039,6 +2039,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the same deterministic handle text used at adapter dispatch.',
       },
       {
+        signature: 'async accountUsage(provider: string, signal?: AbortSignal): Promise<LlmAccountUsage | undefined>',
+        description: 'Report account-level quota for one registered provider, when its adapter can read it from the same credentials used for generation.',
+        parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }, { name: 'signal', description: 'optional cancellation for the adapter lookup.' }],
+        returns: 'quota windows, or `undefined` when the adapter has no quota surface.',
+      },
+      {
+        signature: 'async advertiseModels(provider: string): Promise<boolean>',
+        description: 'Whether the advisory picker should list one registered provider\'s models.',
+        parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }],
+        returns: 'whether the picker should list this route\'s models.',
+      },
+      {
         signature: 'async listModels(provider: string): Promise<LlmModelInfo[]>',
         description: 'Discover models advertised by one registered provider. Catalog membership does not constrain core routing. Catalog-driven entry points may restrict selection and submission to the advertised models.',
         parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }],
@@ -2773,6 +2785,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'acknowledgement that the Agent accepted the prompt.',
       },
       {
+        signature: '@Remote(\'revise\') revise(request: SessionReviseRequest, signal: AbortSignal): Promise<SessionReviseValue>',
+        description: 'Edit the latest completed user message in the same Session (no fork): a durable revision cut hides the superseded tail and the replacement dispatches once. Retries with the same `operationId` never dispatch again.',
+        parameters: [{ name: 'request', description: 'Session, anchor seq and message id, idempotency key, and replacement text.' }, { name: 'signal', description: 'caller cancellation; aborting after dispatch cancels the replacement turn.' }],
+        returns: 'the committed revision identity.',
+      },
+      {
+        signature: '@Remote(\'delete\') delete(request: SessionDeleteRequest): Promise<SessionDeleteValue>',
+        description: 'Permanently delete one ordinary Session and its origin-subagent descendants.',
+        parameters: [{ name: 'request', description: 'Session identity to delete.' }],
+        returns: 'every deleted identity, descendants first.',
+      },
+      {
         signature: '@Remote(\'attachment\') attachment(request: SessionAttachmentRequest): Promise<SessionAttachmentValue>',
         description: 'Read one image from the attachment store after gateway authorization.',
         parameters: [{ name: 'request', description: 'image reference and gateway permission scope; Session existence is not checked.' }],
@@ -2927,6 +2951,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'List every stored session visible to this process, in no promised order.',
         parameters: [{ name: 'options', description: 'optional cancellation.' }],
         returns: 'one snapshot per stored session.',
+      },
+      {
+        signature: 'delete(_id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<void>',
+        description: 'Durably remove one stored session: its header, events, and every per-session artifact go together, and `session-persistence/deleted` fires once the removal committed. Write ownership is claimed for the duration, so an active write handle (a live Session) must close first. Unknown ids resolve without writing or emitting. Backends that cannot delete keep this default refusal.',
+        parameters: [{ name: '_id', description: 'the stored session to delete.' }, { name: 'options', description: 'optional cancellation.' }],
+        throws: ['{SessionAlreadyOwnedError} when a write handle owns the session.'],
       },
     ],
   },
@@ -3309,6 +3339,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Register the sole optional title provider. Disposal aborts its pending and active work; a replacement may register once disposal has started, and the closing provider\'s late results never commit.',
         parameters: [{ name: 'provider', description: 'provider identity, cadence, and generation function.' }],
         returns: 'exact Cordis effect disposer, which settles after active calls quiesce.',
+      },
+    ],
+  },
+  {
+    key: 'sessionUsage',
+    summary: 'Host service backing `ctx.remote.usage`.',
+    description: 'Host service backing `ctx.remote.usage`.',
+    methods: [
+      {
+        signature: '@Remote(\'panel\') async panel(): Promise<UsagePanelView>',
+        description: 'Host-local request and token history folded from Session logs and live `session/event` ingest. Empty when nothing has reported usage.',
+        parameters: [],
+        returns: 'days newest first, models by token total, and all-time totals.',
+      },
+      {
+        signature: '@Remote(\'accountUsage\') async accountUsage(request: AccountUsageRequest, signal: AbortSignal): Promise<AccountUsageView>',
+        description: 'Account-level quota for one provider route, using the credentials already configured for generation. `supported: false` when the adapter has no quota surface or the route is unregistered; read failures (missing key, AUTH, transport) stay on `error` instead of failing the call.',
+        parameters: [{ name: 'request', description: 'provider route to inspect.' }, { name: 'signal', description: 'caller cancellation for the adapter lookup.' }],
+        returns: 'the quota view.',
       },
     ],
   },
@@ -4305,10 +4354,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>',
-        description: 'Ask the scoped answerer waterfall and wait for the user\'s answer.\n\nWhen a caller supplies an agent, human interaction is valid only for the exact live runtime root. Runtime ownership, not durable session lineage, decides this boundary: an owned child has no human answerer and would block forever, while a lineage-bearing session resumed as a new runtime root may ask normally.',
+        description: 'Ask the scoped answerer waterfall and wait for the user\'s answer.\n\nWhen a caller supplies an agent, human interaction waits on a UI only for the exact live runtime root the human is answering. A delegated caller — a live child owned by another agent, or a continuable `origin: \'subagent\'` agent whose parent session is still live — never waits: `ask()` selects the recommended option label (else the first) and returns. Optionless batches still fail with `DELEGATED_CALLER`. Durable lineage alone does not decide: a lineage-bearing session resumed as a new runtime root with no live parent may ask normally.',
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
-        returns: 'The answer chosen or typed by the human.',
-        throws: ['{UserQuestionError} code `ASK_ABORTED` when the supplied signal is already or becomes aborted, `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
+        returns: 'The answer chosen by the human, or the auto-selected delegated options.',
+        throws: ['{UserQuestionError} code `ASK_ABORTED` when the supplied signal is already or becomes aborted, `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when a delegated caller has no selectable options.'],
       },
     ],
   },
@@ -4691,6 +4740,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'resolution after durability.',
       },
       {
+        signature: 'forgetSession(sessionId: SessionId): Promise<void>',
+        description: 'Drop one session from archive membership, every workspace account, and the header index. Persistence deletion is the caller\'s job; this only forgets registry bookkeeping after the log is gone.',
+        parameters: [{ name: 'sessionId', description: 'The session identity that persistence no longer holds.' }],
+      },
+      {
         signature: 'async resolveByPath(path: string): Promise<Workspace | undefined>',
         description: 'Resolve by canonical directory path without creating or mutating a workspace. A missing path rejects during `realpath`; an existing unowned directory returns `undefined`.',
         parameters: [{ name: 'path', description: 'Existing directory path in a fully qualified spelling.' }],
@@ -4840,6 +4894,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'A Session became visible or its Agent was created or disposed.',
     description: 'A Session became visible or its Agent was created or disposed. Consumers upsert the summary and replace its current running and availability state.',
     parameters: [{ name: 'summary', description: 'current list row for the Session.' }],
+  },
+  {
+    name: 'api-session/deleted',
+    mode: 'emit',
+    signature: '\'api-session/deleted\'(sessionId: SessionId): void',
+    summary: 'A Session was permanently deleted (`session.delete`).',
+    description: 'A Session was permanently deleted (`session.delete`). Unlike `api-session/removed`, Clients drop the row outright, including origin-subagent rows that removal keeps as idle activations.',
+    parameters: [{ name: 'sessionId', description: 'deleted Session identity.' }],
   },
   {
     name: 'api-session/error',
@@ -5194,6 +5256,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'sessionId', description: 'Original Session receiving the reminder.' }],
   },
   {
+    name: 'session-persistence/deleted',
+    mode: 'emit',
+    signature: '\'session-persistence/deleted\'(sessionId: SessionId): void',
+    summary: 'A persisted session identity was durably removed.',
+    description: 'A persisted session identity was durably removed. Live disposal still emits `session/disposed`; this fires for cold deletes and after a disposed identity\'s artifact is dropped.',
+    parameters: [{ name: 'sessionId', description: 'the deleted session identity.' }],
+  },
+  {
     name: 'session-telemetry/record',
     mode: 'waterfall',
     signature: '\'session-telemetry/record\'(record: SessionTelemetryRecord, next: () => SessionTelemetryRecord): SessionTelemetryRecord',
@@ -5456,6 +5526,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AccountProfile',
     declaration: 'export interface AccountProfile {\n    readonly id: AccountUserId | null;\n    readonly name: string | null;\n    readonly contact: string | null;\n    readonly avatarUrl?: string | null;\n}',
+  },
+  {
+    name: 'AccountUsageRequest',
+    declaration: 'export interface AccountUsageRequest {\n    readonly provider: string;\n}',
+  },
+  {
+    name: 'AccountUsageView',
+    declaration: 'export interface AccountUsageView {\n    readonly supported: boolean;\n    readonly error?: string;\n    readonly plan?: string;\n    readonly windows?: readonly AccountUsageWindowView[];\n}',
+  },
+  {
+    name: 'AccountUsageWindowView',
+    declaration: 'export interface AccountUsageWindowView {\n    readonly id: string;\n    readonly used: number;\n    readonly limit: number;\n    readonly percent: number;\n    readonly resetsAt?: number;\n    readonly windowMinutes?: number;\n}',
   },
   {
     name: 'AccountUserId',
@@ -6931,7 +7013,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmAdapter',
-    declaration: 'export abstract class LlmAdapter {\n    providerInfo(provider: string): LlmProviderInfo;\n    providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;\n    imageRequestPricing(_provider: string, _model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(_provider: string, _model: string, image: ImageAttachmentRef): ImageRequestTarget;\n    listModels(_provider: string): Promise<readonly LlmModelInfo[]>;\n    resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall>;\n    abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+    declaration: 'export abstract class LlmAdapter {\n    providerInfo(provider: string): LlmProviderInfo;\n    providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;\n    imageRequestPricing(_provider: string, _model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(_provider: string, _model: string, image: ImageAttachmentRef): ImageRequestTarget;\n    listModels(_provider: string): Promise<readonly LlmModelInfo[]>;\n    advertiseModels(_provider: string): Promise<boolean>;\n    accountUsage(_provider: string, _signal?: AbortSignal): Promise<LlmAccountUsage | undefined>;\n    resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall>;\n    abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
     name: 'LlmAttemptId',
@@ -6970,16 +7052,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LlmImageRequestPricing {\n    priceImages(images: readonly ImageBlock[]): readonly LlmImageRequestPrice[];\n}',
   },
   {
+    name: 'LlmMetering',
+    declaration: 'export type LlmMetering = \'tokens\' | \'requests\';',
+  },
+  {
     name: 'LlmModelBadge',
     declaration: 'export interface LlmModelBadge {\n    text: LocalizedText;\n    tone: LlmModelBadgeTone;\n}',
   },
   {
     name: 'LlmModelBadgeTone',
     declaration: 'export type LlmModelBadgeTone = \'neutral\' | \'info\' | \'success\' | \'warning\';',
-  },
-  {
-    name: 'LlmMetering',
-    declaration: 'export type LlmMetering = \'tokens\' | \'requests\';',
   },
   {
     name: 'LlmModelContext',
@@ -7023,7 +7105,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): ImageRequestTarget;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(conf /* …truncated — full shape in source */',
+    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    providerMetering(provider: string): LlmMetering;\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    imageRequestTarget(provider: string, model: string, image: ImageAttachmentRef): ImageRequestTarget;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async accountUsage(provider: string, signal?: AbortSignal): Promise<LlmAccountUsage | undefined>;\n    async advertiseModels(provider: string): Promise<boolean>;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveMod /* …truncated — full shape in source */',
   },
   {
     name: 'LocalAtInput',
@@ -7291,7 +7373,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ModelCatalogModel',
-    declaration: 'export interface ModelCatalogModel {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n    readonly reasoning?: ModelReasoning;\n    readonly badge?: LlmModelBadge;\n}',
+    declaration: 'export interface ModelCatalogModel {\n    readonly id: string;\n    readonly name: string;\n    readonly description?: string;\n    readonly reasoning?: ModelReasoning;\n    readonly badge?: LlmModelBadge;\n    readonly contextWindow?: number;\n}',
   },
   {
     name: 'ModelMessageSource',
@@ -7307,7 +7389,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ModelProviderGroup',
-    declaration: 'export interface ModelProviderGroup {\n    readonly id: string;\n    readonly name: string;\n    readonly models: readonly ModelCatalogModel[];\n}',
+    declaration: 'export interface ModelProviderGroup {\n    readonly id: string;\n    readonly name: string;\n    readonly metering?: LlmMetering;\n    readonly models: readonly ModelCatalogModel[];\n}',
   },
   {
     name: 'ModelReasoning',
@@ -8314,6 +8396,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
   },
   {
+    name: 'SessionDeleteRequest',
+    declaration: 'export interface SessionDeleteRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'SessionDeleteValue',
+    declaration: 'export interface SessionDeleteValue {\n    readonly deleted: true;\n    readonly sessionIds: readonly SessionId[];\n}',
+  },
+  {
     name: 'SessionEndInput',
     declaration: 'export interface SessionEndInput {\n    reason: \'clear\' | \'logout\' | \'prompt_input_exit\' | \'resume\' | \'other\';\n    sessionId: string;\n}',
   },
@@ -8335,7 +8425,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'developer/message\': {\n        turn: number;\n        step: number;\n        message: DeveloperMessage;\n        headerSeq?: SessionSeq;\n    };\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': {\n   /* …truncated — full shape in source */',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'developer/message\': {\n        turn: number;\n        step: number;\n        message: DeveloperMessage;\n        headerSeq?: SessionSeq;\n    };\n    \'system/message\': {\n        turn: number;\n        step: number;\n        message: SystemMessage;\n    };\n    \'session/revision\': SessionRevisionCut;\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        stream: AssistantStreamRecord[];\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'assistant/attempt\': {\n        turn: number;\n        step: number;\n        stream: AssistantStreamRecord[];\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: ToolCallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n            reason?: string;\n        };\n        meta?: JsonValue;\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n        startsSeries?: true;\n    };\n    \'request/context\':  /* …truncated — full shape in source */',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -8570,6 +8660,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionPersistenceCreateOptions {\n    readonly signal?: AbortSignal;\n    readonly inheritedEventCount?: SessionLogOffset;\n}',
   },
   {
+    name: 'SessionPersistenceDeleteOptions',
+    declaration: 'export interface SessionPersistenceDeleteOptions {\n    readonly signal?: AbortSignal;\n}',
+  },
+  {
     name: 'SessionPersistenceListOptions',
     declaration: 'export interface SessionPersistenceListOptions {\n    readonly signal?: AbortSignal;\n}',
   },
@@ -8698,8 +8792,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionResultRange {\n    from?: number;\n    to?: number;\n}',
   },
   {
+    name: 'SessionReviseRequest',
+    declaration: 'export interface SessionReviseRequest {\n    readonly sessionId: SessionId;\n    readonly operationId: string;\n    readonly anchorSeq: number;\n    readonly anchorMessageId: MessageId;\n    readonly content: readonly TextBlock[];\n}',
+  },
+  {
+    name: 'SessionReviseValue',
+    declaration: 'export interface SessionReviseValue {\n    readonly revision: number;\n    readonly eventSeq: number;\n    readonly operationId: string;\n}',
+  },
+  {
     name: 'SessionRevisionCut',
-    declaration: 'export interface SessionRevisionCut {\n    readonly revision: number;\n    readonly kind: \'cut\';\n    readonly operationId: string;\n    readonly anchorSeq: number;\n    readonly throughSeq: number;\n    readonly anchorMessageId: import(\'@deepseek-ai/dsh-llm/brand\').MessageId;\n    readonly replacement: UserMessage;\n}',
+    declaration: 'export interface SessionRevisionCut {\n    readonly revision: number;\n    readonly kind: \'cut\';\n    readonly operationId: string;\n    readonly anchorSeq: SessionSeq;\n    readonly throughSeq: SessionSeq;\n    readonly anchorMessageId: MessageId;\n    readonly replacement: UserMessage;\n}',
   },
   {
     name: 'SessionSearchCursor',
@@ -8735,7 +8837,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionSelectModelValue',
-    declaration: 'export interface SessionSelectModelValue {\n    readonly selected: ModelSelection;\n}',
+    declaration: 'export interface SessionSelectModelValue {\n    readonly selected: ModelSelection;\n    readonly metering?: LlmMetering;\n}',
   },
   {
     name: 'SessionSeq',
@@ -9351,7 +9453,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SurfaceEventType',
-    declaration: 'export type SurfaceEventType = \'system/message\' | \'developer/message\' | \'user/message\' | \'assistant/message\' | \'tool/result\';',
+    declaration: 'export type SurfaceEventType = \'system/message\' | \'developer/message\' | \'user/message\' | \'session/revision\' | \'assistant/message\' | \'tool/result\';',
   },
   {
     name: 'SurfaceIntent',
@@ -9359,7 +9461,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SurfaceOp',
-    declaration: 'export type SurfaceOp = \'append\' | {\n    op: \'replace\';\n    startSeq: SessionSeq;\n    endSeq: SessionSeq;\n};',
+    declaration: 'export type SurfaceOp = \'append\' | {\n    op: \'replace\';\n    startSeq: SessionSeq;\n    endSeq: SessionSeq;\n} | {\n    op: \'cut\';\n    anchorSeq: SessionSeq;\n    throughSeq: SessionSeq;\n    revision: number;\n};',
   },
   {
     name: 'SurfaceSnapshot',
@@ -9936,6 +10038,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UpdateTeamTaskRequest',
     declaration: 'export interface UpdateTeamTaskRequest {\n    readonly taskId: TeamTaskId;\n    readonly expectedRevision: number;\n    readonly action: TeamTaskAction;\n    readonly subject?: string;\n    readonly description?: string;\n    readonly blockedBy?: readonly TeamTaskId[];\n    readonly writeScopes?: readonly string[];\n    readonly owner?: string;\n}',
+  },
+  {
+    name: 'UsageBuckets',
+    declaration: 'export interface UsageBuckets {\n    readonly requests: number;\n    readonly inputTokens: number;\n    readonly outputTokens: number;\n    readonly cacheReadTokens: number;\n    readonly cacheWriteTokens: number;\n}',
+  },
+  {
+    name: 'UsageDayView',
+    declaration: 'export interface UsageDayView extends UsageBuckets {\n    readonly date: string;\n}',
+  },
+  {
+    name: 'UsageModelView',
+    declaration: 'export interface UsageModelView extends UsageBuckets {\n    readonly provider: string;\n    readonly model: string;\n}',
+  },
+  {
+    name: 'UsagePanelView',
+    declaration: 'export interface UsagePanelView {\n    readonly days: readonly UsageDayView[];\n    readonly models: readonly UsageModelView[];\n    readonly totals: UsageBuckets;\n}',
   },
   {
     name: 'UserMessage',
