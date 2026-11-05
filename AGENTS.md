@@ -45,6 +45,12 @@ build/appicon.png       mascote 3D transparente (cabeça no anel azul + nós ver
 O loader Cordis resolve plugins por nome a partir de `$DSH_HOME/profiles`, então
 o runtime precisa de arquivos REAIS em disco (por isso extração, não SEA/pkg).
 
+Automatizado em `scripts/stage-runtime.mjs` (build com a marca → `pnpm deploy`
+→ materialização via `scripts/build-exe-for-python-sdk-staging.ts` do upstream →
+pacotes workspace faltantes + `dsh-web-frontend/dist` → smoke do `dsh web` →
+zip determinístico por `tools/zipruntime` → `--node` copia o `node.exe`). Os
+passos manuais abaixo descrevem o que ele faz.
+
 ```powershell
 cd deepseek-harness
 pnpm install && pnpm run build          # builda libs + apps/web/dist (pnpm 11.28.5 via corepack)
