@@ -1,20 +1,31 @@
-import type { CommonKey } from './zh.ts'
+/** Spanish common-namespace dictionary. */
+import type { en } from './en.ts'
 
-/** es base dictionary for the common namespace, checked complete against the zh key set. */
+/** Complete Spanish copy for the common namespace. */
 export const es = {
   'ok': 'OK',
   'cancel': 'Cancelar',
   'close': 'Cerrar',
   'copy': 'Copiar',
   'copied': 'Copiado',
+  'codeBlock.title': 'Bloque de código',
+  'codeBlock.wrap': 'Ajustar líneas',
+  'codeBlock.unwrap': 'No ajustar líneas',
+  'copy.failed': 'Copia fallida',
+  'copy.value': 'Copiar valor',
+  'copy.json': 'Copiar JSON',
+  'copy.path': 'Copiar ruta de propiedad',
+  'copy.prettyJson': 'Copiar JSON con formato',
+  'copy.compactJson': 'Copiar JSON compacto',
+  'copy.optionsHint': '{action}; haga clic derecho para opciones de copia',
   'retry': 'Reintentar',
   'loading': 'Cargando…',
-  'load.failed': 'Error al cargar',
+  'load.failed': 'No se pudo cargar',
   'submit': 'Enviar',
   'submitting': 'Enviando…',
   'next': 'Siguiente',
   'previous': 'Anterior',
-  'skip': 'Omitir',
+  'skip': 'Saltar',
   'delete': 'Eliminar',
   'edit': 'Editar',
   'save': 'Guardar',
@@ -22,8 +33,15 @@ export const es = {
   'more': 'Más',
   'collapse': 'Contraer',
   'expand': 'Expandir',
-  'back': 'Volver',
+  'back': 'Atrás',
+  'brand.localBuild': 'Compilación local de DSH',
+  'workspace.defaultName': 'Espacio de trabajo predeterminado',
   'unknown': 'Desconocido',
   'none': 'Ninguno',
   'truncated': 'Truncado',
-} satisfies Record<CommonKey, string>
+  'json.label': 'JSON',
+  'markdown.footnotes': 'Notas a pie de página',
+  'markdown.truncatedCharacters': '… truncado a {total} caracteres',
+  'number.thousand': '{value}K',
+  'number.million': '{value}M',
+} satisfies Record<keyof typeof en, string>

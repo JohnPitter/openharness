@@ -7,7 +7,7 @@
  */
 
 import { contentHasImage, LlmError } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
+import type { AssistantMessage, ContentBlock, GenerateOptions, RequestMessage } from '@deepseek-ai/dsh-llm'
 import type { WireMessage, WireRequest, WireTool } from './types.ts'
 
 /** Adapter-level request defaults (from plugin config). */
@@ -82,7 +82,7 @@ function k2ToggleEffort(effort: NonNullable<GenerateOptions['reasoningEffort']>)
 }
 
 /** Resolve one legal thinking/effort pair for the requested model family. */
-function resolveThinking(options: GenerateOptions, defaults: RequestDefaults): ResolvedThinking {
+function resolveThinking(options: GenerateOptions<string>, defaults: RequestDefaults): ResolvedThinking {
   const family = reasoningFamilyOf(options.model)
   if (family === 'k3') {
     // K3 always thinks. Titles and compaction still pay for reasoning, so use the cheapest legal effort.
@@ -115,7 +115,7 @@ function resolveThinking(options: GenerateOptions, defaults: RequestDefaults): R
 }
 
 /** Join the text blocks of a message (used for user/tool-result content). */
-function flattenText(blocks: ContentBlock[]): string {
+function flattenText(blocks: readonly ContentBlock[]): string {
   return blocks
     .filter(block => block.type === 'text')
     .map(block => block.text)
@@ -130,7 +130,7 @@ function assertTextOnly(blocks: readonly ContentBlock[]): void {
 }
 
 /** Serialize one assistant message (text + reasoning + tool calls). */
-function serializeAssistant(message: Message): WireMessage {
+function serializeAssistant(message: AssistantMessage): WireMessage {
   const text = flattenText(message.content)
   const reasoning = message.content
     .filter(block => block.type === 'reasoning')
@@ -164,39 +164,36 @@ function serializeAssistant(message: Message): WireMessage {
 }
 
 /**
- * Serialize the conversation. `tool-result` blocks become standalone
- * `{role: 'tool'}` messages; the harness puts each tool result in its own
- * user-role message, so a mixed user message contributes its text first and
- * its tool results as separate wire messages after.
+ * Serialize the conversation. Tool-role messages become `{role: 'tool'}`
+ * wire messages answering their call id; developer messages (tool
+ * declaration updates) never reach this route, whose models declare no tool
+ * update mode, so any that survive projection are dropped.
  * @param messages - the harness conversation, in order.
- * @returns the wire messages; order preserved, each tool result expanded into its own entry.
+ * @returns the wire messages; order preserved.
  */
-export function serializeMessages(messages: Message[]): WireMessage[] {
+export function serializeMessages(messages: readonly RequestMessage[]): WireMessage[] {
   const wire: WireMessage[] = []
   for (const message of messages) {
     assertTextOnly(message.content)
-    if (message.role === 'system') {
-      wire.push({ role: 'system', content: flattenText(message.content) })
-      continue
-    }
-    if (message.role === 'assistant') {
-      wire.push(serializeAssistant(message))
-      continue
-    }
-    // user role: tool results ride in user messages in the harness
-    // vocabulary, but the chat-completions wire wants them as role:'tool' messages.
-    const toolResults = message.content.filter(block => block.type === 'tool-result')
-    const text = flattenText(message.content)
-    if (text.length > 0 || toolResults.length === 0) {
-      wire.push({ role: 'user', content: text })
-    }
-    for (const result of toolResults) {
-      wire.push({
-        role: 'tool',
-        tool_call_id: result.toolCallId,
-        // Empty tool output still needs SOME content on the wire.
-        content: flattenText(result.content) || '(no output)',
-      })
+    switch (message.role) {
+      case 'system':
+        wire.push({ role: 'system', content: flattenText(message.content) })
+        continue
+      case 'developer':
+        continue
+      case 'assistant':
+        wire.push(serializeAssistant(message))
+        continue
+      case 'tool':
+        wire.push({
+          role: 'tool',
+          tool_call_id: message.toolCallId,
+          // Empty tool output still needs SOME content on the wire.
+          content: flattenText(message.content) || '(no output)',
+        })
+        continue
+      default:
+        wire.push({ role: 'user', content: flattenText(message.content) })
     }
   }
   return wire
@@ -211,7 +208,7 @@ export function serializeMessages(messages: Message[]): WireMessage[] {
  * @returns the chat-completions request body.
  */
 export function serializeRequest(
-  options: GenerateOptions,
+  options: GenerateOptions<string>,
   defaults: RequestDefaults = {},
 ): WireRequest {
   const messages: WireMessage[] = []

@@ -1,0 +1,6 @@
+- menu:
+  - menuitem "Standard mode Work with code, files, and information. Suitable for most tasks, with search, editing, terminal commands, and other tools available as needed. Construction follows the J-Space protocol by default."
+  - menuitem "PTC mode Includes all Standard mode capabilities. Better suited to tasks that call tools in batches and then filter, organize, deduplicate, count, or summarize the results. Construction follows the J-Space protocol by default."
+  - menuitem "Minimal mode The agent uses a terminal and image reading, with context compaction. Useful for testing and comparing its basic performance."
+  - menuitem "Creator mode Customize DSH through conversation. Let the agent write plugins that add features or UI, or combine tools and prompts to create your own mode."
+  - menuitem "Workflow mode Orchestrator and planner with Standard tools. Pick a planner model for this session and a worker model for subagents and construction. Construction follows the J-Space protocol by default."

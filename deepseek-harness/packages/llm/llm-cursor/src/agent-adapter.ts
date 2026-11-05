@@ -15,9 +15,9 @@
  */
 
 import { platform, release } from 'node:os'
-import { CallId, LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
+import { isMissingCredential, LlmAdapter, LlmError, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type {
-  ContentBlock, GenerateOptions, LlmAccountUsage, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, StreamChunk,
+  ContentBlock, GenerateOptions, ToolResultMessage, LlmAccountUsage, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, StreamChunk,
   ToolSchema,
 } from '@deepseek-ai/dsh-llm'
 import {
@@ -194,6 +194,9 @@ export class CursorAgentAdapter extends LlmAdapter {
       this.lastGoodModels = models
       return models
     } catch (error) {
+      // No token at all: the route cannot serve a request, so the picker
+      // lists nothing until the user signs in or pastes one.
+      if (isMissingCredential(error)) return []
       console.error('Cursor listModels RPC failed; using configured catalog', error)
       if (this.lastGoodModels !== undefined) return this.lastGoodModels
       return catalog.map(row => ({ provider: 'cursor', id: row.id, name: row.name ?? row.id }))
@@ -217,10 +220,14 @@ export class CursorAgentAdapter extends LlmAdapter {
     }
     const live = this.runs.get(sessionKey)
 
-    const trailing = options.messages.at(-1)
-    const results = trailing?.role === 'user'
-      ? trailing.content.filter((block): block is Extract<ContentBlock, { type: 'tool-result' }> => block.type === 'tool-result')
-      : []
+    // Tool results are tool-role messages; the trailing run of them answers
+    // the calls the live run parked.
+    const results: ToolResultMessage[] = []
+    for (let index = options.messages.length - 1; index >= 0; index--) {
+      const message = options.messages[index]
+      if (message?.role !== 'tool') break
+      results.unshift(message)
+    }
     if (live !== undefined && results.length > 0) {
       for (const result of results) {
         const call = live.pending.get(result.toolCallId)
@@ -318,15 +325,18 @@ export class CursorAgentAdapter extends LlmAdapter {
     }
     const lines: string[] = []
     for (const message of messages) {
+      if (message.role === 'developer') continue
+      if (message.role === 'tool') {
+        const name = toolNames.get(message.toolCallId) ?? 'unknown'
+        const text = message.content.map(item => (item.type === 'text' ? item.text : '[non-text tool result content]')).join('\n')
+        lines.push(`[tool result ${name}${message.isError === true ? ' (error)' : ''}]\n${text}`)
+        continue
+      }
       for (const block of message.content) {
         if (block.type === 'text') {
           lines.push(message.role === 'assistant' ? `[assistant]\n${block.text}` : `[user]\n${block.text}`)
         } else if (block.type === 'tool-call') {
           lines.push(`[assistant called tool ${block.name} with arguments]\n${block.arguments}`)
-        } else if (block.type === 'tool-result') {
-          const name = toolNames.get(block.toolCallId) ?? 'unknown'
-          const text = block.content.map(item => (item.type === 'text' ? item.text : '[non-text tool result content]')).join('\n')
-          lines.push(`[tool result ${name}${block.isError === true ? ' (error)' : ''}]\n${text}`)
         } else if (block.type === 'image') {
           throw new LlmError('Cursor native transport does not support image attachments', 'PROVIDER_ERROR')
         }
@@ -412,8 +422,8 @@ export class CursorAgentAdapter extends LlmAdapter {
       run.pending.set(call.callId, call)
       const index = 2 + run.pending.size
       this.push(run, { type: 'block-start', index, blockType: 'tool-call' })
-      this.push(run, { type: 'tool-call-delta', index, id: CallId(call.callId), name: call.name, argumentsDelta: call.argsJson })
-      this.push(run, { type: 'block-end', index, block: { type: 'tool-call', id: CallId(call.callId), name: call.name, arguments: call.argsJson } })
+      this.push(run, { type: 'tool-call-delta', index, id: ToolCallId(call.callId), name: call.name, argumentsDelta: call.argsJson })
+      this.push(run, { type: 'block-end', index, block: { type: 'tool-call', id: ToolCallId(call.callId), name: call.name, arguments: call.argsJson } })
       this.push(run, { type: 'finish', reason: { kind: 'tool-calls' } })
       return
     }

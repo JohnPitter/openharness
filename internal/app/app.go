@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"openharness/internal/remote"
 	"openharness/internal/sidecar"
@@ -16,8 +17,27 @@ type App struct {
 	ctx     context.Context
 	manager *sidecar.Manager
 	remote  remote.Server
-	url     string
-	err     string
+	// mu guards url/err/manager: the boot goroutine writes them while the
+	// frontend polls HarnessState from Wails' binding goroutines.
+	mu  sync.Mutex
+	url string
+	err string
+}
+
+func (a *App) setResult(url string, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err != nil {
+		a.err = err.Error()
+		return
+	}
+	a.url = url
+}
+
+func (a *App) harnessURL() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.url
 }
 
 func New() (*App, error) {
@@ -34,33 +54,39 @@ func New() (*App, error) {
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 	a.initNotifications()
+	m := a.manager
 	go func() {
-		url, err := a.manager.Start(ctx)
+		url, err := m.Start(ctx)
 		if err != nil {
 			slog.Error("sidecar falhou", "err", err)
-			a.err = err.Error()
-			return
+		} else {
+			slog.Info("harness pronto")
 		}
-		a.url = url
-		slog.Info("harness pronto", "url", url)
+		a.setResult(url, err)
 	}()
 }
 
 func (a *App) Shutdown(ctx context.Context) {
 	a.remote.Stop()
-	a.manager.Stop()
+	a.mu.Lock()
+	m := a.manager
+	a.mu.Unlock()
+	m.Stop()
 }
 
 // HarnessState retorna {url} quando o harness está pronto, ou {error};
 // enquanto isso, {phase} informa "extracting" ou "starting".
 func (a *App) HarnessState() map[string]string {
-	if a.err != "" {
-		return map[string]string{"error": a.err}
+	a.mu.Lock()
+	errMsg, url, m := a.err, a.url, a.manager
+	a.mu.Unlock()
+	if errMsg != "" {
+		return map[string]string{"error": errMsg}
 	}
-	if a.url != "" {
-		return map[string]string{"url": a.url}
+	if url != "" {
+		return map[string]string{"url": url}
 	}
-	if phase, ok := a.manager.Phase.Load().(string); ok && phase != "" {
+	if phase, ok := m.Phase.Load().(string); ok && phase != "" {
 		return map[string]string{"phase": phase}
 	}
 	return map[string]string{}
@@ -71,22 +97,21 @@ func (a *App) RestartHarness() error {
 	if a.ctx == nil {
 		return fmt.Errorf("app ainda não iniciado")
 	}
-	a.manager.Stop()
 	a.remote.Stop()
-	a.err = ""
-	a.url = ""
 	m, err := sidecar.NewManager()
 	if err != nil {
 		return err
 	}
+	a.mu.Lock()
+	old := a.manager
 	a.manager = m
+	a.err = ""
+	a.url = ""
+	a.mu.Unlock()
+	old.Stop()
 	go func() {
-		url, err := a.manager.Start(a.ctx)
-		if err != nil {
-			a.err = err.Error()
-			return
-		}
-		a.url = url
+		url, err := m.Start(a.ctx)
+		a.setResult(url, err)
 	}()
 	return nil
 }
@@ -108,10 +133,11 @@ func (a *App) ApplyUpdate() error {
 
 // EnableRemote publishes the harness on the public internet behind a random URL and QR.
 func (a *App) EnableRemote() (remote.Access, error) {
-	if a.url == "" {
+	url := a.harnessURL()
+	if url == "" {
 		return remote.Access{}, fmt.Errorf("harness ainda não está pronto")
 	}
-	return a.remote.Start(a.url)
+	return a.remote.Start(url)
 }
 
 // DisableRemote closes the public tunnel and the local proxy.

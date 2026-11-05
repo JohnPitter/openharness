@@ -3,8 +3,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
-import type { AccountUsageView } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SessionListState } from '@deepseek-ai/dsh-client-runtime/client'
+import type { AccountUsageView } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import type { WorkerModelState } from '../src/client/worker-store.ts'
 import type { UsageStatusChipProps } from '../src/client/UsageStatusChip.tsx'
@@ -27,17 +27,19 @@ function directory(overrides: Partial<ModelDirectoryState> = {}): ModelDirectory
     }],
     failures: [],
     status: 'ready',
+    pending: null,
     error: null,
     ...overrides,
   }
 }
 
 function listState(overrides: Partial<SessionListState> = {}): SessionListState {
-  return {
+  return ({
     ids: [sid],
     byId: {
       [sid]: {
         id: sid,
+        retainedBy: { mainView: 1 },
         displayTitle: 'Chat',
         running: false,
         blank: false,
@@ -53,13 +55,10 @@ function listState(overrides: Partial<SessionListState> = {}): SessionListState 
         },
       },
     },
-    current: sid,
     phase: 'ready',
-    subagentsByParent: {},
-    jobsBySession: {},
-    currentAddress: undefined,
+    projectionsBySession: {},
     ...overrides,
-  }
+  }) as unknown as SessionListState
 }
 
 function interpolate(key: keyof typeof en, vars?: Record<string, string>): string {
@@ -89,9 +88,9 @@ function mount(options: {
   const list = options.list ?? listState()
   const dir = options.directory ?? directory()
   const unused = (() => { throw new Error('unused') }) as never
-  const props: UsageStatusChipProps = {
+  const props = {
     wide: options.wide ?? true,
-    useSessions: select => select(list),
+    useSessions: (select: (state: SessionListState) => unknown) => select(list),
     useWorkspaces: unused,
     directory: {
       getSnapshot: () => dir,
@@ -108,7 +107,7 @@ function mount(options: {
     openQuotas,
     loadAccountUsage,
     t: interpolate as UsageStatusChipProps['t'],
-  }
+  } as unknown as UsageStatusChipProps
   const view = render(<UsageStatusChip {...props} />)
   return { view, ensureDirectory, openModels, openQuotas, loadAccountUsage }
 }
@@ -183,6 +182,7 @@ describe('UsageStatusChip', () => {
         byId: {
           [sid]: {
             id: sid,
+            retainedBy: { mainView: 1 },
             displayTitle: 'Chat',
             running: false,
             blank: false,
@@ -198,7 +198,6 @@ describe('UsageStatusChip', () => {
   it('shows idle copy when no model or usage is known', () => {
     mount({
       list: listState({
-        current: undefined,
         ids: [],
         byId: {},
       }),
@@ -318,7 +317,7 @@ describe('UsageStatusChip', () => {
 
   it('adds the Workflow worker route and its own account quota below the planner quota', async () => {
     const { loadAccountUsage } = mount({
-      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } }),
+      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, projectionValues: { ...listState().byId[sid]!.projectionValues, agentPreset: 'workflow' } } } }),
       directory: directory({
         groups: [
           {
@@ -364,7 +363,7 @@ describe('UsageStatusChip', () => {
 
   it('reuses the planner account quota for the worker when both share a provider', async () => {
     const { loadAccountUsage } = mount({
-      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } }),
+      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, projectionValues: { ...listState().byId[sid]!.projectionValues, agentPreset: 'workflow' } } } }),
       worker: { current: { provider: 'kimi-for-coding', model: 'k3-256k' }, status: 'ready', error: null },
       quota: {
         supported: true,
@@ -394,14 +393,14 @@ describe('UsageStatusChip', () => {
     const loadAccountUsage = vi.fn((provider: string) => provider === 'claude-code'
       ? Promise.reject(new Error('rate limited'))
       : Promise.resolve({ supported: false } satisfies AccountUsageView))
-    const list = listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } })
+    const list = listState({ byId: { [sid]: { ...listState().byId[sid]!, projectionValues: { ...listState().byId[sid]!.projectionValues, agentPreset: 'workflow' } } } })
     const dir = directory()
     const worker: WorkerModelState = {
       current: { provider: 'claude-code', model: 'claude-sonnet-4-5' }, status: 'ready', error: null,
     }
-    const props: UsageStatusChipProps = {
+    const props = {
       wide: true,
-      useSessions: select => select(list),
+      useSessions: (select: (state: SessionListState) => unknown) => select(list),
       useWorkspaces: () => { throw new Error('unused') },
       directory: { getSnapshot: () => dir, subscribe: () => () => {} },
       workerDirectory: { getSnapshot: () => worker, subscribe: () => () => {} },
@@ -410,7 +409,7 @@ describe('UsageStatusChip', () => {
       openQuotas,
       loadAccountUsage,
       t: interpolate as UsageStatusChipProps['t'],
-    }
+    } as unknown as UsageStatusChipProps
     render(<UsageStatusChip {...props} />)
     fireEvent.click(screen.getByRole('button', { expanded: false }))
     await waitFor(() => {
@@ -424,7 +423,7 @@ describe('UsageStatusChip', () => {
       ? Promise.reject('quota endpoint gone')
       : Promise.resolve({ supported: false } satisfies AccountUsageView))
     mount({
-      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } }),
+      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, projectionValues: { ...listState().byId[sid]!.projectionValues, agentPreset: 'workflow' } } } }),
       worker: { current: { provider: 'claude-code', model: 'claude-sonnet-4-5' }, status: 'ready', error: null },
       loadAccountUsage,
     })
@@ -439,7 +438,7 @@ describe('UsageStatusChip', () => {
       ? Promise.reject(new DOMException('The operation was aborted', 'AbortError'))
       : Promise.resolve({ supported: false } satisfies AccountUsageView))
     mount({
-      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, agentPreset: 'workflow' } } }),
+      list: listState({ byId: { [sid]: { ...listState().byId[sid]!, projectionValues: { ...listState().byId[sid]!.projectionValues, agentPreset: 'workflow' } } } }),
       worker: { current: { provider: 'claude-code', model: 'claude-sonnet-4-5' }, status: 'ready', error: null },
       loadAccountUsage,
     })

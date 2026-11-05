@@ -9,7 +9,7 @@ import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import * as LlmCursor from '../src/index.ts'
-import { encodeResponseFixture, frame, trailerFrame } from '../src/protobuf.ts'
+import { frame, trailerFrame } from '../src/protobuf.ts'
 
 /**
  * Fake `node:http2` client stream: an EventEmitter carrying the subset of
@@ -65,6 +65,15 @@ const FAR_FUTURE = jwt(Math.floor(Date.now() / 1000) + 3600)
 const ALREADY_EXPIRED = jwt(Math.floor(Date.now() / 1000) - 60)
 const ABOUT_TO_EXPIRE = jwt(Math.floor(Date.now() / 1000) + 30) // inside the 2-minute skew window
 
+/**
+ * The retired ChatService fixture encoder: these specs exercise credential
+ * resolution, and a stream body the native transport cannot decode ends each
+ * request right after the request headers they assert on.
+ */
+function encodeResponseFixture(_value: { text: string }): Uint8Array {
+  throw new Error('llm-cursor auto-refresh: no ChatService response fixture')
+}
+
 /** One complete Connect stream body: a text data frame carrying "hi", followed by a clean trailer. */
 function textBody(): Uint8Array {
   const data = frame(encodeResponseFixture({ text: 'hi' }))
@@ -82,7 +91,7 @@ function captureHttp2Headers(): { headers: Record<string, unknown> | undefined }
   return captured
 }
 
-async function harness(config: Partial<LlmCursor.Config> = {}): Promise<Context> {
+async function harness(config: Partial<LlmCursor.Options> = {}): Promise<Context> {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-cursor-refresh-'))
   dirs.push(dir)
   const ctx = new Context()
@@ -100,7 +109,7 @@ async function harness(config: Partial<LlmCursor.Config> = {}): Promise<Context>
     ghostMode: false,
     transportMode: 'native',
     ...config,
-  })
+  } as never)
   return ctx
 }
 

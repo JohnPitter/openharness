@@ -1,18 +1,17 @@
 /**
- * Live user overlay for automatic compaction. The `compaction-basic` settings
- * namespace is registered when a settings provider exists; pressure and
- * overflow listeners read it at event time so a General-row change applies
- * without remounting the engine. Absent settings keep the plugin Config.
+ * Live user overlay for automatic compaction. `auto` and `thresholdPercent`
+ * are volatile Config fields, so the host settings forms edit them on the
+ * `compaction-basic` profile entry and the pressure and overflow listeners
+ * read them at event time without remounting the engine. An unset
+ * `thresholdPercent` keeps the routed `thresholdRatio`.
  *
  * @module @deepseek-ai/dsh-compaction-basic/user-settings
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
-import type {} from '@deepseek-ai/dsh-settings'
 
-/** Settings namespace owned by this backend; the General rows bind the same id. */
+/** Profile entry id the General rows bind; the settings forms key edits by it. */
 export const COMPACTION_SETTINGS_NAMESPACE = 'compaction-basic'
 
 /** Discrete context-window fractions the General row offers. */
@@ -22,59 +21,80 @@ export const COMPACTION_THRESHOLD_PERCENTS = [25, 50, 75, 100] as const
 export type CompactionThresholdPercent = typeof COMPACTION_THRESHOLD_PERCENTS[number]
 
 /**
- * Default threshold in the settings document. Closest allowed discrete value
- * to the plugin Config `thresholdRatio` default of `0.8`.
+ * Default threshold the General row shows while the field is unset. Closest
+ * allowed discrete value to the plugin Config `thresholdRatio` default of `0.8`.
  */
 export const DEFAULT_COMPACTION_THRESHOLD_PERCENT: CompactionThresholdPercent = 75
 
-/** Default automatic-compaction switch in the settings document. */
+/** Default automatic-compaction switch. */
 export const DEFAULT_COMPACTION_AUTO = true
 
-/** Durable compaction section shared by the Host schema and the browser scope. */
+/** Resolved live overlay; an absent field defers to the load-time policy. */
 export interface CompactionUserSettings {
-  /** When false, skip step-boundary pressure and overflow-recovery listeners. */
-  auto: boolean
+  /** When false, skip step-boundary pressure, model-switch, and overflow-recovery listeners. */
+  auto?: boolean
   /** Compact when estimated tokens reach this percent of the routed context window. */
-  thresholdPercent: CompactionThresholdPercent
-}
-
-const thresholdPercentSchema: z<CompactionThresholdPercent> = z.union([
-  z.const(25), z.const(50), z.const(75), z.const(100),
-])
-
-/** Durable compaction schema; also the wire envelope the browser scope validates against. */
-export const CompactionUserSettingsSchema: z<CompactionUserSettings> = z.object({
-  auto: z.boolean().default(DEFAULT_COMPACTION_AUTO),
-  thresholdPercent: thresholdPercentSchema.default(DEFAULT_COMPACTION_THRESHOLD_PERCENT),
-})
-
-/** Register the section once per process; later standing mounts no-op. */
-export function registerCompactionUserSettings(ctx: Context): void {
-  const tryRegister = (settingsCtx: Context): void => {
-    // Preset fibers isolate compaction and do not inject `settings`. The
-    // property proxy would throw `without inject`; `get` reads the host store.
-    const settings = settingsCtx.get('settings')
-    if (settings === undefined) return
-    const ns = settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)
-    if (settings.describe().some(row => row.ns === ns)) return
-    settings.register(ns, CompactionUserSettingsSchema)
-  }
-  if (ctx.get('settings') !== undefined) {
-    tryRegister(ctx)
-    return
-  }
-  ctx.inject(['settings'], tryRegister)
+  thresholdPercent?: CompactionThresholdPercent
 }
 
 /**
- * Read the live overlay when the namespace is registered and valid.
- * @param ctx - engine context that may inherit a host settings service.
- * @returns the resolved section, or `undefined` when settings are absent or unregistered.
+ * Host-wide automatic-compaction preference. Presets mount this engine per
+ * Agent, so the General settings rows edit a host entry instead; that entry
+ * provides this service and each engine reads it at event time for every
+ * field its own Config leaves unset.
  */
-export function readCompactionUserSettings(ctx: Context): CompactionUserSettings | undefined {
-  const settings = ctx.get('settings')
-  if (settings === undefined) return undefined
-  return asCompactionUserSettings(settings.get(settingsNamespace(COMPACTION_SETTINGS_NAMESPACE)))
+export interface CompactionUserSettingsSource {
+  /** @returns the current host-wide preference; absent fields defer to the engine. */
+  read(): CompactionUserSettings
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host-wide automatic-compaction preference; absent when no host entry provides it. */
+    compactionUserSettings: CompactionUserSettingsSource
+  }
+}
+
+/** Volatile threshold-percent field schema shared by the plugin Config. */
+export const thresholdPercentSchema: z<CompactionThresholdPercent> = z.union([
+  z.const(25), z.const(50), z.const(75), z.const(100),
+])
+
+/** Schema of the user-editable section, as the General rows validate it. */
+export const CompactionUserSettingsSchema: z<CompactionUserSettings> = z.object({
+  auto: z.boolean(),
+  thresholdPercent: thresholdPercentSchema,
+})
+
+/** A Config field that is either a plain load-time value or a live volatile reference. */
+export type LiveField<T> = T | Volatile<T | undefined> | undefined
+
+/**
+ * Whether a raw Config field is a live volatile reference.
+ * @param value - raw field value.
+ * @returns true for a reference exposing `get()`.
+ */
+export function isVolatileField(value: unknown): value is Volatile<unknown> {
+  return typeof value === 'object' && value !== null && 'get' in value
+    && typeof (value as { get?: unknown }).get === 'function'
+}
+
+/** Read one possibly volatile Config field at call time. */
+function readField(value: unknown): unknown {
+  return isVolatileField(value) ? value.get() : value
+}
+
+/**
+ * Snapshot the live overlay from the engine's raw Config fields.
+ * @param auto - raw `auto` field (volatile under the Loader, plain in direct construction).
+ * @param thresholdPercent - raw `thresholdPercent` field.
+ * @returns the currently valid overlay fields; invalid values are dropped.
+ */
+export function readCompactionUserSettings(
+  auto: LiveField<boolean>,
+  thresholdPercent: LiveField<CompactionThresholdPercent>,
+): CompactionUserSettings {
+  return asCompactionUserSettings({ auto: readField(auto), thresholdPercent: readField(thresholdPercent) })
 }
 
 /**
@@ -87,7 +107,7 @@ export function overlayAutomaticEnabled(
   pluginAuto: boolean,
   overlay: CompactionUserSettings | undefined,
 ): boolean {
-  return overlay === undefined ? pluginAuto : overlay.auto
+  return overlay?.auto ?? pluginAuto
 }
 
 /**
@@ -100,17 +120,17 @@ export function overlayThresholdRatio(
   pluginRatio: number,
   overlay: CompactionUserSettings | undefined,
 ): number {
-  return overlay === undefined ? pluginRatio : overlay.thresholdPercent / 100
+  return overlay?.thresholdPercent === undefined ? pluginRatio : overlay.thresholdPercent / 100
 }
 
-/** Admit a resolved settings value into the overlay type, or drop it. */
-export function asCompactionUserSettings(value: unknown): CompactionUserSettings | undefined {
-  if (typeof value !== 'object' || value === null) return undefined
+/** Admit resolved settings values into the overlay type, dropping invalid fields. */
+export function asCompactionUserSettings(value: unknown): CompactionUserSettings {
+  if (typeof value !== 'object' || value === null) return {}
   const { auto, thresholdPercent } = value as Record<string, unknown>
-  if (typeof auto !== 'boolean') return undefined
-  if (
-    thresholdPercent !== 25 && thresholdPercent !== 50
-    && thresholdPercent !== 75 && thresholdPercent !== 100
-  ) return undefined
-  return { auto, thresholdPercent }
+  return {
+    ...typeof auto === 'boolean' ? { auto } : {},
+    ...thresholdPercent === 25 || thresholdPercent === 50 || thresholdPercent === 75 || thresholdPercent === 100
+      ? { thresholdPercent }
+      : {},
+  }
 }

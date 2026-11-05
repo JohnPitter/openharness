@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Kimi for Code",
+    "description": "Kimi for Code chat-completions 适配器（K2.x 与 K3），支持实时模型列表。"
+  }
+}

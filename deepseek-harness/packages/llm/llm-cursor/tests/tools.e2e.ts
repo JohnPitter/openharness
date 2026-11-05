@@ -11,7 +11,7 @@ const tools = [{
 }]
 const user = createUserMessage({
   content: [{ type: 'text', text: "Call the echo tool with msg='ping' and then report exactly what it returned." }],
-  source: { kind: 'plugin', plugin: 'cursor-tools-e2e' },
+  source: { kind: 'user' },
 })
 
 describe.skipIf(!process.env.CURSOR_API_KEY)('Cursor custom tools e2e (real API)', () => {

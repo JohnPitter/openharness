@@ -1,4 +1,4 @@
-import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
+import { isMissingCredential, LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk, ToolSchema, TokenUsage } from '@deepseek-ai/dsh-llm'
 import {
   CATALOG_LISTING_TIMEOUT_MS, catalogModelInfo, rejectedWhenAborted, resolveCatalogModel,
@@ -39,7 +39,6 @@ function textOf(message: GenerateOptions['messages'][number]): string {
   return message.content.map((block) => {
     if ('text' in block) return block.text
     if (block.type === 'tool-call') return block.arguments
-    if (block.type === 'tool-result') return block.content.map(x => 'text' in x ? x.text : '').join('')
     return ''
   }).join('')
 }
@@ -57,8 +56,8 @@ function toolSignature(tools: ToolSchema[]): string { return JSON.stringify(tool
 function sessionKey(options: GenerateOptions): string { return String(options.sessionId ?? crypto.randomUUID()) }
 function resultFor(message: GenerateOptions['messages'][number]): Array<{ id: string; value: unknown }> {
   const out: Array<{ id: string; value: unknown }> = []
-  for (const block of message.content) {
-    if (block.type === 'tool-result') out.push({ id: String(block.toolCallId), value: block.content.map(x => 'text' in x ? x.text : '').join('') })
+  if (message.role === 'tool') {
+    out.push({ id: String(message.toolCallId), value: message.content.map(x => 'text' in x ? x.text : '').join('') })
   }
   return out
 }
@@ -94,6 +93,7 @@ export class CursorCloudAdapter extends LlmAdapter {
       const listed = models.map(model => ({ provider: 'cursor' as const, id: model.id, name: model.displayName }))
       return listed.length > 0 ? listed : catalog
     } catch (error) {
+      if (isMissingCredential(error)) return []
       console.warn('Cursor SDK listModels failed; using configured catalog', error)
       return catalog
     }

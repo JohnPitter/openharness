@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ReasoningEffortId, createUserMessage, createMessage } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { reasoningFamilyOf, serializeMessages, serializeRequest } from '../src/serialize.ts'
 
@@ -10,7 +10,7 @@ function request(overrides: Partial<GenerateOptions> = {}): GenerateOptions {
     messages: [
       createUserMessage({
         content: [{ type: 'text', text: 'hi' }],
-        source: { kind: 'plugin', plugin: 'test' },
+        source: { kind: 'user' },
       }),
     ],
     ...overrides,
@@ -122,13 +122,12 @@ describe('serializeRequest K2', () => {
 describe('serializeMessages', () => {
   it('passes reasoning_content back on tool-call-free turns', () => {
     const wire = serializeMessages([
-      createMessage({
-        role: 'assistant',
+      createAssistantMessage({
         content: [
           { type: 'reasoning', text: 'thinking…' },
           { type: 'text', text: 'answer' },
         ],
-        source: { kind: 'plugin', plugin: 'test' },
+        source: { provider: 'kimi-for-coding', model: 'kimi-for-coding' },
       }),
     ])
     expect(wire).toEqual([{ role: 'assistant', content: 'answer', reasoning_content: 'thinking…' }])

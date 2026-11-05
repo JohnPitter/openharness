@@ -1,0 +1,32 @@
+- banner:
+  - navigation "Session hierarchy": /user-invoke-demo @"meeting notes-this-i
+  - button "Standard mode"
+  - button "More actions"
+  - button "Open right sidebar"
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+  - button "More conversation views"
+- group "Session waypoints":
+  - 'button "Message: /user-invoke-demo @\"meeting notes-this-is-a-very-long-filename-for-testing-user…"'
+- button "/user-invoke-demo"
+- button "meeting notes-this-is-a-very-long-filename-for-testing-user-message-file-references-and-preview-layout.md"
+- text: and confirm the fixture wiring {{clock}}
+- button "Copy"
+- button "Edit message"
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
+- paragraph: USER_INVOKE_REPLY acknowledged; following the injected skill.
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands"
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
+- button "Send message" [disabled]
+- button "1 turns 1 steps · {{throughput}} tok/s": 1 turns 1 steps{{throughput}} tok/s
+- button "272 tok · Cache hit 0%": 272 tokCache hit 0%
+- button "0% of context used": 0%

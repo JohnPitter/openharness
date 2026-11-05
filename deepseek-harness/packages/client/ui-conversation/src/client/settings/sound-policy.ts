@@ -3,9 +3,8 @@
  * completion postMessage. Host writes go through the bound scope; absent
  * compositions stay process-local.
  */
-import {
-  createSnapshotStore, type SettingsScope, type SnapshotStore,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   DEFAULT_TASK_COMPLETE_SOUND, TASK_COMPLETE_SOUND_FIELD,
   type TaskCompleteSound,
@@ -18,20 +17,22 @@ export { DEFAULT_TASK_COMPLETE_SOUND } from '../../desktop-sound-settings.ts'
 export class TaskCompleteSoundPolicy {
   /** Reactive sound id for the Settings row and completion post. */
   readonly sound: SnapshotStore<TaskCompleteSound> = createSnapshotStore(DEFAULT_TASK_COMPLETE_SOUND)
-  private readonly host: SettingsScope<ConversationSettings> | undefined
+  private readonly host: ConfigForm<ConversationSettings> | undefined
+  private readonly unsubscribe: (() => void) | undefined
 
   /**
-   * @param host - durable conversation preference scope; absent compositions
-   * stay process-local. The adoption subscription shares the scope's plugin
-   * lifetime — a disposed scope never publishes again.
+   * @param host - shared configuration form; absent compositions stay process-local.
    */
-  constructor(host?: SettingsScope<ConversationSettings>) {
+  constructor(host?: ConfigForm<ConversationSettings>) {
     this.host = host
     if (host !== undefined) {
-      host.subscribe(() => { this.adopt(host) })
+      this.unsubscribe = host.subscribe(() => { this.adopt(host) })
       this.adopt(host)
     }
   }
+
+  /** Release the preference subscription. */
+  dispose(): void { this.unsubscribe?.() }
 
   /**
    * Persist and publish a catalog id.
@@ -47,7 +48,7 @@ export class TaskCompleteSoundPolicy {
    * Adopt the scope's accepted durable section without writing it back.
    * @param host - the constructor-narrowed scope driving this adoption.
    */
-  private adopt(host: SettingsScope<ConversationSettings>): void {
+  private adopt(host: ConfigForm<ConversationSettings>): void {
     const section = host.getSnapshot().value
     if (section === undefined) return
     if (this.sound.getSnapshot() !== section.taskCompleteSound) {

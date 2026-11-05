@@ -8,11 +8,11 @@
   max-width: 180px;
   padding: 0 2px 0 0;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-xs);
   background: var(--dsw-alias-fill-tsp-secondary);
   font-size: 12px;
   line-height: 22px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -25,10 +25,16 @@
   padding: 0 4px 0 2px;
 }
 
-.trigger:not(:disabled):hover,
 .trigger[aria-expanded='true'] {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+@media (hover: hover) {
+  .trigger:not(:disabled):hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
 }
 
 .trigger:disabled {
@@ -63,4 +69,13 @@
   line-height: 16px;
   color: var(--dsw-alias-label-caption);
   white-space: normal;
+}
+
+/* First sacrifice when the title row (the enclosing inline-size container)
+   runs out of width: the passive label (a child session's preset name)
+   yields before any interactive header action loses its label. */
+@container (max-width: 540px) {
+  .label {
+    display: none;
+  }
 }

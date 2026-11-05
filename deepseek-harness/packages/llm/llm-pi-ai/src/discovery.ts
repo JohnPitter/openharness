@@ -10,7 +10,7 @@
  *
  * Neither path is a catalog refresh. Nothing here is stored: the request
  * carries a draft the user is still editing, and the reply is candidate
- * metadata the surface offers for adoption. `settings.yaml` remains the only
+ * metadata the surface offers for adoption. `cordis.patch.yml` remains the only
  * thing that decides what a route serves.
  *
  * OpenAI-compatible and Anthropic Messages protocols are interrogated through
@@ -23,7 +23,7 @@
  */
 
 import { INVALID_CREDENTIAL_CODE, LlmError, normalizeApiKey } from '@deepseek-ai/dsh-llm'
-import type { LlmDiscoveredModel, LlmModelDiscoveryRequest } from '@deepseek-ai/dsh-llm'
+import type { LlmDiscoveredModel, LlmModelDiscoveryOperation } from '@deepseek-ai/dsh-llm'
 import { attributionHeaders } from '@deepseek-ai/dsh-llm'
 import { catalogModels } from './catalog.ts'
 
@@ -270,7 +270,7 @@ export interface StoredModelDiscoveryProfile {
  *   refuses or fails the request, or the reply is not a model listing.
  */
 export async function discoverModels(
-  request: LlmModelDiscoveryRequest,
+  request: LlmModelDiscoveryOperation,
   storedProfile?: () => StoredModelDiscoveryProfile | undefined,
   catalogIdOf?: (provider: string) => string | undefined,
 ): Promise<readonly LlmDiscoveredModel[]> {
@@ -287,6 +287,7 @@ export async function discoverModels(
         name: model.name,
         contextWindow: model.contextWindow,
         maxTokens: model.maxTokens,
+        inputModalities: [...model.input],
       }))
     }
   }
@@ -313,8 +314,8 @@ export async function discoverModels(
   const url = listingUrl(request.baseURL, api)
   // A key typed into the form wins: it may replace the stored key that is
   // failing. The stored profile is asked past the catalog and protocol checks,
-  // and its credential resolver remains lazy so a typed key cannot fail over
-  // a stored credential it supersedes. A route may still authenticate through a
+  // and its credential resolver remains lazy so a typed key cannot fail over a
+  // stored credential it supersedes. A route may still authenticate through a
   // deployment-owned Authorization header when neither key exists.
   const stored = storedProfile?.()
   const supplied = request.apiKey ?? await stored?.resolveApiKey()

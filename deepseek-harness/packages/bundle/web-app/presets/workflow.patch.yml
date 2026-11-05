@@ -1,0 +1,191 @@
+# Agent preset workflow (OpenHarness): one `@deepseek-ai/dsh-agent-preset`
+# declaration inserted after the web patch. Edits saved from the Web editor
+# override this row's `config.plugins` by id from the profile patch.
+#
+# The full coding agent as an orchestrator/planner. The revision keeps the same
+# tools as `standard` so in-process workers, which join the parent's exact
+# revision, inherit grep, filesystem, shell, and skill. A root Workflow agent
+# is restricted at runtime to coordinator tools (subagent, workflow, todo,
+# ask-user, plan): grep/edit/shell/skill/ralph/fork and milestone_write are
+# denied on its own scope only. Workers keep them and run on the model chosen
+# in the worker chip beside this preset. One or two tasks go through
+# `subagent`; the `workflow` tool is a fan-out script, not a shell. The spawn
+# `subagent` tool never waits (`foregroundWait: never`), so the planner stays
+# free to take more user instructions and launch further workers.
+- insert:
+    - id: preset-workflow
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: workflow
+        order: 5
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: >-
+                You are the orchestrator and planner for this session, powered by the {{model}} model.
+
+                Think, choose, and design the solution. You never inspect the tree, grep, edit files, fetch the web, or run shell yourself — those tools are unavailable to you. Delegate every information-gathering step (grep, glob, read) and every modification (edit, write, shell, tests) by calling subagent with a concrete task, success criteria, and the files to touch. Stay in the coordinator role for the whole session.
+
+                Each subagent call returns immediately. Never wait for a worker to finish before the next action: start independent tasks together in one message, stay ready for further user instructions, and launch more workers for remaining tasks. Worker results arrive later as notices.
+
+                When the user attaches images and your model cannot see them, still describe the visual task in the worker prompt — the harness forwards those images to each worker you start. Name what to look for; do not claim you inspected the pixels yourself.
+
+                Do not load the j-space skill or any other skill. If construction needs a pass, name it in the subagent task so the worker can load it.
+
+                When a delegated task creates or edits code, put the coding bar in that worker's prompt as short excerpts plus the instruction-file paths to follow (AGENTS.md, package AGENTS.md, CLAUDE.md, or the owning README) — never paste the whole file. Quote only the rules that apply to this change: naming, tests, layering, error handling, and what not to invent. Worker models are faster and more concise; they skip software-engineering discipline unless the task names the relevant bar. Name the files so the worker can read the rest if the excerpts are not enough.
+
+                The workflow tool is not a shell and not a substitute for grep, edit, or pwsh: it only runs a JavaScript script that starts workers through agent(). For one or two tasks, call subagent only. Use workflow only when the work fans out across many independent pieces and the script actually starts those workers.
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              # Set false to drop the apply_patch tool beside edit.
+              applyPatch: false
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          # Code navigation (LSP), complementing tool-fs-search's textual
+          # matches. `lsp` registers ctx.lsp, so it needs its own realm like
+          # `compaction` below; `lsp-stdio` and `tool-lsp` provide no service.
+          # TypeScript resolution walks up from the analyzed file to that
+          # workspace's own `typescript` install; a project without one gets a
+          # structured LSP error from the query, not a crash. Extend `servers`
+          # here to add another language.
+          - id: lsp
+            name: cordis:group
+            group: true
+            isolate:
+              lsp: true
+            config:
+              - id: lsp-service
+                name: '@deepseek-ai/dsh-lsp'
+              - id: lsp-stdio
+                name: '@deepseek-ai/dsh-lsp-stdio'
+                config:
+                  servers:
+                    typescript:
+                      command: typescript-language-server
+                      args: [--stdio]
+                      extensionToLanguage:
+                        '.ts': typescript
+                        '.tsx': typescriptreact
+                        '.js': javascript
+                        '.jsx': javascriptreact
+                        '.mjs': javascript
+                        '.cjs': javascript
+              - id: tool-lsp
+                name: '@deepseek-ai/dsh-tool-lsp'
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              # Skills the web bundle ships beside its presets (J-Space).
+              customSkillDirs:
+                - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-web-app/package.json')), 'skills')
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: command-goal
+            name: '@deepseek-ai/dsh-command-goal'
+          - id: tool-goal
+            name: '@deepseek-ai/dsh-tool-goal'
+          - id: planning
+            name: cordis:group
+            group: true
+            isolate:
+              planMode: true
+            config:
+              - id: plan-mode
+                name: '@deepseek-ai/dsh-plan-mode'
+                config:
+                  section: |
+                    You are in plan mode. Stay in plan mode until the user approves your plan through exit_plan_mode or switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+                    Explore first. Delegate non-mutating reads, searches, static analysis, and checks to a worker subagent so the plan is grounded in the actual repository. Do not inspect the tree yourself. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+                    The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+                    Resolve discoverable facts by delegating inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when a worker can find out.
+
+                    Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+                    When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 4096
+                  headChars: 2048
+                  tailChars: 512
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  # Workers run on the worker-chip model, never one the planner picks.
+                  foregroundWait: never
+              - id: tool-subagent-fork
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: fork
+                  toolName: subagent_fork
+              - id: workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                config:
+                  provider: spawn
+              - id: tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-milestone
+            name: '@deepseek-ai/dsh-tool-milestone'
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+          - id: tool-plugin-manager
+            name: '@deepseek-ai/dsh-plugin-manager/tools'
+            disabled: !!js "!ctx.get('profileContext')"
+          - id: tool-plugin-market
+            name: '@deepseek-ai/dsh-plugin-market/tools'
+            disabled: true

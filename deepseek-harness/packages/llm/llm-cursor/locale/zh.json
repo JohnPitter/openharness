@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Cursor",
+    "description": "Cursor 适配器，使用 cursor-agent 协议，支持登录与配额。"
+  }
+}

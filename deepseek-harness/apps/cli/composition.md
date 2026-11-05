@@ -3,25 +3,35 @@
 
 # DSH Base Composition
 
-The dsh-base bundle patch every profile applies first; mode bundles (dsh-web-app, dsh-headless) and the user's profile layer patch over it.
+The dsh-base bundle patch shared by the web, headless, sdk, and acp profiles; their mode bundles and user layers patch over it, while sdk-minimal owns a separate standalone tree.
 
 ```mermaid
 flowchart LR
   cfg["packages/bundle/base/cordis.patch.yml<br/>cordis.yml"]
+  plugin_dsh_base_tool_plugin_manager["tool-plugin-manager<br/>@deepseek-ai/dsh-plugin-manager/tools"]
+  cfg --> plugin_dsh_base_tool_plugin_manager
+  plugin_dsh_base_plugin_manager["plugin-manager<br/>@deepseek-ai/dsh-plugin-manager"]
+  cfg --> plugin_dsh_base_plugin_manager
   plugin_dsh_base_timer["timer<br/>@deepseek-ai/cordis-plugin-timer"]
   cfg --> plugin_dsh_base_timer
-  plugin_dsh_base_hmr["hmr<br/>@deepseek-ai/cordis-plugin-hmr"]
+  plugin_dsh_base_hmr["hmr<br/>@deepseek-ai/dsh-hmr"]
   cfg --> plugin_dsh_base_hmr
   plugin_dsh_base_llm["llm<br/>@deepseek-ai/dsh-llm"]
   cfg --> plugin_dsh_base_llm
+  plugin_dsh_base_deepseek_llm_api_extensions["deepseek-llm-api-extensions<br/>@deepseek-ai/dsh-deepseek-llm-api-extensions"]
+  cfg --> plugin_dsh_base_deepseek_llm_api_extensions
   plugin_dsh_base_session["session<br/>@deepseek-ai/dsh-session"]
   cfg --> plugin_dsh_base_session
+  plugin_dsh_base_session_log_deepseek["session-log-deepseek<br/>@deepseek-ai/dsh-session-log-deepseek"]
+  cfg --> plugin_dsh_base_session_log_deepseek
   plugin_dsh_base_typert["typert<br/>@deepseek-ai/dsh-typert-registry"]
   cfg --> plugin_dsh_base_typert
   plugin_dsh_base_typert_loader["typert-loader<br/>@deepseek-ai/dsh-typert-loader"]
   cfg --> plugin_dsh_base_typert_loader
   plugin_dsh_base_typert_gateway["typert-gateway<br/>@deepseek-ai/dsh-api-gateway"]
   cfg --> plugin_dsh_base_typert_gateway
+  plugin_dsh_base_remote_access["remote-access<br/>@deepseek-ai/dsh-api-remote-access"]
+  cfg --> plugin_dsh_base_remote_access
   plugin_dsh_base_session_title["session-title<br/>@deepseek-ai/dsh-session-title"]
   cfg --> plugin_dsh_base_session_title
   plugin_dsh_base_session_title_llm["session-title-llm<br/>@deepseek-ai/dsh-session-title-first-prompt-llm"]
@@ -30,98 +40,48 @@ flowchart LR
   cfg --> plugin_dsh_base_user_questions
   plugin_dsh_base_agent["agent<br/>@deepseek-ai/dsh-agent"]
   cfg --> plugin_dsh_base_agent
+  plugin_dsh_base_plugin_package_inventory_deepseek["plugin-package-inventory-deepseek<br/>@deepseek-ai/dsh-plugin-package-inventory-deepseek"]
+  cfg --> plugin_dsh_base_plugin_package_inventory_deepseek
   plugin_dsh_base_agent_default_model["agent-default-model<br/>@deepseek-ai/dsh-agent-default-model"]
   cfg --> plugin_dsh_base_agent_default_model
   plugin_dsh_base_jobs["jobs<br/>@deepseek-ai/dsh-jobs-local"]
   cfg --> plugin_dsh_base_jobs
   plugin_dsh_base_llm_retry["llm-retry<br/>@deepseek-ai/dsh-llm-retry"]
   cfg --> plugin_dsh_base_llm_retry
-  plugin_dsh_base_settings["settings<br/>@deepseek-ai/dsh-settings-file"]
+  plugin_dsh_base_config_editor["config-editor<br/>@deepseek-ai/dsh-config-editor"]
+  cfg --> plugin_dsh_base_config_editor
+  plugin_dsh_base_settings["settings<br/>@deepseek-ai/dsh-settings"]
   cfg --> plugin_dsh_base_settings
+  plugin_dsh_base_authorization["authorization<br/>@deepseek-ai/dsh-authorization"]
+  cfg --> plugin_dsh_base_authorization
+  plugin_dsh_base_deepseek_account["deepseek-account<br/>@deepseek-ai/dsh-deepseek-account-platform"]
+  cfg --> plugin_dsh_base_deepseek_account
   plugin_dsh_base_credentials["credentials<br/>@deepseek-ai/dsh-credentials-local"]
   cfg --> plugin_dsh_base_credentials
   plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@deepseek-ai/dsh-llm-pi-ai"]
   cfg --> plugin_dsh_base_llm_pi_ai
-  plugin_dsh_base_glm_5_3["glm-5.3<br/>GLM-5.3"]
-  cfg --> plugin_dsh_base_glm_5_3
-  plugin_dsh_base_glm_5_3_flash["glm-5.3-flash<br/>GLM-5.3-Flash"]
-  cfg --> plugin_dsh_base_glm_5_3_flash
-  plugin_dsh_base_glm_5_2["glm-5.2<br/>GLM-5.2"]
-  cfg --> plugin_dsh_base_glm_5_2
-  plugin_dsh_base_glm_5_1["glm-5.1<br/>GLM-5.1"]
-  cfg --> plugin_dsh_base_glm_5_1
-  plugin_dsh_base_glm_5_turbo["glm-5-turbo<br/>GLM-5-Turbo"]
-  cfg --> plugin_dsh_base_glm_5_turbo
-  plugin_dsh_base_glm_5v_turbo["glm-5v-turbo<br/>GLM-5V-Turbo"]
-  cfg --> plugin_dsh_base_glm_5v_turbo
-  plugin_dsh_base_glm_4_7["glm-4.7<br/>GLM-4.7"]
-  cfg --> plugin_dsh_base_glm_4_7
-  plugin_dsh_base_glm_4_5_air["glm-4.5-air<br/>GLM-4.5-Air"]
-  cfg --> plugin_dsh_base_glm_4_5_air
-  plugin_dsh_base_big_pickle["big-pickle<br/>Big Pickle"]
-  cfg --> plugin_dsh_base_big_pickle
-  plugin_dsh_base_mimo_v2_5_free["mimo-v2.5-free<br/>MiMo V2.5 Free"]
-  cfg --> plugin_dsh_base_mimo_v2_5_free
-  plugin_dsh_base_hy3_free["hy3-free<br/>Hy3 Free"]
-  cfg --> plugin_dsh_base_hy3_free
-  plugin_dsh_base_nemotron_3_ultra_free["nemotron-3-ultra-free<br/>Nemotron 3 Ultra Free"]
-  cfg --> plugin_dsh_base_nemotron_3_ultra_free
-  plugin_dsh_base_nemotron_3_5_lightning_free["nemotron-3.5-lightning-free<br/>Nemotron 3.5 Lightning Free"]
-  cfg --> plugin_dsh_base_nemotron_3_5_lightning_free
-  plugin_dsh_base_deepseek_v4_flash_free["deepseek-v4-flash-free<br/>DeepSeek V4 Flash Free"]
-  cfg --> plugin_dsh_base_deepseek_v4_flash_free
-  plugin_dsh_base_laguna_s_2_1_free["laguna-s-2.1-free<br/>Laguna S 2.1 Free"]
-  cfg --> plugin_dsh_base_laguna_s_2_1_free
-  plugin_dsh_base_kimi_k2_7_code["kimi-k2.7-code<br/>Kimi K2.7 Code"]
-  cfg --> plugin_dsh_base_kimi_k2_7_code
-  plugin_dsh_base_kimi_k3["kimi-k3<br/>Kimi K3"]
-  cfg --> plugin_dsh_base_kimi_k3
-  plugin_dsh_base_glm_5_2["glm-5.2<br/>GLM 5.2"]
-  cfg --> plugin_dsh_base_glm_5_2
-  plugin_dsh_base_glm_5_1["glm-5.1<br/>GLM 5.1"]
-  cfg --> plugin_dsh_base_glm_5_1
-  plugin_dsh_base_minimax_m2_7["minimax-m2.7<br/>MiniMax M2.7"]
-  cfg --> plugin_dsh_base_minimax_m2_7
-  plugin_dsh_base_minimax_m3["minimax-m3<br/>MiniMax M3"]
-  cfg --> plugin_dsh_base_minimax_m3
-  plugin_dsh_base_deepseek_v4_pro["deepseek-v4-pro<br/>DeepSeek V4 Pro"]
-  cfg --> plugin_dsh_base_deepseek_v4_pro
-  plugin_dsh_base_deepseek_v4_flash["deepseek-v4-flash<br/>DeepSeek V4 Flash"]
-  cfg --> plugin_dsh_base_deepseek_v4_flash
-  plugin_dsh_base_deepseek_v4_flash["deepseek-v4-flash<br/>DeepSeek V4 Flash Go"]
-  cfg --> plugin_dsh_base_deepseek_v4_flash
-  plugin_dsh_base_deepseek_v4_pro["deepseek-v4-pro<br/>DeepSeek V4 Pro Go"]
-  cfg --> plugin_dsh_base_deepseek_v4_pro
-  plugin_dsh_base_glm_5_1["glm-5.1<br/>GLM 5.1 Go"]
-  cfg --> plugin_dsh_base_glm_5_1
-  plugin_dsh_base_glm_5_2["glm-5.2<br/>GLM 5.2 Go"]
-  cfg --> plugin_dsh_base_glm_5_2
-  plugin_dsh_base_hy3["hy3<br/>Hy3"]
-  cfg --> plugin_dsh_base_hy3
-  plugin_dsh_base_kimi_k2_6["kimi-k2.6<br/>Kimi K2.6"]
-  cfg --> plugin_dsh_base_kimi_k2_6
-  plugin_dsh_base_kimi_k2_7_code["kimi-k2.7-code<br/>Kimi K2.7 Code Go"]
-  cfg --> plugin_dsh_base_kimi_k2_7_code
-  plugin_dsh_base_kimi_k3["kimi-k3<br/>Kimi K3 (2x usage)"]
-  cfg --> plugin_dsh_base_kimi_k3
-  plugin_dsh_base_mimo_v2_5["mimo-v2.5<br/>MiMo V2.5"]
-  cfg --> plugin_dsh_base_mimo_v2_5
-  plugin_dsh_base_mimo_v2_5_pro["mimo-v2.5-pro<br/>MiMo V2.5 Pro"]
-  cfg --> plugin_dsh_base_mimo_v2_5_pro
-  plugin_dsh_base_minimax_m2_7["minimax-m2.7<br/>MiniMax M2.7 Go"]
-  cfg --> plugin_dsh_base_minimax_m2_7
-  plugin_dsh_base_qwen3_6_plus["qwen3.6-plus<br/>Qwen3.6 Plus"]
-  cfg --> plugin_dsh_base_qwen3_6_plus
-  plugin_dsh_base_llm_cursor["llm-cursor<br/>@deepseek-ai/dsh-llm-cursor"]
-  cfg --> plugin_dsh_base_llm_cursor
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@deepseek-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_attachment_local["attachment-local<br/>@deepseek-ai/dsh-attachment-local"]
   cfg --> plugin_dsh_base_attachment_local
   plugin_dsh_base_session_query_sqlite["session-query-sqlite<br/>@deepseek-ai/dsh-session-query-sqlite"]
   cfg --> plugin_dsh_base_session_query_sqlite
+  plugin_dsh_base_working_directory["working-directory<br/>@deepseek-ai/dsh-working-directory"]
+  cfg --> plugin_dsh_base_working_directory
+  plugin_dsh_base_tool_working_directory["tool-working-directory<br/>@deepseek-ai/dsh-tool-working-directory"]
+  cfg --> plugin_dsh_base_tool_working_directory
   plugin_dsh_base_session_projection["session-projection<br/>@deepseek-ai/dsh-session-projection"]
   cfg --> plugin_dsh_base_session_projection
+  plugin_dsh_base_storage["storage<br/>@deepseek-ai/dsh-storage"]
+  cfg --> plugin_dsh_base_storage
+  plugin_dsh_base_storage_json["storage-json<br/>@deepseek-ai/dsh-storage-json"]
+  cfg --> plugin_dsh_base_storage_json
+  plugin_dsh_base_storage_domain["storage-domain<br/>@deepseek-ai/dsh-storage-domain"]
+  cfg --> plugin_dsh_base_storage_domain
+  plugin_dsh_base_session_projection_cache["session-projection-cache<br/>@deepseek-ai/dsh-session-projection-cache"]
+  cfg --> plugin_dsh_base_session_projection_cache
+  plugin_dsh_base_otel["otel<br/>@deepseek-ai/dsh-otel"]
+  cfg --> plugin_dsh_base_otel
   plugin_dsh_base_session_telemetry_otel["session-telemetry-otel<br/>@deepseek-ai/dsh-session-telemetry-otel"]
   cfg --> plugin_dsh_base_session_telemetry_otel
   plugin_dsh_base_subprocess["subprocess<br/>@deepseek-ai/dsh-subprocess-local"]
@@ -158,8 +118,6 @@ flowchart LR
   cfg --> plugin_dsh_base_skill
   plugin_dsh_base_skill_filesystem["skill-filesystem<br/>@deepseek-ai/dsh-skill-filesystem"]
   cfg --> plugin_dsh_base_skill_filesystem
-  plugin_dsh_base_skill_badge["skill-badge<br/>@deepseek-ai/dsh-skill-badge"]
-  cfg --> plugin_dsh_base_skill_badge
   plugin_dsh_base_tool_skill["tool-skill<br/>@deepseek-ai/dsh-tool-skill"]
   cfg --> plugin_dsh_base_tool_skill
   plugin_dsh_base_commands["commands<br/>@deepseek-ai/dsh-commands"]
@@ -188,16 +146,14 @@ flowchart LR
   cfg --> plugin_dsh_base_subagent_fork_in_process
   plugin_dsh_base_tool_subagent_control["tool-subagent-control<br/>@deepseek-ai/dsh-tool-subagent-control"]
   cfg --> plugin_dsh_base_tool_subagent_control
-  plugin_dsh_base_tool_subagent_list_agents["tool-subagent-list-agents<br/>@deepseek-ai/dsh-tool-subagent-control/list-agents"]
-  cfg --> plugin_dsh_base_tool_subagent_list_agents
   plugin_dsh_base_tool_subagent["tool-subagent<br/>@deepseek-ai/dsh-tool-subagent"]
   cfg --> plugin_dsh_base_tool_subagent
   plugin_dsh_base_tool_subagent_fork["tool-subagent-fork<br/>@deepseek-ai/dsh-tool-subagent"]
   cfg --> plugin_dsh_base_tool_subagent_fork
-  plugin_dsh_base_tool_subagent_report["tool-subagent-report<br/>@deepseek-ai/dsh-tool-subagent-report"]
-  cfg --> plugin_dsh_base_tool_subagent_report
-  plugin_dsh_base_workflow_worker_thread["workflow-worker-thread<br/>@deepseek-ai/dsh-workflow-worker-thread"]
-  cfg --> plugin_dsh_base_workflow_worker_thread
+  plugin_dsh_base_ptc_runtime["ptc-runtime<br/>@deepseek-ai/dsh-ptc-runtime-node"]
+  cfg --> plugin_dsh_base_ptc_runtime
+  plugin_dsh_base_workflow_ptc["workflow-ptc<br/>@deepseek-ai/dsh-workflow-ptc"]
+  cfg --> plugin_dsh_base_workflow_ptc
   plugin_dsh_base_tool_workflow["tool-workflow<br/>@deepseek-ai/dsh-tool-workflow"]
   cfg --> plugin_dsh_base_tool_workflow
   plugin_dsh_base_timeout_policy["timeout-policy<br/>@deepseek-ai/dsh-tool-call-timeout-policy"]
@@ -210,99 +166,83 @@ flowchart LR
   cfg --> plugin_dsh_base_session_checkpoint_policy
   plugin_dsh_base_tool_result_pruner["tool-result-pruner<br/>@deepseek-ai/dsh-compaction-tool-result-pruner"]
   cfg --> plugin_dsh_base_tool_result_pruner
+  plugin_dsh_base_image_offload["image-offload<br/>@deepseek-ai/dsh-compaction-image-offload"]
+  cfg --> plugin_dsh_base_image_offload
   plugin_dsh_base_tool_todo["tool-todo<br/>@deepseek-ai/dsh-tool-todo"]
   cfg --> plugin_dsh_base_tool_todo
-  plugin_dsh_base_tool_milestone["tool-milestone<br/>@deepseek-ai/dsh-tool-milestone"]
-  cfg --> plugin_dsh_base_tool_milestone
   plugin_dsh_base_tool_goal["tool-goal<br/>@deepseek-ai/dsh-tool-goal"]
   cfg --> plugin_dsh_base_tool_goal
-  plugin_dsh_base_tool_ralph["tool-ralph<br/>@deepseek-ai/dsh-tool-ralph"]
-  cfg --> plugin_dsh_base_tool_ralph
-  plugin_dsh_base_tool_str_replace_editor["tool-str-replace-editor<br/>@deepseek-ai/dsh-tool-str-replace-editor"]
-  cfg --> plugin_dsh_base_tool_str_replace_editor
   plugin_dsh_base_repeat_tool_reminder["repeat-tool-reminder<br/>@deepseek-ai/dsh-repeat-tool-reminder"]
   cfg --> plugin_dsh_base_repeat_tool_reminder
   plugin_dsh_base_web["web<br/>@deepseek-ai/dsh-web"]
   cfg --> plugin_dsh_base_web
-  plugin_dsh_base_web_search_duckduckgo["web-search-duckduckgo<br/>@deepseek-ai/dsh-web-search-duckduckgo"]
-  cfg --> plugin_dsh_base_web_search_duckduckgo
   plugin_dsh_base_web_search_deepseek["web-search-deepseek<br/>@deepseek-ai/dsh-web-search-deepseek"]
   cfg --> plugin_dsh_base_web_search_deepseek
+  plugin_dsh_base_web_deepseek_api["web-deepseek-api<br/>@deepseek-ai/dsh-web-deepseek-api"]
+  cfg --> plugin_dsh_base_web_deepseek_api
+  plugin_dsh_base_web_fetch_http["web-fetch-http<br/>@deepseek-ai/dsh-web-fetch-http"]
+  cfg --> plugin_dsh_base_web_fetch_http
   plugin_dsh_base_tool_web["tool-web<br/>@deepseek-ai/dsh-tool-web"]
   cfg --> plugin_dsh_base_tool_web
+  plugin_dsh_base_mcp_resources["mcp-resources<br/>@deepseek-ai/dsh-mcp-resources"]
+  cfg --> plugin_dsh_base_mcp_resources
   plugin_dsh_base_tools["tools<br/>@deepseek-ai/dsh-tools"]
   cfg --> plugin_dsh_base_tools
+  plugin_dsh_base_tool_executor_native["tool-executor-native<br/>@deepseek-ai/dsh-tool-executor-native"]
+  cfg --> plugin_dsh_base_tool_executor_native
+  plugin_dsh_base_tool_executor_ptc["tool-executor-ptc<br/>@deepseek-ai/dsh-tool-executor-ptc"]
+  cfg --> plugin_dsh_base_tool_executor_ptc
   plugin_dsh_base_system_prompt["system-prompt<br/>@deepseek-ai/dsh-system-prompt"]
   cfg --> plugin_dsh_base_system_prompt
   plugin_dsh_base_agent_loop["agent-loop<br/>@deepseek-ai/dsh-agent-loop"]
   cfg --> plugin_dsh_base_agent_loop
   plugin_dsh_base_fs_sandbox["fs-sandbox<br/>@deepseek-ai/dsh-fs-sandbox"]
   cfg --> plugin_dsh_base_fs_sandbox
-  plugin_dsh_base_llm_deepseek["llm-deepseek<br/>@deepseek-ai/dsh-llm-deepseek"]
+  plugin_dsh_base_llm_deepseek["llm-deepseek<br/>@deepseek-ai/dsh-llm-deepseek-api-key"]
   cfg --> plugin_dsh_base_llm_deepseek
-  plugin_dsh_base_llm_kimi["llm-kimi<br/>@deepseek-ai/dsh-llm-kimi"]
-  cfg --> plugin_dsh_base_llm_kimi
+  plugin_dsh_base_llm_deepseek_account["llm-deepseek-account<br/>@deepseek-ai/dsh-llm-deepseek-account"]
+  cfg --> plugin_dsh_base_llm_deepseek_account
 ```
 
 | Plugin id | Package / module |
 | --- | --- |
+| `tool-plugin-manager` | `@deepseek-ai/dsh-plugin-manager/tools` |
+| `plugin-manager` | `@deepseek-ai/dsh-plugin-manager` |
 | `timer` | `@deepseek-ai/cordis-plugin-timer` |
-| `hmr` | `@deepseek-ai/cordis-plugin-hmr` |
+| `hmr` | `@deepseek-ai/dsh-hmr` |
 | `llm` | `@deepseek-ai/dsh-llm` |
+| `deepseek-llm-api-extensions` | `@deepseek-ai/dsh-deepseek-llm-api-extensions` |
 | `session` | `@deepseek-ai/dsh-session` |
+| `session-log-deepseek` | `@deepseek-ai/dsh-session-log-deepseek` |
 | `typert` | `@deepseek-ai/dsh-typert-registry` |
 | `typert-loader` | `@deepseek-ai/dsh-typert-loader` |
 | `typert-gateway` | `@deepseek-ai/dsh-api-gateway` |
+| `remote-access` | `@deepseek-ai/dsh-api-remote-access` |
 | `session-title` | `@deepseek-ai/dsh-session-title` |
 | `session-title-llm` | `@deepseek-ai/dsh-session-title-first-prompt-llm` |
 | `user-questions` | `@deepseek-ai/dsh-user-questions` |
 | `agent` | `@deepseek-ai/dsh-agent` |
+| `plugin-package-inventory-deepseek` | `@deepseek-ai/dsh-plugin-package-inventory-deepseek` |
 | `agent-default-model` | `@deepseek-ai/dsh-agent-default-model` |
 | `jobs` | `@deepseek-ai/dsh-jobs-local` |
 | `llm-retry` | `@deepseek-ai/dsh-llm-retry` |
-| `settings` | `@deepseek-ai/dsh-settings-file` |
+| `config-editor` | `@deepseek-ai/dsh-config-editor` |
+| `settings` | `@deepseek-ai/dsh-settings` |
+| `authorization` | `@deepseek-ai/dsh-authorization` |
+| `deepseek-account` | `@deepseek-ai/dsh-deepseek-account-platform` |
 | `credentials` | `@deepseek-ai/dsh-credentials-local` |
 | `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
-| `glm-5.3` | `GLM-5.3` |
-| `glm-5.3-flash` | `GLM-5.3-Flash` |
-| `glm-5.2` | `GLM-5.2` |
-| `glm-5.1` | `GLM-5.1` |
-| `glm-5-turbo` | `GLM-5-Turbo` |
-| `glm-5v-turbo` | `GLM-5V-Turbo` |
-| `glm-4.7` | `GLM-4.7` |
-| `glm-4.5-air` | `GLM-4.5-Air` |
-| `big-pickle` | `Big Pickle` |
-| `mimo-v2.5-free` | `MiMo V2.5 Free` |
-| `hy3-free` | `Hy3 Free` |
-| `nemotron-3-ultra-free` | `Nemotron 3 Ultra Free` |
-| `nemotron-3.5-lightning-free` | `Nemotron 3.5 Lightning Free` |
-| `deepseek-v4-flash-free` | `DeepSeek V4 Flash Free` |
-| `laguna-s-2.1-free` | `Laguna S 2.1 Free` |
-| `kimi-k2.7-code` | `Kimi K2.7 Code` |
-| `kimi-k3` | `Kimi K3` |
-| `glm-5.2` | `GLM 5.2` |
-| `glm-5.1` | `GLM 5.1` |
-| `minimax-m2.7` | `MiniMax M2.7` |
-| `minimax-m3` | `MiniMax M3` |
-| `deepseek-v4-pro` | `DeepSeek V4 Pro` |
-| `deepseek-v4-flash` | `DeepSeek V4 Flash` |
-| `deepseek-v4-flash` | `DeepSeek V4 Flash Go` |
-| `deepseek-v4-pro` | `DeepSeek V4 Pro Go` |
-| `glm-5.1` | `GLM 5.1 Go` |
-| `glm-5.2` | `GLM 5.2 Go` |
-| `hy3` | `Hy3` |
-| `kimi-k2.6` | `Kimi K2.6` |
-| `kimi-k2.7-code` | `Kimi K2.7 Code Go` |
-| `kimi-k3` | `Kimi K3 (2x usage)` |
-| `mimo-v2.5` | `MiMo V2.5` |
-| `mimo-v2.5-pro` | `MiMo V2.5 Pro` |
-| `minimax-m2.7` | `MiniMax M2.7 Go` |
-| `qwen3.6-plus` | `Qwen3.6 Plus` |
-| `llm-cursor` | `@deepseek-ai/dsh-llm-cursor` |
 | `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` |
 | `attachment-local` | `@deepseek-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@deepseek-ai/dsh-session-query-sqlite` |
+| `working-directory` | `@deepseek-ai/dsh-working-directory` |
+| `tool-working-directory` | `@deepseek-ai/dsh-tool-working-directory` |
 | `session-projection` | `@deepseek-ai/dsh-session-projection` |
+| `storage` | `@deepseek-ai/dsh-storage` |
+| `storage-json` | `@deepseek-ai/dsh-storage-json` |
+| `storage-domain` | `@deepseek-ai/dsh-storage-domain` |
+| `session-projection-cache` | `@deepseek-ai/dsh-session-projection-cache` |
+| `otel` | `@deepseek-ai/dsh-otel` |
 | `session-telemetry-otel` | `@deepseek-ai/dsh-session-telemetry-otel` |
 | `subprocess` | `@deepseek-ai/dsh-subprocess-local` |
 | `sandbox` | `@deepseek-ai/dsh-sandbox-local` |
@@ -321,7 +261,6 @@ flowchart LR
 | `agent-instructions` | `@deepseek-ai/dsh-agent-instructions` |
 | `skill` | `@deepseek-ai/dsh-skill` |
 | `skill-filesystem` | `@deepseek-ai/dsh-skill-filesystem` |
-| `skill-badge` | `@deepseek-ai/dsh-skill-badge` |
 | `tool-skill` | `@deepseek-ai/dsh-tool-skill` |
 | `commands` | `@deepseek-ai/dsh-commands` |
 | `command-feedback` | `@deepseek-ai/dsh-command-feedback` |
@@ -336,34 +275,35 @@ flowchart LR
 | `subagent-spawn-in-process` | `@deepseek-ai/dsh-subagent-spawn-in-process` |
 | `subagent-fork-in-process` | `@deepseek-ai/dsh-subagent-fork-in-process` |
 | `tool-subagent-control` | `@deepseek-ai/dsh-tool-subagent-control` |
-| `tool-subagent-list-agents` | `@deepseek-ai/dsh-tool-subagent-control/list-agents` |
 | `tool-subagent` | `@deepseek-ai/dsh-tool-subagent` |
 | `tool-subagent-fork` | `@deepseek-ai/dsh-tool-subagent` |
-| `tool-subagent-report` | `@deepseek-ai/dsh-tool-subagent-report` |
-| `workflow-worker-thread` | `@deepseek-ai/dsh-workflow-worker-thread` |
+| `ptc-runtime` | `@deepseek-ai/dsh-ptc-runtime-node` |
+| `workflow-ptc` | `@deepseek-ai/dsh-workflow-ptc` |
 | `tool-workflow` | `@deepseek-ai/dsh-tool-workflow` |
 | `timeout-policy` | `@deepseek-ai/dsh-tool-call-timeout-policy` |
 | `spill-local` | `@deepseek-ai/dsh-spill-local` |
 | `spill-policy` | `@deepseek-ai/dsh-spill-policy` |
 | `session-checkpoint-policy` | `@deepseek-ai/dsh-session-checkpoint-policy` |
 | `tool-result-pruner` | `@deepseek-ai/dsh-compaction-tool-result-pruner` |
+| `image-offload` | `@deepseek-ai/dsh-compaction-image-offload` |
 | `tool-todo` | `@deepseek-ai/dsh-tool-todo` |
-| `tool-milestone` | `@deepseek-ai/dsh-tool-milestone` |
 | `tool-goal` | `@deepseek-ai/dsh-tool-goal` |
-| `tool-ralph` | `@deepseek-ai/dsh-tool-ralph` |
-| `tool-str-replace-editor` | `@deepseek-ai/dsh-tool-str-replace-editor` |
 | `repeat-tool-reminder` | `@deepseek-ai/dsh-repeat-tool-reminder` |
 | `web` | `@deepseek-ai/dsh-web` |
-| `web-search-duckduckgo` | `@deepseek-ai/dsh-web-search-duckduckgo` |
 | `web-search-deepseek` | `@deepseek-ai/dsh-web-search-deepseek` |
+| `web-deepseek-api` | `@deepseek-ai/dsh-web-deepseek-api` |
+| `web-fetch-http` | `@deepseek-ai/dsh-web-fetch-http` |
 | `tool-web` | `@deepseek-ai/dsh-tool-web` |
+| `mcp-resources` | `@deepseek-ai/dsh-mcp-resources` |
 | `tools` | `@deepseek-ai/dsh-tools` |
+| `tool-executor-native` | `@deepseek-ai/dsh-tool-executor-native` |
+| `tool-executor-ptc` | `@deepseek-ai/dsh-tool-executor-ptc` |
 | `system-prompt` | `@deepseek-ai/dsh-system-prompt` |
 | `agent-loop` | `@deepseek-ai/dsh-agent-loop` |
 | `fs-sandbox` | `@deepseek-ai/dsh-fs-sandbox` |
-| `llm-deepseek` | `@deepseek-ai/dsh-llm-deepseek` |
-| `llm-kimi` | `@deepseek-ai/dsh-llm-kimi` |
+| `llm-deepseek` | `@deepseek-ai/dsh-llm-deepseek-api-key` |
+| `llm-deepseek-account` | `@deepseek-ai/dsh-llm-deepseek-account` |
 
 Source config: [`packages/bundle/base/cordis.patch.yml`](../../packages/bundle/base/cordis.patch.yml).
 
-Maintenance mode: hybrid: the leaf plugin list is parsed from its `cordis.yml`; app package expansion is curated from package source.
+Maintenance mode: hybrid: the patch row list is parsed from its `cordis.yml`; app package expansion is curated from package source.

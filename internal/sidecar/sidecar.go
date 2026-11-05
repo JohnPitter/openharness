@@ -378,6 +378,31 @@ func zipEntryUnchanged(path string, f *zip.File) bool {
 	return err == nil && got == f.CRC32
 }
 
+// tailBuffer is an io.Writer that keeps only the last max bytes written.
+type tailBuffer struct {
+	mu  sync.Mutex
+	max int
+	buf []byte
+}
+
+func newTailBuffer(max int) *tailBuffer { return &tailBuffer{max: max} }
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if over := len(t.buf) - t.max; over > 0 {
+		t.buf = append(t.buf[:0], t.buf[over:]...)
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.buf)
+}
+
 func urlFromLine(line string) (string, bool) {
 	i := strings.Index(line, "http://127.0.0.1:")
 	if i < 0 {
@@ -474,8 +499,10 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 		m.mu.Unlock()
 		return "", err
 	}
-	var stderr bytes.Buffer
-	m.cmd.Stderr = &stderr
+	// stderr keeps only a bounded tail for the "exited without URL" report:
+	// the sidecar runs for hours and an unbounded buffer grows forever.
+	stderr := newTailBuffer(64 * 1024)
+	m.cmd.Stderr = stderr
 	if err := m.cmd.Start(); err != nil {
 		m.mu.Unlock()
 		return "", fmt.Errorf("falha ao iniciar dsh: %w", err)
@@ -486,17 +513,30 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 
 	urlCh := make(chan string, 1)
 	errCh := make(chan error, 1)
+	cmd := m.cmd
 	go func() {
-		sc := bufio.NewScanner(stdout)
-		sc.Buffer(make([]byte, 0, 4096), 256*1024)
-		for sc.Scan() {
-			if url, ok := urlFromLine(sc.Text()); ok {
-				urlCh <- url
-				return
+		r := bufio.NewReaderSize(stdout, 64*1024)
+		announced := false
+		for {
+			line, err := r.ReadString('\n')
+			if !announced {
+				if url, ok := urlFromLine(line); ok {
+					announced = true
+					urlCh <- url
+				}
+			}
+			if err != nil {
+				break
 			}
 		}
-		waitErr := m.cmd.Wait()
-		errCh <- fmt.Errorf("%s", exitWithoutURL(waitErr, stderr.String()))
+		// Keep draining stdout for the sidecar's whole life (the loop above
+		// only ends at EOF). Stopping after the URL line left the pipe
+		// unread: once its buffer filled, every console.log in the harness
+		// blocked or queued without bound, stalling the UI over time.
+		waitErr := cmd.Wait()
+		if !announced {
+			errCh <- fmt.Errorf("%s", exitWithoutURL(waitErr, stderr.String()))
+		}
 	}()
 
 	select {

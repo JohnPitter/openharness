@@ -1,0 +1,38 @@
+- table:
+  - rowgroup:
+    - row "SYSTEM, Initial System Prompt":
+      - cell "SYSTEM"
+      - cell "Initial System Prompt"
+    - row "USER, Use the ask_user_question tool to ask me exactly one question with id \"checkpoint\", question \"Ready to continue?\", header \"Checkpoint\", and options labeled \"Yes\" and \"No\". After I answer, reply with one short sentence acknowledging my answer and stop.":
+      - cell "Turn 1 USER": USER
+      - cell "Use the ask_user_question tool to ask me exactly one question with id \"checkpoint\", question \"Ready to continue?\", header \"Checkpoint\", and options labeled \"Yes\" and \"No\". After I answer, reply with one short sentence acknowledging my answer and stop."
+    - 'row "CONTEXT, Current runtime context. This snapshot supersedes earlier runtime-context snapshots. Current working directory: \"{{cwd}}/workspace\". Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"{{cwd}}/workspace\". Some pl…"':
+      - cell "CONTEXT"
+      - 'cell "Current runtime context. This snapshot supersedes earlier runtime-context snapshots. Current working directory: \"{{cwd}}/workspace\". Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"{{cwd}}/workspace\". Some pl…"'
+    - 'row "CONTEXT, <system-reminder> A skill is a reusable set of task-specific instructions. The following skills are available in this session: <available_skills> j-space: Load only for long-horizon, multi-stage, or competition-level work, or when the user asks to think harder. Classify fast/full/loop, then Read modules from this skill''s resource base. Do not call this skill again after it is loaded. Skip ordinary one-glance edits. </available_skills> If the user names a skill, or the task clearly matches a skill''s descript…"':
+      - cell "CONTEXT"
+      - 'cell "<system-reminder> A skill is a reusable set of task-specific instructions. The following skills are available in this session: <available_skills> j-space: Load only for long-horizon, multi-stage, or competition-level work, or when the user asks to think harder. Classify fast/full/loop, then Read modules from this skill''s resource base. Do not call this skill again after it is loaded. Skip ordinary one-glance edits. </available_skills> If the user names a skill, or the task clearly matches a skill''s descript…"'
+    - 'row "CONTEXT, Time sampled while preparing turn 1, step 1: 2026-01-15T{{clock}}+{{clock}}[Asia/Shanghai] Browser time zone for this request: Asia/Shanghai. Interpret otherwise-unqualified dates and times in this zone. Elapsed since the preceding model-visible message: unavailable."':
+      - cell "CONTEXT"
+      - 'cell "Time sampled while preparing turn 1, step 1: 2026-01-15T{{clock}}+{{clock}}[Asia/Shanghai] Browser time zone for this request: Asia/Shanghai. Interpret otherwise-unqualified dates and times in this zone. Elapsed since the preceding model-visible message: unavailable."'
+    - row "Request 1, compaction":
+      - 'cell "Request #1"':
+        - 'button "Request #1"'
+      - cell
+    - 'row "USER, Interjection: include the word BANANA in your final reply."':
+      - cell "Turn 2 USER": USER
+      - 'cell "Interjection: include the word BANANA in your final reply."'
+    - row "USER, Also acknowledge this second message.":
+      - cell "USER"
+      - cell "Also acknowledge this second message."
+    - row "SYSTEM, Tools Updated":
+      - cell "SYSTEM"
+      - cell "Tools Updated"
+    - 'row "CONTEXT, Tool added: trajectory_order_probe"':
+      - cell "CONTEXT"
+      - 'cell "Tool added: trajectory_order_probe"'
+    - row "Request 2, ASSISTANT, Great, let's move forward. BANANA!":
+      - 'cell "Request #2 ASSISTANT"':
+        - 'button "Request #2"'
+        - text: ASSISTANT
+      - cell "Great, let's move forward. BANANA!"

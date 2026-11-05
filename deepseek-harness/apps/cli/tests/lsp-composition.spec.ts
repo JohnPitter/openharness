@@ -42,6 +42,9 @@ beforeAll(async () => {
       { id: 'subprocess', name: '@deepseek-ai/dsh-subprocess-local' },
       { id: 'system-prompt', name: '@deepseek-ai/dsh-system-prompt', config: { persona: '' } },
       { id: 'tools', name: '@deepseek-ai/dsh-tools' },
+      // tool-lsp resolves each Agent's workspace root through ctx.workingDirectory.
+      { id: 'session-projection', name: '@deepseek-ai/dsh-session-projection' },
+      { id: 'working-directory', name: '@deepseek-ai/dsh-working-directory' },
       { id: 'lsp-service', name: '@deepseek-ai/dsh-lsp' },
       {
         id: 'lsp-stdio',

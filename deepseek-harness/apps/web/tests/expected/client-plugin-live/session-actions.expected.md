@@ -1,0 +1,12 @@
+- menu:
+  - menuitem "Pin session"
+  - menuitem "Rename"
+  - menuitem "Fork session"
+  - separator
+  - menuitem "Copy Session ID"
+  - separator
+  - menuitem "Export session"
+  - menuitem "Copy session ID"
+  - separator
+  - menuitem "Archive session"
+  - menuitem "Delete session"

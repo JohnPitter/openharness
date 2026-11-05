@@ -60,6 +60,7 @@ describe('routeLabelOf', () => {
       }],
       failures: [],
       status: 'ready',
+      pending: null,
       error: null,
     }
     expect(routeLabelOf(directory)).toEqual({ provider: 'Kimi for Code', model: 'K3-256k' })

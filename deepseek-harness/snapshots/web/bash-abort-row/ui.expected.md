@@ -1,0 +1,27 @@
+- banner:
+  - navigation "Session hierarchy": "Run two shell commands: wait"
+  - button "More actions"
+  - button "Open right sidebar"
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+  - button "More conversation views"
+- group "Session waypoints":
+  - 'button "Message: Run two shell commands: wait for cancellation, then write skipped.txt."'
+- text: "Run two shell commands: wait for cancellation, then write skipped.txt. {{clock}}"
+- button "Copy"
+- button "Edit message"
+- status: Stopped
+- button "Stopped" [disabled] [expanded]
+- button "Ran commands" [expanded]
+- 'button "Failed Bash Error: tool call aborted" [expanded]'
+- text: "IN { \"command\": \"node -e \\\"const fs=require('node:fs'); fs.writeFileSync('started.tmp', 'started'); fs.renameSync('started.tmp', 'started.txt'); setInterval(() => {}, 1000)\\\"\", \"description\": \"Wait until cancellation\" } OUT Error: tool call aborted"
+- button "Inspect"
+- 'button "Failed Bash Error: tool call aborted before dispatch"'
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands"
+- 'button "Access mode, current: Custom"': Custom
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
+- button "Send message" [disabled]
+- button "1 turns 1 steps"
+- button "20 tok · Cache hit 0%": 20 tokCache hit 0%

@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react'
-import type { AccountUsageView, AccountUsageWindowView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AccountUsageView, AccountUsageWindowView } from '@deepseek-ai/dsh-api-session-controller/types'
 import { formatQuotaCount, formatResetWhen } from './usage-format.ts'
 import type { ModelKey } from './locales.ts'
 

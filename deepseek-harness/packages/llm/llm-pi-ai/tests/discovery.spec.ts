@@ -74,6 +74,14 @@ async function harness(): Promise<Context> {
 }
 
 describe('catalog-route model discovery', () => {
+  it('includes the installed model input types for vision models', async () => {
+    const ctx = await harness()
+    const models = await ctx.llm.discoverModels('llm-pi-ai', { provider: 'openai' })
+    const installed = getBuiltinModels('openai').find(model => model.id === 'gpt-6-astra')
+    expect(installed?.input).toContain('image')
+    expect(models.find(model => model.id === 'gpt-6-astra')).toMatchObject({ inputModalities: installed?.input })
+  })
+
   it('answers from the installed registry, with capacities and no network call', async () => {
     const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'from-the-endpoint' }] }) })
     const ctx = await harness()
@@ -127,6 +135,9 @@ describe('draft-provider model discovery', () => {
       body: JSON.stringify({
         data: [
           { id: 'acme-large', display_name: 'Acme Large', context_length: 65_536, max_output_tokens: 4096 },
+          { id: 'acme-camel', displayName: 'Acme Camel', contextWindow: 131_072, maxOutputTokens: 8192 },
+          { id: 'acme-mixed', name: 'Acme Mixed', context_window: 32_768, maxTokens: 2048 },
+          { id: 'acme-legacy', max_tokens: 1024 },
           { id: 'acme-small' },
         ],
       }),
@@ -137,30 +148,14 @@ describe('draft-provider model discovery', () => {
 
     expect(models).toEqual([
       { id: 'acme-large', name: 'Acme Large', contextWindow: 65_536, maxTokens: 4096 },
+      { id: 'acme-camel', name: 'Acme Camel', contextWindow: 131_072, maxTokens: 8192 },
+      { id: 'acme-mixed', name: 'Acme Mixed', contextWindow: 32_768, maxTokens: 2048 },
+      { id: 'acme-legacy', name: 'acme-legacy', maxTokens: 1024 },
       { id: 'acme-small', name: 'acme-small' },
     ])
     expect(server.paths).toEqual(['/v1/models'])
     expect(server.headers[0]?.authorization).toBe('Bearer probe-key')
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
-  })
-
-  it('reads an OpenAI-compatible listing and keeps the camelCase and mixed capacity fields it discloses', async () => {
-    const server = await listingServer({
-      body: JSON.stringify({
-        data: [
-          { id: 'acme-camel', displayName: 'Acme Camel', contextWindow: 131_072, maxOutputTokens: 8192 },
-          { id: 'acme-mixed', name: 'Acme Mixed', context_window: 32_768, maxTokens: 2048 },
-          { id: 'acme-legacy', max_tokens: 1024 },
-        ],
-      }),
-    })
-    const ctx = await harness()
-
-    expect(await ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url })).toEqual([
-      { id: 'acme-camel', name: 'Acme Camel', contextWindow: 131_072, maxTokens: 8192 },
-      { id: 'acme-mixed', name: 'Acme Mixed', contextWindow: 32_768, maxTokens: 2048 },
-      { id: 'acme-legacy', name: 'acme-legacy', maxTokens: 1024 },
-    ])
   })
 
   it('reads an enriched models map using route ids and nested capacities', async () => {
@@ -434,8 +429,7 @@ describe('draft-provider model discovery', () => {
     })
     const probe = ctx.llm.discoverModels('llm-pi-ai', {
       baseURL: 'https://slow.example/v1',
-      signal: controller.signal,
-    })
+    }, controller.signal)
     await bodyRead.promise
     controller.abort('test cancellation')
 
@@ -447,8 +441,7 @@ describe('draft-provider model discovery', () => {
     const aborted = AbortSignal.abort('test cancellation')
     await expect(ctx.llm.discoverModels('llm-pi-ai', {
       baseURL: 'http://127.0.0.1:9/v1',
-      signal: aborted,
-    })).rejects.toMatchObject({ code: 'ABORTED' })
+    }, aborted)).rejects.toMatchObject({ code: 'ABORTED' })
   })
 
   it('is offered for the namespace, and refuses one it does not serve', async () => {

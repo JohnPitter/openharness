@@ -1,8 +1,8 @@
 /** General Settings rows for automatic compaction and its context-window threshold. */
 import { useState } from 'react'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineRegular, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   COMPACTION_THRESHOLD_PERCENTS, type CompactionThresholdPercent,
 } from '../../compaction-settings.ts'
@@ -73,7 +73,7 @@ export function CompactionAutoRow({
             onClick={() => { setOpen(value => !value) }}
           >
             {t(selectedLabel)}
-            <IconChevronDownOutline14 className={css.chevron} />
+            <IconChevronDownOutlineRegular className={css.chevron} />
           </button>
         )}
       />
@@ -125,7 +125,7 @@ export function CompactionThresholdRow({
             onClick={() => { setOpen(value => !value) }}
           >
             {`${percent}%`}
-            <IconChevronDownOutline14 className={css.chevron} />
+            <IconChevronDownOutlineRegular className={css.chevron} />
           </button>
         )}
       />

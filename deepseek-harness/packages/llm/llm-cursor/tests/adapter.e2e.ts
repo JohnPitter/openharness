@@ -26,7 +26,7 @@ afterEach(async () => {
 function user(text: string): Message {
   return createUserMessage({
     content: [{ type: 'text', text }],
-    source: { kind: 'plugin', plugin: 'cursor-e2e' },
+    source: { kind: 'user' },
   })
 }
 

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Cursor",
+    "description": "Adaptador do Cursor no protocolo cursor-agent, com login e cota."
+  }
+}

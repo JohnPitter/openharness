@@ -1,0 +1,29 @@
+- button "New session"
+- button "Collapse sidebar"
+- button "New session": New Session
+- navigation "Global panels":
+  - button "Plugins"
+  - button "Automation tasks"
+  - button "More"
+- text: Workspaces
+- button "Search sessions"
+- textbox "Search session names"
+- button "View options"
+- button "Add workspace"
+- tree "Sessions":
+  - treeitem "workspace" [expanded]
+  - treeitem "New Session" [selected]
+- button "Remote access, currently Off": Remote Off
+- button "DeepSeek · DeepSeek-V4-Flash, context Waiting for a request": DeepSeek · DeepSeek-V4-Flash 0
+- button "Settings"
+- banner:
+  - button "Open right sidebar"
+- text: OpenHarness Preview
+- button "Choose workspace": workspace
+- button "Standard mode"
+- textbox "Describe what you want to build, / commands, @ files or sessions"
+- button "Add files or run commands"
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Plan mode on, press to turn off": Plan
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
+- button "Send message" [disabled]

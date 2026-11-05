@@ -279,6 +279,9 @@ export class KimiAdapter extends LlmAdapter {
   }
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    // A route without a usable key cannot serve a request, so the picker
+    // lists none of its models until one is stored.
+    if (!await this.advertiseModels(provider)) return []
     return (await this.catalog()).map(model => modelInfo(provider, model))
   }
 

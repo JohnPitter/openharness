@@ -8,13 +8,16 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import clsx from 'clsx'
-import { IconDataOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconDataOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type { ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
-import type { AccountUsageView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AccountUsageView } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { UsageStatusChipInjected } from './usage-slots.ts'
+import { mainSessionId } from './usage-directory.ts'
 import type { WorkerModelState } from './worker-store.ts'
 import {
   billedInputTokens,
@@ -86,6 +89,11 @@ function QuotaSection({
   )
 }
 
+/** The main-view Session of one list snapshot. */
+function mainSessionOf(state: SessionListState): SessionId | undefined {
+  return mainSessionId({ list: { getSnapshot: () => state } })
+}
+
 /**
  * Render the usage chip and its click-open panel.
  * @param props - sidebar owner state plus directory/settings inject.
@@ -95,18 +103,24 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
   const {
     wide, useSessions, directory, workerDirectory, ensureDirectory, openModels, openQuotas, loadAccountUsage, t,
   } = props
-  const sessionId = useSessions(state => state.current)
+  const sessionId = useSessions(state => mainSessionOf(state))
   const usage = useSessions((state): TokenUsageProjection | undefined => {
-    const id = state.current
-    return id === undefined ? undefined : state.byId[id]?.projectionValues?.tokenUsage
+    const id = mainSessionOf(state)
+    if (id === undefined) return undefined
+    return (state.projectionsBySession[id]?.values.tokenUsage ?? state.byId[id]?.projectionValues?.tokenUsage) as
+      TokenUsageProjection | undefined
   })
   const pressure = useSessions((state): ContextPressureProjection | undefined => {
-    const id = state.current
-    return id === undefined ? undefined : state.byId[id]?.projectionValues?.contextPressure
+    const id = mainSessionOf(state)
+    if (id === undefined) return undefined
+    return (state.projectionsBySession[id]?.values.contextPressure
+      ?? (state.byId[id]?.projectionValues as { contextPressure?: unknown } | undefined)?.contextPressure) as
+      ContextPressureProjection | undefined
   })
   const preset = useSessions((state): string | undefined => {
-    const id = state.current
-    return id === undefined ? undefined : state.byId[id]?.agentPreset
+    const id = mainSessionOf(state)
+    const value = id === undefined ? undefined : state.byId[id]?.projectionValues?.agentPreset
+    return typeof value === 'string' ? value : undefined
   })
   const directorySnap = useSyncExternalStore(
     listener => directory.subscribe(listener),
@@ -325,7 +339,7 @@ export function UsageStatusChip(props: UsageStatusChipProps): ReactNode {
           onClick={() => { setOpen(value => !value) }}
         >
           {occupancy === null
-            ? <IconDataOutline16 size={wide ? 16 : 18} />
+            ? <IconDataOutlineRegular size={wide ? 16 : 18} />
             : <Ring percent={occupancy.percent} styles={{ ring: css.ring, ringTrack: css.ringTrack, ringFill: css.ringFill }} />}
           {wide && (
             <span className={css.badgeBody}>

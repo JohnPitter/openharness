@@ -1,12 +1,13 @@
 /** J-space preference stored in the Host user-settings document. */
 
-import z from '@deepseek-ai/schemastery'
+/**
+ * Settings namespace (Host entry id) of this plugin's node half, which owns
+ * the composer J-space toggle in shipped bundles.
+ */
+export const JSPACE_SETTINGS_NAMESPACE = 'ui-model-selection'
 
-/** Settings namespace owned by the composer J-space toggle. */
-export const JSPACE_SETTINGS_NAMESPACE = 'ui-jspace'
-
-/** Field carrying whether the construction protocol is on. */
-export const JSPACE_ENABLED_FIELD = 'enabled'
+/** Config field carrying whether the construction protocol is on. */
+export const JSPACE_ENABLED_FIELD = 'jspaceEnabled'
 
 /** Bundled skill the composer toggle hides from model invocation. */
 export const JSPACE_SKILL_NAME = 'j-space'
@@ -14,19 +15,14 @@ export const JSPACE_SKILL_NAME = 'j-space'
 /** Default: on, matching the previous hardcoded persona. */
 export const JSPACE_DEFAULT_ENABLED = true
 
-/** Durable J-space section shared by the Host schema and the browser scope. */
+/** The J-space slice of this entry's settings section as the browser reads it. */
 export interface JspaceSettings {
   /**
    * When true, the system prompt injects the construction protocol.
    * When false, that section is empty and `j-space` is hidden from the model catalog and `skill` tool.
    */
-  enabled: boolean
+  jspaceEnabled?: boolean
 }
-
-/** Durable schema; also the wire envelope the browser scope validates against. */
-export const JspaceSettingsSchema: z<JspaceSettings> = z.object({
-  [JSPACE_ENABLED_FIELD]: z.boolean().default(JSPACE_DEFAULT_ENABLED),
-})
 
 /**
  * Prompt fragment injected after the persona while J-space is on.

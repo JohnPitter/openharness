@@ -1,34 +1,10 @@
 /**
- * Locale chrome for tool rows: titles, Inspect/IN/OUT, and known English
- * executor error prefixes. Model-authored argument summaries stay verbatim.
+ * Locale chrome for tool rows: known English executor error prefixes in the
+ * collapsed failure line and the Output section. Titles and Input/Output/Inspect
+ * labels are localized by the row model and its keys; model-authored argument
+ * summaries and unknown error bodies stay verbatim.
  */
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ToolRowVariant } from './tool-call-model.ts'
-
-/** Conversation keys owned by a specific tool name. */
-const TOOL_TITLE_KEYS: Record<string, 'tool.title.pwsh' | 'tool.title.grep' | 'tool.title.glob' | 'tool.title.webSearch' | 'tool.title.webFetch' | 'tool.title.inspect' | 'tool.title.cordisRun' | 'tool.title.cordisStop' | 'tool.title.cordisUndefine'> = {
-  pwsh: 'tool.title.pwsh',
-  grep: 'tool.title.grep',
-  glob: 'tool.title.glob',
-  web_search: 'tool.title.webSearch',
-  web_fetch: 'tool.title.webFetch',
-  cordis_package_inspect: 'tool.title.inspect',
-  cordis_runtime_inspect: 'tool.title.inspect',
-  cordis_run: 'tool.title.cordisRun',
-  cordis_stop: 'tool.title.cordisStop',
-  cordis_undefine: 'tool.title.cordisUndefine',
-}
-
-/** Conversation keys owned by a generic row variant. */
-const VARIANT_TITLE_KEYS: Record<ToolRowVariant, 'tool.title.search' | 'tool.title.read' | 'tool.title.bash' | 'tool.title.write' | 'tool.title.edit' | 'tool.title.code' | 'tool.title.others'> = {
-  search: 'tool.title.search',
-  read: 'tool.title.read',
-  bash: 'tool.title.bash',
-  write: 'tool.title.write',
-  edit: 'tool.title.edit',
-  code: 'tool.title.code',
-  others: 'tool.title.others',
-}
 
 const CODE_RUN_FAILED = /^code run failed \(([^)]+)\):\s*(.*)$/
 const ERROR_PREFIX = 'Error: '
@@ -42,22 +18,6 @@ const EXACT_ERROR_KEYS: Record<string, 'tool.error.waitAborted' | 'tool.error.to
 }
 
 const CANCELLED_DETAILS = new Set(['user', 'parent', 'disposed', 'aborted', '[object Object]'])
-
-/**
- * Locale title for a tool row.
- * @param toolName - wire tool name.
- * @param variant - classified row variant.
- * @param t - conversation locale seat.
- * @returns the translated chrome title.
- */
-export function localizedToolTitle(
-  toolName: string,
-  variant: ToolRowVariant,
-  t: TranslateNS<'conversation'>,
-): string {
-  const owned = TOOL_TITLE_KEYS[toolName]
-  return t(owned ?? VARIANT_TITLE_KEYS[variant])
-}
 
 /**
  * Locale first line of a tool error shown in the collapsed row or Output.

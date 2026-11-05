@@ -67,11 +67,17 @@ Opt-in. O exe publica um HTTPS público a partir de `127.0.0.1` (túnel Cloudfla
 ```powershell
 wails generate module
 Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
-wails build -ldflags "-X openharness/internal/update.Version=0.1.67"
+wails build -ldflags "-X openharness/internal/update.Version=0.2.0"
 go test ./...
 ```
 
-O zip `dsh-runtime` e o `node.exe` **não** entram no git (`internal/sidecar/assets/`). Sem eles o `wails build` local não embute o sidecar.
+O zip `dsh-runtime` e o `node.exe` **não** entram no git (`internal/sidecar/assets/`). Sem eles o `wails build` local não embute o sidecar. Para gerá-los (build do harness com a marca, `pnpm deploy`, smoke do `dsh web` e zip determinístico):
+
+```powershell
+node scripts/stage-runtime.mjs --node "C:\Program Files\nodejs\node.exe"
+```
+
+Use `--skip-build` quando o `deepseek-harness` já estiver buildado. O harness exige Node ≥ 24.9 e a máquina precisa alcançar `cdn.sheetjs.com` (dependência `xlsx` do upstream).
 
 Rebuild da face web (marca OpenHarness):
 
@@ -91,9 +97,9 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | [Release](.github/workflows/release.yml) | tag `v*.*.*` | cria a GitHub Release |
 
 ```powershell
-git tag v0.1.67
-git push origin v0.1.67
-gh release upload v0.1.67 build/bin/openharness.exe
+git tag v0.2.0
+git push origin v0.2.0
+gh release upload v0.2.0 build/bin/openharness.exe
 ```
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.

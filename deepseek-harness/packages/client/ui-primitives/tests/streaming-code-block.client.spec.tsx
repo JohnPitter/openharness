@@ -10,6 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { CodeBlock } from '../src/markdown/CodeBlock.tsx'
 import { StreamingHighlightSession } from '../src/markdown/highlight.ts'
+import { markdownLabels } from './labels.client.ts'
+
+const LABELS = markdownLabels.code
 
 afterEach(cleanup)
 
@@ -62,6 +65,39 @@ describe('StreamingHighlightSession', () => {
     const second = session.update('const a = 1\nlet b = 2', 'ts')
     expect(second?.[0]).toBe(first?.[0])
     expect(second?.[1]).not.toBe(first?.[1])
+  })
+
+  it('reports only newly completed lines to a retained renderer', () => {
+    const session = new StreamingHighlightSession()
+    const first = session.updateFrame('const a = 1\nlet', 'ts')
+    const second = session.updateFrame('const a = 1\nlet b = 2\n// tail', 'ts')
+    expect(first?.appended).toHaveLength(1)
+    expect(first?.tail).toHaveLength(1)
+    expect(second?.appended).toHaveLength(1)
+    expect(second?.appended[0]?.map(span => span.text).join('')).toBe('let b = 2')
+    expect(second?.tail[0]?.map(span => span.text).join('')).toBe('// tail')
+    expect(second?.generation).toBe(first?.generation)
+    expect(session.updateFrame('const a = 1\nlet b = 2\n// tail', 'ts')).toBe(second)
+  })
+
+  it('emits one completed line per frame across an 800-line stream', () => {
+    const session = new StreamingHighlightSession()
+    let code = ''
+    let generation: number | undefined
+    let appended = 0
+    for (let index = 0; index < 800; index += 1) {
+      const line = `const value${String(index)} = ${String(index)}`
+      code += `${line}\n`
+      const frame = session.updateFrame(code, 'ts')
+      expect(frame?.appended).toHaveLength(1)
+      expect(frame?.appended[0]?.map(span => span.text).join('')).toBe(line)
+      generation ??= frame?.generation
+      expect(frame?.generation).toBe(generation)
+      appended += frame?.appended.length ?? 0
+    }
+    // Frame cardinality is stable across CI hosts; wall-clock thresholds are
+    // diagnostics owned by the manual Web performance inventory.
+    expect(appended).toBe(800)
   })
 
   it('is idempotent per input: repeated calls return the identical result array', () => {
@@ -167,8 +203,8 @@ describe('StreamingHighlightSession', () => {
 describe('CodeBlock streaming arm', () => {
   it('renders the same token tree as the settled shiki HTML swap', () => {
     const code = 'const s = `tpl\nline ${x}\n`\n'
-    const streamed = render(<CodeBlock code={code} lang="ts" streaming />)
-    const settled = render(<CodeBlock code={code} lang="ts" />)
+    const streamed = render(<CodeBlock code={code} lang="ts" streaming {...LABELS} />)
+    const settled = render(<CodeBlock code={code} lang="ts" {...LABELS} />)
     expect(readPre(streamed.container)).toEqual(readPre(settled.container))
   })
 
@@ -178,8 +214,8 @@ describe('CodeBlock streaming arm', () => {
       expect(new StreamingHighlightSession().update('# x', 'md')).toBeDefined()
     }, { timeout: 5_000 })
     const md = '# Heading\n**bold words** and *italic* and a [link with spaces](https://x.example) tail\n'
-    const mdStreamed = render(<CodeBlock code={md} lang="md" streaming />)
-    const mdSettled = render(<CodeBlock code={md} lang="md" />)
+    const mdStreamed = render(<CodeBlock code={md} lang="md" streaming {...LABELS} />)
+    const mdSettled = render(<CodeBlock code={md} lang="md" {...LABELS} />)
     const streamedTree = readPre(mdStreamed.container)
     expect(streamedTree).toEqual(readPre(mdSettled.container))
     // The settled arm really carries the styles, so the equality above cannot
@@ -189,16 +225,16 @@ describe('CodeBlock streaming arm', () => {
     expect(flat).toContain('|italic|')
     expect(flat).toContain('|underline')
     const crlf = 'echo a \\\r\nb\r\nc\n'
-    const crlfStreamed = render(<CodeBlock code={crlf} lang="bash" streaming />)
-    const crlfSettled = render(<CodeBlock code={crlf} lang="bash" />)
+    const crlfStreamed = render(<CodeBlock code={crlf} lang="bash" streaming {...LABELS} />)
+    const crlfSettled = render(<CodeBlock code={crlf} lang="bash" {...LABELS} />)
     expect(readPre(crlfStreamed.container)).toEqual(readPre(crlfSettled.container))
   })
 
   it('keeps completed lines\' DOM nodes as the code grows and appends the new ones', () => {
-    const view = render(<CodeBlock code={'const a = 1\nlet partial\n'} lang="ts" streaming />)
+    const view = render(<CodeBlock code={'const a = 1\nlet partial\n'} lang="ts" streaming {...LABELS} />)
     const firstLine = view.container.querySelector('pre.shiki .line')
     expect(firstLine).not.toBeNull()
-    view.rerender(<CodeBlock code={'const a = 1\nlet partial = 2\n// tail\n'} lang="ts" streaming />)
+    view.rerender(<CodeBlock code={'const a = 1\nlet partial = 2\n// tail\n'} lang="ts" streaming {...LABELS} />)
     const lines = view.container.querySelectorAll('pre.shiki .line')
     expect(lines).toHaveLength(3)
     expect(lines[0]).toBe(firstLine)
@@ -208,19 +244,56 @@ describe('CodeBlock streaming arm', () => {
     expect(view.container.querySelector('pre.shiki')?.textContent).toBe('const a = 1\nlet partial = 2\n// tail')
   })
 
+  it('keeps a tail line mounted when the next frame completes it', () => {
+    const view = render(<CodeBlock code={'const first = 1\n'} lang="ts" streaming {...LABELS} />)
+    const firstLine = view.container.querySelector('pre.shiki .line')
+    expect(firstLine).not.toBeNull()
+    view.rerender(
+      <CodeBlock code={'const first = 1\nconst second = 2\nlet tail'} lang="ts" streaming {...LABELS} />,
+    )
+    expect(view.container.querySelector('pre.shiki .line')).toBe(firstLine)
+  })
+
+  it('keeps completed line groups mounted while later groups grow', () => {
+    const code = (count: number) => Array.from({ length: count }, (_, index) => `const v${String(index)} = ${String(index)}`).join('\n')
+    const view = render(<CodeBlock code={code(40)} lang="ts" streaming {...LABELS} />)
+    const firstLine = view.container.querySelector('pre.shiki .line')
+    const thirtySecond = view.container.querySelectorAll('pre.shiki .line')[31]
+    view.rerender(<CodeBlock code={code(80)} lang="ts" streaming {...LABELS} />)
+    const lines = view.container.querySelectorAll('pre.shiki .line')
+    expect(lines).toHaveLength(80)
+    expect(lines[0]).toBe(firstLine)
+    expect(lines[31]).toBe(thirtySecond)
+  })
+
+  it('reuses an unchanged frame when an unrelated lazy grammar finishes loading', async () => {
+    const view = render(<CodeBlock code={'const stable = 1\n'} lang="ts" streaming {...LABELS} />)
+    const line = view.container.querySelector('pre.shiki .line')
+    expect(line).not.toBeNull()
+    const loader = new StreamingHighlightSession()
+    expect(loader.update('puts 1', 'ruby')).toBeUndefined()
+    await vi.waitFor(() => { expect(loader.update('puts 1', 'ruby')).toBeDefined() }, { timeout: 5_000 })
+    expect(view.container.querySelector('pre.shiki .line')).toBe(line)
+  })
+
   it('streaming with an unknown language stays on the identical plain arm', () => {
-    const view = render(<CodeBlock code={'IDENTIFICATION DIVISION.\n'} lang="cobol" streaming />)
+    const view = render(<CodeBlock code={'IDENTIFICATION DIVISION.\n'} lang="cobol" streaming {...LABELS} />)
     expect(view.container.querySelector('pre.shiki')).toBeNull()
     expect(view.getByText('IDENTIFICATION DIVISION.')).toBeTruthy()
   })
 
-  it('the settle swap (streaming to settled) preserves the code content', () => {
+  it('the settle transition preserves the highlighted DOM when the code is unchanged', () => {
     const code = 'const answer = 42\n'
-    const view = render(<CodeBlock code={code} lang="ts" streaming />)
+    const view = render(<CodeBlock code={code} lang="ts" streaming {...LABELS} />)
+    const streamedLine = view.container.querySelector('pre.shiki .line')
     const streamedText = view.container.querySelector('pre.shiki')?.textContent
-    view.rerender(<CodeBlock code={code} lang="ts" />)
+    view.rerender(<CodeBlock code={code} lang="ts" {...LABELS} />)
     const settledText = view.container.querySelector('pre.shiki')?.textContent
     expect(streamedText).toBe('const answer = 42')
     expect(settledText).toBe(streamedText)
+    expect(view.container.querySelector('pre.shiki .line')).toBe(streamedLine)
+    view.rerender(<CodeBlock code={code} lang="ts" streaming {...LABELS} />)
+    expect(view.container.querySelector('pre.shiki')?.textContent).toBe(streamedText)
+    expect(view.container.querySelector('pre.shiki .line')).toBe(streamedLine)
   })
 })

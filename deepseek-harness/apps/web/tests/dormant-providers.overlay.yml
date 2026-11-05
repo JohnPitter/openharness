@@ -1,0 +1,11 @@
+# The upstream provider-directory scenarios start from a dormant pi-ai
+# adapter: zero declared routes, so the Models page lists nothing and the add
+# card offers the whole installed catalog. OpenHarness ships one coding-plan
+# card per vendor (pi-ai routes plus the Kimi and Cursor adapters); this
+# overlay restores the dormant directory those scenarios are written over.
+- id: llm-pi-ai
+  config: {}
+- id: llm-kimi
+  disabled: true
+- id: llm-cursor
+  disabled: true

@@ -11,14 +11,17 @@
  * @module @deepseek-ai/dsh-llm-kimi
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
+import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
+import { isVolatile } from '@deepseek-ai/cosmokit'
 import { assertUsableApiKey, LlmError, resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_TOKENS,
@@ -44,7 +47,7 @@ export type * from './types.ts'
 export const name = 'llm-kimi'
 export const inject = ['llm']
 
-const NS = settingsNamespace('llm-kimi')
+const NS = 'llm-kimi'
 const DEFAULT_API_KEY_ENV = 'KIMI_API_KEY'
 /** The single provider route this plugin owns. */
 const PROVIDER = 'kimi-for-coding'
@@ -59,14 +62,14 @@ const DEFAULT_MODELS: KimiCatalogModel[] = [
 ]
 
 /**
- * Plugin config, validated by the same-named schemastery schema and doubling
- * as the `llm-kimi` settings-section shape. Every field is optional in
- * yml: a missing API key resolves through {@link Config.apiKeyEnv} at each
+ * Plain plugin options, validated by the same-named schemastery schema and
+ * doubling as the `llm-kimi` settings-section shape. Every field is optional
+ * in yml: a missing API key resolves through {@link Options.apiKeyEnv} at each
  * request (a request without any key fails with `MISSING_CREDENTIAL`, not at
  * plugin load), omitted thinking mode uses the provider default, and omitted
  * reasoning effort resolves to `high`.
  */
-export interface Config {
+export interface Options {
   /** Credential reference (environment-variable name) resolved per request; defaults to `KIMI_API_KEY`. */
   apiKeyEnv?: string
   /** Endpoint base; falls back to $KIMI_BASE_URL from a trusted environment layer, then the public API. */
@@ -87,6 +90,22 @@ export interface Config {
   retryPolicy?: RetryPolicyConfig
 }
 
+/**
+ * Live plugin configuration: every field is a volatile reference the loader
+ * updates in place when the `llm-kimi` settings section changes, so a changed
+ * key reference, endpoint, or catalog reaches the next request.
+ */
+export type Config = { [K in keyof Options]-?: Volatile<Options[K]> }
+
+/**
+ * Read the current value behind every reference of a validated Config.
+ * @param config - parsed plugin Config.
+ * @returns plain options for the resolver.
+ */
+export function plainOptions(config: Config): Options {
+  return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, isVolatile(value) ? value.get() : value])) as Options
+}
+
 const catalogModel: z<KimiCatalogModel> = z.object({
   id: z.string().required(),
   name: z.string(),
@@ -95,16 +114,16 @@ const catalogModel: z<KimiCatalogModel> = z.object({
   maxTokens: z.number().step(1).min(1),
 })
 
-export const Config: z<Config> = z.object({
-  apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV),
-  baseURL: z.string(),
-  thinking: z.union(['enabled', 'disabled']),
-  reasoningEffort: z.union(['off', 'low', 'high', 'max']),
-  maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_MAX_TOKENS),
-  defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
-  models: z.array(catalogModel).default(DEFAULT_MODELS),
-  streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS),
-  retryPolicy: RetryPolicySchema,
+export const Config = z.object({
+  apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV).volatile(),
+  baseURL: z.string().volatile(),
+  thinking: z.union(['enabled', 'disabled']).volatile(),
+  reasoningEffort: z.union(['off', 'low', 'high', 'max']).volatile(),
+  maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_MAX_TOKENS).volatile(),
+  defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW).volatile(),
+  models: z.array(catalogModel).default(DEFAULT_MODELS).volatile(),
+  streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS).volatile(),
+  retryPolicy: RetryPolicySchema.volatile(),
 })
 
 /** Public API default; an override comes from $KIMI_BASE_URL. */
@@ -165,7 +184,7 @@ function resolveModels(models: readonly KimiCatalogModel[] | undefined): KimiCat
  * gateway that checkout is meant to use.
  * @returns validated connection facts plus the credential reference.
  */
-export function resolveAdapterOptions(config: Config, environment?: LaunchEnvironmentSnapshot): ResolvedKimiOptions {
+export function resolveAdapterOptions(config: Options, environment?: LaunchEnvironmentSnapshot): ResolvedKimiOptions {
   if (config.thinking === 'disabled'
     && config.reasoningEffort !== undefined
     && config.reasoningEffort !== 'off') {
@@ -205,12 +224,14 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
 }
 
 export function apply(ctx: Context, config: Config): void {
-  let current: () => Config = () => config
-  let lastRaw: Config | undefined
+  // The Models page owns this section's form, so the generic editor stays off.
+  ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
+  const settingsNs = ctx.fiber.entry?.options.id ?? NS
+  let lastRaw: Options | undefined
   let lastGood: ResolvedKimiOptions | undefined
   const options = (): ResolvedKimiOptions => {
-    const raw = current()
-    if (raw === lastRaw && lastGood !== undefined) return lastGood
+    const raw = plainOptions(config)
+    if (lastRaw !== undefined && lastGood !== undefined && deepEqualJson(raw, lastRaw)) return lastGood
     try {
       const next = resolveAdapterOptions(raw, launchEnvironmentOf(ctx))
       lastRaw = raw
@@ -254,12 +275,12 @@ export function apply(ctx: Context, config: Config): void {
 
   const adapter = new KimiAdapter({ options, resolveApiKey })
   ctx.llm.registerConfigurableProviders([
-    { provider: PROVIDER, displayName: 'Kimi for Code', settingsNs: NS, settingsPath: [] },
+    { provider: PROVIDER, displayName: 'Kimi for Code', settingsNs, settingsPath: [] },
   ])
-  ctx.llm.registerModelDiscovery(NS, request => {
+  ctx.llm.registerModelDiscovery(settingsNs, (request, signal) => {
     const connection = options()
     return discoverModels(
-      request,
+      { ...request, ...signal === undefined ? {} : { signal } },
       async () => {
         try {
           return await resolveApiKey(connection)
@@ -272,8 +293,7 @@ export function apply(ctx: Context, config: Config): void {
       connection.models,
     )
   })
-  // Route effects bind to this apply fiber via the stable `ctx` reference,
-  // even when a swap runs inside the scoped settings callback below.
+  // Route effects bind to this apply fiber via the stable `ctx` reference.
   const registration = ctx.llm.registerAdapter([PROVIDER], adapter)
   let registeredPolicy = options().retryPolicy
   const ensureRegistrationFacts = (): void => {
@@ -288,10 +308,8 @@ export function apply(ctx: Context, config: Config): void {
     registeredPolicy = policy
   }
 
-  installSettingsSection(ctx, NS, Config, config, {
-    setSource: (source) => {
-      current = source
-    },
-    onChange: ensureRegistrationFacts,
+  ctx.on('loader/volatile-update', () => {
+    try { ensureRegistrationFacts() }
+    catch (error) { ctx.logger.warn(error) }
   })
 }
