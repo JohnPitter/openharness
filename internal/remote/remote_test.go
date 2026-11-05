@@ -214,3 +214,60 @@ type constError string
 func (e constError) Error() string { return string(e) }
 
 const errTunnelDown = constError("túnel indisponível")
+
+// dsh web >= 0.2 gates every request on a cookie minted from its launch
+// token; the proxy must redeem the token itself and never forward it.
+func TestProxyRedeemsHarnessLaunchToken(t *testing.T) {
+	stubTunnel(t)
+	const launch = "launch-secret"
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tok := r.URL.Query().Get("token"); tok != "" {
+			if tok != launch || r.URL.Path != "/" {
+				http.Error(w, "bad token", http.StatusForbidden)
+				return
+			}
+			http.SetCookie(w, &http.Cookie{Name: "dsh-auth-test", Value: "signed", Path: "/"})
+			http.Redirect(w, r, "./", http.StatusFound)
+			return
+		}
+		c, err := r.Cookie("dsh-auth-test")
+		if err != nil || c.Value != "signed" {
+			http.Error(w, "no harness cookie", http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, "ok-"+r.URL.Path)
+	}))
+	t.Cleanup(backend.Close)
+
+	var s Server
+	access, err := s.Start(backend.URL + "/?token=" + launch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Stop)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	res, err := client.Get(access.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK || string(body) != "ok-/" {
+		t.Fatalf("index through proxy: %d %q", res.StatusCode, body)
+	}
+	parsed, _ := url.Parse(access.URL)
+	res, err = client.Get(parsed.Scheme + "://" + parsed.Host + "/api/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK || string(body) != "ok-/api/x" {
+		t.Fatalf("api through proxy: %d %q", res.StatusCode, body)
+	}
+}

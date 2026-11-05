@@ -12,11 +12,16 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
 
-const cookieName = "oh_remote"
+const (
+	cookieName = "oh_remote"
+	// harnessCookiePrefix is the name prefix of dsh web's signed browser-session cookie.
+	harnessCookiePrefix = "dsh-auth-"
+)
 
 // Access is what the UI shows after the user opts in.
 type Access struct {
@@ -72,13 +77,23 @@ func (s *Server) Start(target string) (Access, error) {
 		_ = ln.Close()
 		return Access{}, err
 	}
-	proxy := httputil.NewSingleHostReverseProxy(parsed)
+	// The harness (dsh web >= 0.2) authenticates browsers with a launch
+	// token exchanged for a signed cookie bound to its own authority. The
+	// phone never sees that token: the proxy redeems it once and attaches the
+	// cookie to every forwarded request, so only the oh_remote cookie gates
+	// the public side.
+	harnessCookies := redeemLaunchToken(parsed)
+	upstream := *parsed
+	upstream.RawQuery = ""
+	upstream.Fragment = ""
+	proxy := httputil.NewSingleHostReverseProxy(&upstream)
 	director := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		director(req)
-		req.Host = parsed.Host
-		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
+		req.Host = upstream.Host
+		req.Header.Set("Origin", upstream.Scheme+"://"+upstream.Host)
 		req.Header.Del("Referer")
+		attachCookies(req, harnessCookies)
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/", gate(token, proxy))
@@ -150,6 +165,55 @@ func gate(token string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// redeemLaunchToken trades the harness URL's `token` query for the session
+// cookie the harness mints on `GET /?token=...`. A harness without browser
+// auth (no token in its URL, or no cookie in the reply) yields nil and the
+// proxy forwards requests unchanged.
+func redeemLaunchToken(target *url.URL) []*http.Cookie {
+	if target.Query().Get("token") == "" {
+		return nil
+	}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	redeem := *target
+	redeem.Path = "/"
+	res, err := client.Get(redeem.String())
+	if err != nil {
+		return nil
+	}
+	_ = res.Body.Close()
+	var out []*http.Cookie
+	for _, c := range res.Cookies() {
+		if strings.HasPrefix(c.Name, harnessCookiePrefix) {
+			out = append(out, &http.Cookie{Name: c.Name, Value: c.Value})
+		}
+	}
+	return out
+}
+
+// attachCookies replaces any same-named cookie the browser sent and appends
+// the harness session cookies to the forwarded request.
+func attachCookies(req *http.Request, cookies []*http.Cookie) {
+	if len(cookies) == 0 {
+		return
+	}
+	kept := make([]string, 0, 4)
+	for _, c := range req.Cookies() {
+		if strings.HasPrefix(c.Name, harnessCookiePrefix) {
+			continue
+		}
+		kept = append(kept, c.String())
+	}
+	for _, c := range cookies {
+		kept = append(kept, c.String())
+	}
+	req.Header.Set("Cookie", strings.Join(kept, "; "))
 }
 
 func forwardedHTTPS(r *http.Request) bool {
