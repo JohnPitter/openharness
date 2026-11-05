@@ -94,12 +94,9 @@ Pipeline do runtime, OAuth e cotas: [`AGENTS.md`](AGENTS.md).
 | Workflow | Quando | O que faz |
 | --- | --- | --- |
 | [CI](.github/workflows/ci.yml) | push/PR | `go test` / `go vet` |
-| [Release](.github/workflows/release.yml) | tag `v*.*.*` | builda o `openharness.exe` no Windows (runtime embutido + `node.exe` + Wails) e publica na GitHub Release |
+| [Release](.github/workflows/release.yml) | versão nova na `main` ou tag `v*.*.*` | builda o `openharness.exe` no Windows (runtime embutido + `node.exe` + Wails) e publica na GitHub Release |
 
-```powershell
-git tag v0.2.0
-git push origin v0.2.0   # o workflow builda e anexa o openharness.exe
-```
+Para lançar, suba `Version` em `internal/update/update.go` e faça merge na `main`: o workflow cria a tag `v<versão>`, builda e anexa o `openharness.exe`. Empurrar a tag manualmente (`git tag vX.Y.Z && git push origin vX.Y.Z`) também funciona.
 
 O auto-update procura o asset exatamente chamado `openharness.exe`.
 
