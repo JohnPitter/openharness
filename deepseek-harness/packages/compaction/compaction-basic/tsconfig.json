@@ -4,7 +4,9 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
     {
       "path": "../../../vendor/cosmokit"
@@ -34,13 +36,10 @@
       "path": "../compaction"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
-    },
-    {
       "path": "../compaction-tool-result-pruner"
     },
     {
-      "path": "../../settings/settings"
+      "path": "../../session/session-projection"
     },
     {
       "path": "../../milestone/tool-milestone"

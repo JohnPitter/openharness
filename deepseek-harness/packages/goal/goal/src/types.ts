@@ -1,12 +1,11 @@
 /**
  * Pure types of the goal domain: the ONE home of the `goal` projection-key
  * declaration plus the durable payload vocabulary it carries, free of this
- * package's host-side Agent/LLM imports. Two namespace projections serve it —
- * `./types` for host consumers, `./client` (the browser half-entry's re-export)
- * for client aggregates — with zero content duplication. Host-coupled domain
- * vocabulary (message sources, scoped `goal/changed`, fold shapes) lives in
- * ./domain.ts. The JSON-safe `goal/activation-changed` payload is declared here
- * so Web clients and the Remote allowlist share one declaration.
+ * package's host-side imports (cordis events, dsh-agent, dsh-llm, the
+ * service). Two namespace projections serve it — `./types` for host
+ * consumers, `./client` (the browser half-entry's re-export) for client
+ * aggregates — with zero content duplication. Host-coupled domain
+ * vocabulary (message sources, events, fold shapes) lives in ./domain.ts.
  *
  * @module @deepseek-ai/dsh-goal/types
  */
@@ -101,7 +100,7 @@ export interface GoalView extends GoalSnapshot {
 
 /**
  * The `goal` projection value: the current durable goal with its replay
- * counters, exactly as the latest `goal/change` event carried them.
+ * counters, including admitted goal rounds.
  * Activation is process-local (never persisted) and deliberately absent —
  * the projection reflects durable phase only.
  */
@@ -116,16 +115,23 @@ export interface GoalProjection {
   readonly updatedAt: number
 }
 
+/** Strict checkpoint state used to derive the current goal client value. */
+export interface GoalProjectionState {
+  /** Latest valid current goal, or null before creation and after clear. */
+  readonly current: GoalProjection | null
+  /** Goal identities already created in this Session, retained to reject reuse. */
+  readonly seenGoalIds: GoalId[]
+  /** First strict replay failure, or null while the durable stream is valid. */
+  readonly failure: string | null
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
-  interface SessionProjectionStateMap {
-    goal: GoalProjection | null
-  }
   interface SessionProjectionMap {
     /**
-     * The session's current goal (the latest `goal/change` whole value), or
+     * The session's current goal and admitted-round count, or
      * `null` before the first create and after a clear tombstone.
-     * Whole-value rule: every goal change carries the complete post-change
-     * state, so the fold is last-wins.
+     * `goal/change` supplies the whole lifecycle value; matching admitted
+     * `user/message` events advance `roundsStarted`.
      */
     goal: GoalProjection | null
   }

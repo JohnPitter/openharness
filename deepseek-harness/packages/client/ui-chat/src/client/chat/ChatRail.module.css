@@ -1,0 +1,152 @@
+/* Session milestone rail: ticks stacked from the top on an 8px rhythm, a
+   scrolling track when the stack outgrows the sticky column, and a
+   viewport-fixed preview for the hovered or pinned waypoint. */
+
+/* Left milestone/waypoint rail (the upstream turn rail sits on the right).
+   Full-height overlay over the Chat frame: the conversation scrollport is an
+   ancestor, so an absolute rail at the flow start scrolls off-screen on a
+   long transcript. Sticky inside this overlay stays in the visible column.
+   The overlay is a sibling of the clipped transcript, so its preview is not
+   clipped; z-index matches the turn rail (above CodeBlock banners). */
+.railSlot {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+
+/* Compact tick stack from the top (8px rhythm). The scroller caps at the
+   sticky column; a taller stack scrolls instead of compressing. Titles live
+   in `.railPreview` (viewport-fixed). No transform on `.rail`: a containing
+   block would trap that fixed preview. The right edge stays 28px left of
+   the message column on a wide gutter. */
+.rail {
+  position: sticky;
+  top: 16px;
+  z-index: 2;
+  display: block;
+  width: 16px;
+  height: auto;
+  max-height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
+  margin-left: max(-4px, calc(50% - min(var(--dsh-chat-content-width), 100%) / 2 - 44px));
+  overflow: visible;
+  pointer-events: none;
+}
+
+.railStack {
+  width: 16px;
+  max-height: calc(100dvh - var(--dsh-composer-height, 152px) - 96px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rail[data-scrollable] {
+  width: 24px;
+}
+
+.rail[data-scrollable] .railStack {
+  width: 24px;
+  pointer-events: auto;
+}
+
+.railTrack {
+  position: relative;
+  width: 16px;
+}
+
+.railTrack::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  bottom: 4px;
+  width: 0.5px;
+  background: var(--dsw-alias-border-l2);
+  pointer-events: none;
+}
+
+.railTick {
+  pointer-events: auto;
+  position: absolute;
+  left: 0;
+  width: 16px;
+  height: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.railTick::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.railTick[data-kind='milestone']::after {
+  left: 2px;
+  right: 2px;
+  height: 3px;
+  top: 2.5px;
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.railTick[data-active]::after {
+  left: 3px;
+  right: 3px;
+  background: var(--dsw-alias-label-primary);
+}
+
+.railTick[data-kind='milestone'][data-active]::after {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.railPreview {
+  pointer-events: auto;
+  position: fixed;
+  z-index: 20;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 40px));
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--dsw-radius-lg);
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-elevation-panel);
+}
+
+.railPreviewTitle {
+  font: var(--dsw-font-s-strong-14);
+  color: var(--dsw-alias-label-primary);
+}
+
+.railPreviewBody {
+  margin-top: 6px;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Narrow conversation column: no leftover gutter. Ticks sit in the left
+   padding and the preview overlays the transcript. Keep position:sticky so
+   the minimap stays in the scrollport — absolute would pin it to the
+   transcript start and scroll away. */
+@container (max-width: 840px) {
+  .rail {
+    margin-left: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .railPreview {
+    max-width: min(220px, calc(100vw - 40px));
+  }
+}

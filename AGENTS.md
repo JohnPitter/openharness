@@ -5,6 +5,14 @@ App desktop (Wails v2) que empacota o **DeepSeek Harness** original (TypeScript,
 (node.exe embutido + árvore de runtime buildada) e a UI web oficial
 (`apps/web`) é exibida num iframe dentro do shell.
 
+**Base upstream:** `dsh-v0.2.2-rc.1` (github.com/deepseek-ai/deepseek-harness).
+O fork foi rebaseado do `dsh-v0.1.1-rc.2` por merge 3-way: os recursos do
+OpenHarness vivem por cima da arquitetura 0.2 (ApiProxy → `packages/api/*`
+controllers, `client/runtime` → `client/connection`/`store`/`ui-session`,
+`ui-conversation` dividido com `ui-chat`, `agent-presets` →
+`agent-preset` + `agent-preset-registry`, sem `invariant.ts`). Para o próximo
+upgrade, repita o merge 3-way com base = tag upstream atual do fork.
+
 ## Arquitetura
 
 ```
@@ -15,14 +23,17 @@ internal/
                         CRC dos arquivos do zip + hash do node.exe — rezip sem
                         mudar arquivos reusa o cache), sobe `node lib/bin.js web
                         --no-open --host 127.0.0.1 --port 0`, captura a URL do stdout
-                        ("dsh web: http://..."), DSH_HOME isolado em
+                        ("dsh web: http://...?token=..."; o stdout é drenado
+                        a vida toda e o stderr guarda só 64 KiB), DSH_HOME isolado em
                         %LOCALAPPDATA%\openharness\dsh-home
   sidecar/assets/       node.exe + dsh-runtime.zip (embed via go:embed; NÃO
                         commitar — ver .gitignore; gerados pelo pipeline abaixo)
   app/                  bindings Wails: HarnessState, RestartHarness,
                         EnableRemote / DisableRemote (túnel + QR)
   remote/               proxy em 127.0.0.1 + túnel HTTPS público com cookie
-                        de token; o celular abre o harness como no desktop
+                        de token; o celular abre o harness como no desktop. O
+                        proxy resgata o `?token=` do dsh web uma vez e anexa o
+                        cookie `dsh-auth-*` em cada request (HTTP e WebSocket)
 frontend/dist/          shell estático (sem build step): titlebar própria
                         (logo, --wails-draggable, min/max/close via runtime
                         Wails) + iframe full-bleed para a URL do harness
@@ -36,7 +47,10 @@ o runtime precisa de arquivos REAIS em disco (por isso extração, não SEA/pkg)
 
 ```powershell
 cd deepseek-harness
-pnpm install && pnpm run build          # builda libs + apps/web/dist
+pnpm install && pnpm run build          # builda libs + apps/web/dist (pnpm 11.28.5 via corepack)
+# xlsx vem de https://cdn.sheetjs.com (dependência do upstream); a máquina de
+# build precisa alcançar esse host. O addon nativo `system.node` só existe em
+# Linux/macOS — no Windows o lease do JSONL não usa addon.
 # staging sem symlinks (mesma rota do scripts/build-exe-for-python-sdk.ts):
 pnpm --filter @deepseek-ai/dsh deploy --legacy --prod `
   --config.node-linker=hoisted --config.auto-install-peers=false `
@@ -60,10 +74,13 @@ pnpm --filter @deepseek-ai/dsh deploy --legacy --prod `
 ## Rebrand (deepseek → openharness)
 
 Marca da UI trocada na fonte do monorepo (não há patch em runtime — edite lá e
-rebuilde). A tela de boot não vive mais em `AppRoot.tsx`: o rc.8 preenche a
-marca via slots em `packages/client/ui-brand-official` (só registra se
+rebuilde). A marca entra via slots em `packages/client/ui-brand-official`
+(sidebar e `conversation.hero.brand.mark`; só registra se
 `DSH_CLIENT_BUILD_PROFILE === 'official'`). O título do produto vem de
-`DSH_CLIENT_TITLE` (inlinado no bundle client).
+`DSH_CLIENT_TITLE` (inlinado no bundle client; o padrão do `apps/web/vite.config.ts`
+já é OpenHarness). A conta DeepSeek do upstream (login/saldo/onboarding em
+`ui-settings-account` e a rota `llm-deepseek-account`) fica `disabled: true` na
+composição: o primeiro uso cai no onboarding multi-provider de Settings → Models.
 
 Build da face client/web:
 
@@ -78,19 +95,20 @@ pnpm --filter @deepseek-ai/dsh-web-frontend run build
 Arquivos da marca:
 
 - `apps/web/index.html` (title), `apps/web/public/mascot.png` (raster 3D sem
-  placa), `apps/web/public/favicon.svg` (wrapper), `apps/web/public/manifest.webmanifest`
+  placa), `apps/web/public/favicon.svg` + `favicon-dark.svg` (wrappers),
+  `apps/web/public/manifest.webmanifest`; ícones PWA (`icon-*.png`,
+  `apple-touch-icon.png`) gerados por `apps/web/scripts/render-app-icons.ts`
 - `packages/client/ui-primitives/src/BrandWordmark.tsx` e `FishLogo.tsx`
-  (`<image href="/mascot.png">`; `includeMark=false` deixa o box vazio para o nome slotted)
+  (`<image href="mascot.png">` relativo ao `<base href="./">`; `includeMark=false`
+  deixa o box vazio para o nome slotted)
 - `packages/client/ui-brand-official/src/client/` (`OfficialBrandMark` /
   `OfficialBrandName` nos slots sidebar/hero)
-- `packages/client/ui-conversation/src/client/locales.ts` (`hero.headline`)
+- `packages/client/ui-conversation/src/client/locales.ts` (`hero.headline`, 8 locales)
 - `packages/client/ui-settings-models/src/onboarding-copy.ts` (aviso de boas-vindas)
 
-Locales pt (pt-BR) e es adicionados: `packages/client/locale` (LOCALE_IDS/LOCALES,
-dicionários common + settings) e dicionários `pt`/`es` em todos os `locales.ts`
-(23 pacotes em `packages/client/*` + `packages/extensions/ui-cordis` +
-`packages/session-query/session-log-export`). O registro tipado exige todos os
-locales por namespace — ao criar dicionário novo, inclua zh/en/pt/es.
+Locales: o upstream 0.2 já embarca zh/en/ja/es/fr/de/ru/pt. Chaves novas do
+fork existem em zh/en (obrigatórios) e nos demais objetos cujo `satisfies` não é
+`Partial` (pt/es traduzidos; ja/fr/de/ru com o texto em inglês).
 
 ## Provider Kimi for Code
 
@@ -158,9 +176,12 @@ padrão de botões no card, contra `GET/POST /dsh-llm-cursor/oauth/{status,login
 
 Para mudanças só de UI basta `build:lib:client` + web (com os env de marca
 acima). A face host do tsdown no Windows não expande o glob
-`lib/types/{index,invariant,startup}.js` no pacote raiz — o overlay
-`openharness-expand-host-entries` em `tsdown.config.ts` + stub
-`scripts/tsdown-root-stub.js` contorna isso. Rodar `pnpm run build` completo só
+`lib/types/{index,startup}.js` — o overlay `openharness-expand-host-entries`
+em `tsdown.config.ts` + stub `scripts/tsdown-root-stub.js` contorna isso.
+`build:lib:host` agora é `tsx scripts/compile-referenced-projects.ts host-libraries`
+(gera os artefatos Typert de `ctx.remote.*` antes do tsc; sem eles o typecheck
+client acusa `ClientRemote` sem propriedades). As rotas OAuth (`/dsh-llm-*/oauth`)
+passam pela cerca `connection.requestRejection` (Host/Origin + cookie do dsh web). Rodar `pnpm run build` completo só
 quando libs host mudarem. O staging `dsh-runtime/` é uma cópia independente:
 depois de rebuildar, sincronize cada `lib/` do workspace para
 `dsh-runtime/node_modules/@deepseek-ai/<pkg>/lib` e recopie `apps/web/dist`
@@ -196,7 +217,9 @@ go vet ./...  # lint
   `%WINDIR%\Media` (`ui-conversation.taskCompleteSound`; padrão `notify-email`).
   Botão de ouvir manda `openharness:preview-sound`; a conclusão inclui o id no
   `openharness:task-complete`.
-- **Modo Workflow:** o Planejador só pensa e delega (sem grep/edit/shell, sem
+- **Modo Workflow:** preset em `packages/bundle/web-app/presets/workflow.patch.yml`
+  (`tool-subagent.foregroundWait: never`; `restrictWorkflowOrchestrator` no
+  `SubagentRuntime`). O Planejador só pensa e delega (sem grep/edit/shell, sem
   skill/ralph/fork); uma ou duas tarefas vão só por `subagent` — a ferramenta
   `workflow` não é shell. O despacho não espera o trabalhador: o planejador
   segue recebendo instruções e sobe outros workers. Não carrega J-space. O
@@ -219,12 +242,14 @@ go vet ./...  # lint
 - **Custo por rota:** coding plans (Kimi, Claude Code, Codex, GLM, OpenCode, Cursor)
   cobram por request; DeepSeek e plataformas pay-per-token cobram por token.
   Em rota de request o harness não dispara título-LLM (o fallback de primeiras
-  palavras continua). Compactação automática no percentual da aba Geral ainda
+  palavras continua). Compactação automática (campos voláteis `compaction-basic.auto` /
+  `thresholdPercent`, editados na aba Geral) ainda
   resume; overflow e `/compact` limitam o intervalo para o summarizer caber.
   A unidade vem do adapter (`metering`), não do nome do provedor.
 - **Busca na web:** padrão é DuckDuckGo (HTML, sem chave). A busca nativa
   DeepSeek fica desativada; ela cobra saldo DeepSeek mesmo se o chat for Kimi.
-- **J-Space:** skill empacotada em `apps/cli/config/skills/j-space`, nos presets
+- **J-Space:** skill empacotada em `packages/bundle/web-app/skills/j-space`
+  (carregada por `skill-filesystem` `customSkillDirs`), nos presets
   Standard, Code e Workflow. Protocolo de construção (fast/full/loop) no
   Standard/Code e no trabalhador Workflow; o planejador Workflow não recebe o
   protocolo. Se a tarefa admite duas leituras com ações diferentes, carrega
@@ -234,9 +259,18 @@ go vet ./...  # lint
 - **Perguntas de subagente:** `ask_user_question` no filho não espera o composer
   do pai. Escolhe a opção `(Recommended)` (senão a primeira). Sem opções, falha
   com `DELEGATED_CALLER` em vez de travar.
-- O SQLite de sessão do rc.8 (v2) **não** lê o storage antigo: dados em
-  `%LOCALAPPDATA%\openharness\dsh-home` de um exe rc.5 podem quebrar. Se a UI
-  não subir sessões, apague (ou renomeie) essa pasta e reabra o app.
+- Sessões ficam em JSONL (`session-persistence-jsonl`); o upstream 0.2 migra
+  formatos antigos pela cadeia `session-format-v0-to-v1` … `v3-to-v4`. Se a UI
+  não subir sessões de um dsh-home muito antigo, renomeie a pasta e reabra.
+- **Privacidade:** telemetria OTEL (`session-telemetry-otel`) sai `DISABLED`
+  salvo `DSH_TELEMETRY_MODE`, e o anexo de log de sessão em requests DeepSeek
+  oficiais (`session-log-deepseek.enabled`) começa desligado (opt-in em Geral).
+- **Editar mensagem / apagar sessão:** RPCs `session.revise` (evento
+  `session/revision`, op de superfície `cut`) e `session.delete`
+  (`session/delete`, apaga descendentes subagente; evento `api-session/deleted`).
+- **Settings → Status:** ledger local em `$DSH_HOME/usage-panel.json`
+  (`usagePanel: true` no `session-controller` em `bundle/web-app/cordis.patch.yml`);
+  Limites e Status usam `ctx.remote.usage.{panel,accountUsage}`.
 - Tentativa de exe único via `@yao-pkg/pkg --sea` foi descartada: o loader
   Cordis cria junctions em `$DSH_HOME/profiles/node_modules` apontando para
   diretórios reais, incompatível com o FS virtual /snapshot do SEA.

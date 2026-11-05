@@ -2,7 +2,7 @@
 /** Shared live-quota probe: timeout, abort, and chip/ring single-flight cache. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import type { AccountUsageView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AccountUsageView } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import type { QuotaRingProps } from '../src/client/QuotaRing.tsx'
 import { QuotaRing } from '../src/client/QuotaRing.tsx'
@@ -41,6 +41,7 @@ function directory(): ModelDirectoryState {
     }],
     failures: [],
     status: 'ready',
+    pending: null,
     error: null,
   }
 }

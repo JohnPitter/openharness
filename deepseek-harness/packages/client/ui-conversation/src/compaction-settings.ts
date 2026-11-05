@@ -21,10 +21,13 @@ export const DEFAULT_COMPACTION_AUTO = true
 /** Closest allowed discrete value to the plugin Config `thresholdRatio` default of `0.8`. */
 export const DEFAULT_COMPACTION_THRESHOLD_PERCENT: CompactionThresholdPercent = 75
 
-/** Durable compaction section mirrored by the browser scope. */
+/** compaction-basic's volatile Config section the General rows edit through configForms. */
 export interface CompactionUserSettings {
   /** When false, skip step-boundary pressure and overflow-recovery listeners. */
   auto: boolean
-  /** Compact when estimated tokens reach this percent of the routed context window. */
-  thresholdPercent: CompactionThresholdPercent
+  /**
+   * Compact when estimated tokens reach this percent of the routed context
+   * window; unset falls back to the plugin's `thresholdRatio` (0.8).
+   */
+  thresholdPercent?: CompactionThresholdPercent
 }

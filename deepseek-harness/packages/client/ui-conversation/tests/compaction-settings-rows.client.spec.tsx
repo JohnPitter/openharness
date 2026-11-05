@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
-import { createSnapshotStore, type SessionListState, type WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
+import { standardRowProps } from './settings-row-fixture.client.ts'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import {
   CompactionAutoRow, CompactionThresholdRow,
@@ -16,18 +16,6 @@ afterEach(() => {
   localStorage.clear()
 })
 
-function emptySessions() {
-  return bindSnapshotSelector(createSnapshotStore<SessionListState>({
-    ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
-  }))
-}
-
-function emptyWorkspaces() {
-  return bindSnapshotSelector(createSnapshotStore<WorkspaceListState>({
-    items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-    baselinesReady: true, recentWorkspaceId: undefined,
-  }))
-}
 
 function mount() {
   const policy = new CompactionSettingsPolicy()
@@ -36,8 +24,7 @@ function mount() {
     policy.setThresholdPercent(percent)
   })
   const props: CompactionSettingsRowProps = {
-    useSessions: emptySessions(),
-    useWorkspaces: emptyWorkspaces(),
+    ...standardRowProps(),
     useCompactionAuto: bindSnapshotSelector(policy.auto),
     useCompactionThreshold: bindSnapshotSelector(policy.thresholdPercent),
     setCompactionAuto,

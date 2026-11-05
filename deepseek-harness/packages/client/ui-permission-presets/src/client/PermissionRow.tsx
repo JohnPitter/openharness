@@ -5,10 +5,10 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  IconChevronDownOutline14, Menu, RiskConfirmation,
+  IconChevronDownOutlineRegular, Menu, RiskConfirmation,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PermissionSettingsState } from './settings-store.ts'
 import type { PermissionSettingsKey } from './locales.ts'
@@ -58,12 +58,10 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
   if (state.status === 'unavailable') return null
   const selected = state.options.find(option => option.id === state.currentValue)
   const busy = state.status === 'loading' || state.status === 'saving' || confirmingFullAccess
-  const labelOf = (id: string, fallback: string): string => displayPermissionPreset(id, fallback, t)
-  const label = selected === undefined
-    ? (busy ? t('loading') : t('unavailable'))
-    : labelOf(selected.id, selected.label)
+  const optionLabel = (option: PermissionSettingsState['options'][number]): string =>
+    displayPermissionPreset(option.id, option.label, t)
+  const label = selected !== undefined ? optionLabel(selected) : (busy ? t('loading') : t('unavailable'))
   const description: string = state.error ?? t('description')
-  const fullAccessName = t('preset.fullAccess')
 
   return (
     <>
@@ -75,7 +73,7 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
         <Menu
           open={open}
           onClose={() => { setOpen(false) }}
-          items={state.options.map(option => ({ id: option.id, label: labelOf(option.id, option.label) }))}
+          items={state.options.map(option => ({ id: option.id, label: optionLabel(option) }))}
           selectedId={state.currentValue}
           onSelect={(id) => {
             setOpen(false)
@@ -99,18 +97,19 @@ export function PermissionRow({ load, select, usePermission, t }: PermissionRowP
               onClick={() => { setOpen(value => !value) }}
             >
               {label}
-              <IconChevronDownOutline14 className={css.chevron} />
+              <IconChevronDownOutlineRegular className={css.chevron} />
             </button>
           )}
         />
       </div>
       <RiskConfirmation
         open={confirmingFullAccess}
-        title={t('confirm.title', { name: fullAccessName })}
-        description={t('confirm.description', { name: fullAccessName })}
+        title={t('confirm.title')}
+        description={t('confirm.description')}
         acknowledgeLabel={t('confirm.acknowledge')}
         cancelLabel={t('confirm.cancel')}
-        confirmLabel={t('confirm.enable', { name: fullAccessName })}
+        closeLabel={t('close')}
+        confirmLabel={t('confirm.enable')}
         acknowledged={acknowledged}
         disabled={!state.writable || state.status === 'saving'}
         onAcknowledgedChange={setAcknowledged}

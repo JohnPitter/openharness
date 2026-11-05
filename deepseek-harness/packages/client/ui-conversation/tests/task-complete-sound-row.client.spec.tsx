@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
-import { createSnapshotStore, type SessionListState, type WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
+import { standardRowProps } from './settings-row-fixture.client.ts'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { TaskCompleteSoundRow } from '../src/client/settings/TaskCompleteSoundRow.tsx'
 import type { TaskCompleteSoundRowProps } from '../src/client/settings/TaskCompleteSoundRow.tsx'
@@ -17,18 +17,6 @@ afterEach(() => {
   Object.defineProperty(window, 'parent', { configurable: true, value: window })
 })
 
-function emptySessions() {
-  return bindSnapshotSelector(createSnapshotStore<SessionListState>({
-    ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
-  }))
-}
-
-function emptyWorkspaces() {
-  return bindSnapshotSelector(createSnapshotStore<WorkspaceListState>({
-    items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-    baselinesReady: true, recentWorkspaceId: undefined,
-  }))
-}
 
 function mountDesktop() {
   const posted: unknown[] = []
@@ -42,8 +30,7 @@ function mountDesktop() {
     policy.setSound(sound)
   })
   const props: TaskCompleteSoundRowProps = {
-    useSessions: emptySessions(),
-    useWorkspaces: emptyWorkspaces(),
+    ...standardRowProps(),
     useTaskCompleteSound: bindSnapshotSelector(policy.sound),
     setTaskCompleteSound,
     t: makeTranslate(en),
@@ -57,8 +44,7 @@ describe('TaskCompleteSoundRow', () => {
     Object.defineProperty(window, 'parent', { configurable: true, value: window })
     const policy = new TaskCompleteSoundPolicy()
     render(<TaskCompleteSoundRow
-      useSessions={emptySessions()}
-      useWorkspaces={emptyWorkspaces()}
+      {...standardRowProps()}
       useTaskCompleteSound={bindSnapshotSelector(policy.sound)}
       setTaskCompleteSound={() => {}}
       t={makeTranslate(en)}

@@ -3,6 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -20,6 +21,7 @@ async function mount(preset = 'workflow'): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   ctx.provide('agentPresets', {
     composedPreset: () => preset,
     composeFrom: () => undefined,
@@ -31,8 +33,8 @@ async function mint(ctx: Context, name: string): Promise<Agent> {
   const agent = {
     id: name as SessionId,
     options: {},
-    session: { header: {} },
-  } as Agent
+    session: { header: {}, requestHeader: () => undefined, deriveMessages: () => [] },
+  } as unknown as Agent
   let inner!: ReturnType<typeof createScope>
   await ctx.plugin(Object.assign((scoped: Context) => {
     inner = createScope(scoped, agent)
@@ -107,18 +109,15 @@ describe('workflow orchestrator tool restriction', () => {
     Object.assign(parent, {
       session: {
         header: {},
-        events: [
+        requestHeader: () => undefined,
+        deriveMessages: () => [
           {
-            type: 'user/message',
-            seq: 1,
-            time: 1,
-            data: {
-              source: { kind: 'user' },
-              content: [
-                { type: 'text', text: 'look' },
-                { type: 'image', attachment },
-              ],
-            },
+            role: 'user',
+            source: { kind: 'user' },
+            content: [
+              { type: 'text', text: 'look' },
+              { type: 'image', attachment },
+            ],
           },
         ],
       },

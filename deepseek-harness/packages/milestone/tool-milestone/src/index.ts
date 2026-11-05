@@ -11,16 +11,24 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-agent'
+// Type-only: resolves the required ctx.sessionProjections service declaration.
+import type {} from '@deepseek-ai/dsh-session-projection'
 import { MilestoneId } from './brand.ts'
-import { foldMilestoneTitles, renderMilestoneIndex } from './fold.ts'
+import { milestoneTitlesProjection, renderMilestoneIndex } from './fold.ts'
 import type { MilestoneWriteData } from './types.ts'
 
 export type * from './types.ts'
 export { MilestoneId } from './brand.ts'
-export { foldMilestoneTitles, renderMilestoneIndex } from './fold.ts'
+export {
+  applyMilestoneTitles,
+  foldMilestoneTitles,
+  MILESTONE_TITLES_PROJECTION_KEY,
+  milestoneTitlesProjection,
+  renderMilestoneIndex,
+} from './fold.ts'
 
 export const name = 'tool-milestone'
-export const inject = ['tools', 'systemPrompt']
+export const inject = ['tools', 'systemPrompt', 'sessionProjections']
 
 /** Maximum stored title length after trim. */
 export const MILESTONE_TITLE_MAX = 160
@@ -62,17 +70,20 @@ function appendMilestone(session: Session, data: MilestoneWriteData): void {
 }
 
 /**
- * Register `milestone_write` and the titles-only runtime-context index.
- * @param ctx - registrant context carrying tools and system prompt.
+ * Register `milestone_write`, the host-only title projection, and the
+ * titles-only runtime-context index.
+ * @param ctx - registrant context carrying tools, system prompt, and session projections.
+ * @returns when the projection is registered and the tool is published.
  */
-export function apply(ctx: Context): void {
+export async function apply(ctx: Context): Promise<void> {
+  const titles = await ctx.sessionProjections.register(milestoneTitlesProjection)
   ctx.systemPrompt.context({
     name: 'milestone:index',
-    order: 125,
+    order: ctx.systemPrompt.getContextOrder('MILESTONE_INDEX'),
     text: (context) => {
       const agent = context.agent
       if (agent === undefined) return ''
-      return renderMilestoneIndex(foldMilestoneTitles(agent.session))
+      return renderMilestoneIndex(titles.stateOf(agent.session))
     },
   })
 

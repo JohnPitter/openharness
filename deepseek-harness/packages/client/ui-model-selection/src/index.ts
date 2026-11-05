@@ -1,17 +1,18 @@
 /**
- * Model selection plugin, node half: registers the durable J-space toggle and
- * the system-prompt section it gates. The browser half ships via
- * exports["./client"].
+ * Model selection plugin, node half: owns the durable J-space toggle (this
+ * entry's `jspaceEnabled` config field, which the composer writes through the
+ * settings namespace of the same entry id) and the system-prompt section it
+ * gates. The browser half ships via exports["./client"].
  */
 
-import type { Context } from '@deepseek-ai/cordis'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-skill'
 import type { AssembleContext } from '@deepseek-ai/dsh-system-prompt'
 import {
-  JSPACE_DEFAULT_ENABLED, JSPACE_SETTINGS_NAMESPACE, JSPACE_SKILL_NAME, JspaceSettingsSchema,
-  jspaceProtocolForAssembly, type JspaceSettings,
+  JSPACE_DEFAULT_ENABLED, JSPACE_ENABLED_FIELD, JSPACE_SKILL_NAME, jspaceProtocolForAssembly,
 } from './jspace-settings.ts'
 
 export {
@@ -19,22 +20,21 @@ export {
   JSPACE_SETTINGS_NAMESPACE, JSPACE_SKILL_NAME, jspaceProtocolText,
 } from './jspace-settings.ts'
 
-const NS = settingsNamespace(JSPACE_SETTINGS_NAMESPACE)
-
 /** Wait for the prompt registry; settings is optional until the file provider mounts. */
 export const inject = ['systemPrompt']
 
-/** Prompt-section name: sits just after the deployment/preset persona (order 0). */
+/** Prompt-section name: sits just after the deployment/preset persona. */
 export const JSPACE_SECTION = 'jspace:protocol'
 
-/** Read the stored toggle, defaulting on when the namespace is absent. */
-function readEnabled(ctx: Context): boolean {
-  const settings = ctx.get('settings')
-  if (settings === undefined) return JSPACE_DEFAULT_ENABLED
-  const section = settings.get(NS) as JspaceSettings | undefined
-  if (section === undefined) return JSPACE_DEFAULT_ENABLED
-  return section.enabled
+/** Live entry config: the J-space toggle the composer writes. */
+export interface Config {
+  /** Whether the construction protocol is injected and `j-space` stays model-visible. */
+  jspaceEnabled: Volatile<boolean>
 }
+
+export const Config = z.object({
+  [JSPACE_ENABLED_FIELD]: z.boolean().default(JSPACE_DEFAULT_ENABLED).volatile(),
+})
 
 function composedPresetOf(context: AssembleContext): string | undefined {
   const agent = (context as AssembleContext & {
@@ -62,20 +62,24 @@ function delegationDepthOf(context: AssembleContext): number {
  * Register the settings namespace and the gated prompt section.
  * @param ctx - Host context carrying systemPrompt (and optionally settings).
  */
-export function apply(ctx: Context): void {
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.register(NS, JspaceSettingsSchema)
-  })
+export function apply(ctx: Context, config: Config): void {
+  // The composer menu owns this field; no generic settings form.
+  ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
+  const readEnabled = (_ctx?: Context): boolean => config.jspaceEnabled?.get() ?? JSPACE_DEFAULT_ENABLED
   ctx.effect(() => ctx.systemPrompt.section({
     name: JSPACE_SECTION,
-    order: 1,
+    order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX') + 1,
     text: (context) => jspaceProtocolForAssembly(
-      readEnabled(ctx),
+      readEnabled(),
       composedPresetOf(context),
       delegationDepthOf(context),
     ),
   }), 'jspace.section()')
-  ctx.inject(['skills', 'settings'], (gateCtx) => {
+  // The Loader scopes volatile notifications to this entry's own fiber, so the
+  // listener lives on `ctx` and drives whichever gate the skills scope mounted.
+  let resync: (() => void) | undefined
+  ctx.on('loader/volatile-update', () => { resync?.() })
+  ctx.inject(['skills'], (gateCtx) => {
     let hide: (() => void) | undefined
     const sync = (): void => {
       hide?.()
@@ -83,9 +87,10 @@ export function apply(ctx: Context): void {
       if (!readEnabled(gateCtx)) hide = gateCtx.skills.hideFromModel(JSPACE_SKILL_NAME)
     }
     sync()
-    gateCtx.on('settings/updated', (ns) => {
-      if (ns === NS) sync()
-    })
-    gateCtx.effect(() => () => { hide?.() }, 'jspace.hideFromModel()')
+    resync = sync
+    gateCtx.effect(() => () => {
+      hide?.()
+      if (resync === sync) resync = undefined
+    }, 'jspace.hideFromModel()')
   })
 }

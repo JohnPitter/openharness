@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 /** Settings Limits section: provider account quotas only. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { usageApiOf } from './usage-api-fixture.client.ts'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { AccountUsageView, ConfigurableProviderView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AccountUsageView } from '@deepseek-ai/dsh-api-session-controller/types'
+
 import { QuotasSection } from '../src/client/QuotasSection.tsx'
-import type { QuotasSectionInjected } from '../src/client/QuotasSection.tsx'
 import { en } from '../src/client/locales.ts'
+
+type ConfigurableProviderView = { provider: string; displayName: string; [key: string]: unknown }
 
 afterEach(cleanup)
 
@@ -78,7 +81,7 @@ function mount(options: {
       panel: vi.fn(hanging),
     },
   }
-  render(<QuotasSection api={api as unknown as QuotasSectionInjected['api']} t={interpolate as never} />)
+  render(<QuotasSection api={usageApiOf(api as never)} t={interpolate as never} />)
   return { api }
 }
 
@@ -188,7 +191,7 @@ describe('QuotasSection', () => {
   })
 
   it('renders nothing without a translate seat', () => {
-    const { container } = render(<QuotasSection api={{ llm: { providers: vi.fn(), accountUsage: vi.fn() } } as never} />)
+    const { container } = render(<QuotasSection api={usageApiOf({ llm: { providers: vi.fn(), accountUsage: vi.fn() } } as never)} />)
     expect(container.textContent).toBe('')
   })
 
@@ -201,7 +204,7 @@ describe('QuotasSection', () => {
         accountUsage: vi.fn(),
       },
     }
-    render(<QuotasSection api={api as unknown as QuotasSectionInjected['api']} t={interpolate as never} />)
+    render(<QuotasSection api={usageApiOf(api as never)} t={interpolate as never} />)
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe('no catalog')
     })
@@ -216,7 +219,7 @@ describe('QuotasSection', () => {
         accountUsage: vi.fn(),
       },
     }
-    render(<QuotasSection api={api as unknown as QuotasSectionInjected['api']} t={interpolate as never} />)
+    render(<QuotasSection api={usageApiOf(api as never)} t={interpolate as never} />)
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe('catalog down')
     })
@@ -264,7 +267,7 @@ describe('QuotasSection', () => {
         }),
       },
     }
-    render(<QuotasSection api={api as unknown as QuotasSectionInjected['api']} t={interpolate as never} />)
+    render(<QuotasSection api={usageApiOf(api as never)} t={interpolate as never} />)
     await waitFor(() => {
       expect(screen.getByText('Broken Plan')).toBeTruthy()
     })
@@ -315,7 +318,7 @@ describe('QuotasSection', () => {
         }),
       },
     }
-    render(<QuotasSection api={api as unknown as QuotasSectionInjected['api']} t={interpolate as never} />)
+    render(<QuotasSection api={usageApiOf(api as never)} t={interpolate as never} />)
     await waitFor(() => {
       expect(screen.getByText('Kimi for Code')).toBeTruthy()
     })
@@ -366,7 +369,7 @@ describe('QuotasSection', () => {
         }),
       },
     }
-    render(<QuotasSection api={api as unknown as QuotasSectionInjected['api']} t={interpolate as never} />)
+    render(<QuotasSection api={usageApiOf(api as never)} t={interpolate as never} />)
     await waitFor(() => {
       expect(screen.getByText('Kimi for Code')).toBeTruthy()
     })
@@ -387,7 +390,7 @@ describe('QuotasSection', () => {
       },
     }
     const first = render(
-      <QuotasSection api={successApi as unknown as QuotasSectionInjected['api']} t={interpolate as never} />,
+      <QuotasSection api={usageApiOf(successApi as never)} t={interpolate as never} />,
     )
     first.unmount()
     settleSuccess()
@@ -405,7 +408,7 @@ describe('QuotasSection', () => {
       },
     }
     const second = render(
-      <QuotasSection api={failureApi as unknown as QuotasSectionInjected['api']} t={interpolate as never} />,
+      <QuotasSection api={usageApiOf(failureApi as never)} t={interpolate as never} />,
     )
     second.unmount()
     settleFailure()

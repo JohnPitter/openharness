@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
 import { TaskCompleteSoundPolicy } from '../src/client/settings/sound-policy.ts'
 import { DEFAULT_TASK_COMPLETE_SOUND } from '../src/desktop-sound-settings.ts'
 import type { ConversationSettings } from '../src/submission-settings.ts'
@@ -11,7 +11,7 @@ describe('TaskCompleteSoundPolicy', () => {
   })
 
   it('persists a catalog id and adopts host updates', () => {
-    const host = stubSettingsScope<ConversationSettings>()
+    const host = stubConfigForm<ConversationSettings>()
     const policy = new TaskCompleteSoundPolicy(host.scope)
     policy.setSound('ding')
     expect(policy.sound.getSnapshot()).toBe('ding')

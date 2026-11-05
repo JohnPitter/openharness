@@ -7,16 +7,25 @@
  * activation hook source.
  */
 
+import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { GoalActivation, GoalId } from '@deepseek-ai/dsh-goal/client'
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+
+/**
+ * The one failure the strip reports without a wire call: the session projects
+ * no goal, so no CAS ref exists to address a mutation to.
+ */
+export interface GoalLocalFailure {
+  readonly ok: false
+  readonly error: { readonly code: 'no-current-goal'; readonly message: string }
+}
 
 /**
  * Settled outcome of one goal mutation, rendered inline by the strip. The
  * strip renders the failure only — the mutated goal arrives through the
  * projection — so the success value stays unread here.
  */
-export type GoalActionResult = RemoteResult<unknown>
+export type GoalActionResult = RemoteResult<unknown> | GoalLocalFailure
 
 /** Process-local activation matched to one exact goal revision. */
 export interface GoalActivationSnapshot {
@@ -44,7 +53,7 @@ export interface GoalBarActions {
   onEdit: (objective: string) => Promise<GoalActionResult>
   /** Pause an active goal. */
   onPause: () => Promise<GoalActionResult>
-  /** Resume a paused or active-disarmed goal. */
+  /** Resume a paused goal. */
   onResume: () => Promise<GoalActionResult>
   /** Clear the current goal (tombstone). */
   onClear: () => Promise<GoalActionResult>

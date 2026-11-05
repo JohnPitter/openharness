@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Cursor",
+    "description": "Cursor adapter speaking the cursor-agent protocol, with sign-in and quota."
+  }
+}

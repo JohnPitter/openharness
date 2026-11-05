@@ -1,8 +1,9 @@
 /**
  * Injected face of the sidebar usage-status chip.
  */
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { AccountUsageView, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AccountUsageView, UsagePanelView } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectoryState } from './directory.ts'
 import type { WorkerModelState } from './worker-store.ts'
@@ -32,4 +33,27 @@ export interface QuotaRingInjected {
   directory: HostObservable<ModelDirectoryState> | SnapshotStore<ModelDirectoryState>
   /** Account-level quota for the staged provider, using its stored key. */
   loadAccountUsage: (provider: string, signal?: AbortSignal) => Promise<AccountUsageView>
+}
+
+/** One registered provider route the Limits page probes. */
+export interface UsageProviderEntry {
+  provider: string
+  displayName: string
+}
+
+/** A read that either answered or carries the message to show in its place. */
+export type UsageRead<T> = { ok: true; value: T } | { ok: false; error: string }
+
+/**
+ * Host reads behind the usage surfaces (`usage.accountUsage`, `usage.panel`,
+ * `llm.listProviders`), adapted once by the plugin body so the components
+ * never touch the Remote carrier.
+ */
+export interface UsageApi {
+  /** Registered provider routes, in registry order. */
+  listProviders: () => Promise<UsageRead<readonly UsageProviderEntry[]>>
+  /** Account-level quota for one route; a failed probe rides `error`. */
+  accountUsage: (provider: string, signal?: AbortSignal) => Promise<AccountUsageView>
+  /** Host-local request and token history. */
+  panel: () => Promise<UsageRead<UsagePanelView>>
 }

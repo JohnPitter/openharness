@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { AccountUsageView, AccountUsageWindowView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AccountUsageView, AccountUsageWindowView } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { QuotaTranslate } from './usage-quota.tsx'
 import { windowHours } from './usage-quota.tsx'
 

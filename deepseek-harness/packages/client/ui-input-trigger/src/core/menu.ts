@@ -7,9 +7,11 @@
  * Roster protocol: the frozen `hit` event carries no source roster, so the
  * reducer cannot invent groups. Opening from a closed state, the shell seeds
  * the roster with {@link seedGroups} and then dispatches `hit`; a `hit`
- * while open (query refinement) marks existing groups pending under a new
- * generation without clearing items or highlight (stale-while-revalidate).
- * Auto-close and explicit close drop the groups.
+ * while open (query refinement) resets the existing groups to pending under
+ * a new generation while keeping their items on screen until the new fetch
+ * settles (stale-while-revalidate — the render layer shows skeletons only
+ * for a pending group with no items). Auto-close and explicit close drop
+ * the groups.
  */
 import type { InputTriggerCandidate, InputTriggerSource } from '../types.ts'
 import type { ExactMatch, MenuReduce, MenuState } from './contract.ts'
@@ -82,7 +84,8 @@ const allReadyEmpty = (groups: MenuState['groups']): boolean =>
  * open menu, or the roster is dropped; a settlement or failure leaving every
  * group ready-and-empty (or no groups) auto-closes; `source-failed` silently
  * removes the group (the shell logs); `move` cycles the highlight across
- * ready items.
+ * ready items; `hover` parks it on one ready item (pointer and keyboard
+ * share the single highlight — last input wins).
  *
  * @param state - Current menu state.
  * @param ev - Menu event.
@@ -136,6 +139,14 @@ export const menuReduce: MenuReduce = (state, ev) => {
       if (next === undefined) return state
       if (hl && next.source === hl.source && next.index === hl.index) return state
       return { ...state, highlight: next }
+    }
+    case 'hover': {
+      if (!state.open) return state
+      const target = validHighlight({ source: ev.source, index: ev.index }, state.groups)
+      if (target === null) return state
+      const hl = state.highlight
+      if (hl && hl.source === target.source && hl.index === target.index) return state
+      return { ...state, highlight: target }
     }
     case 'close':
       return closed(state)

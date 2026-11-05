@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /** Settings Status section: local usage panel only. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { usageApiOf } from './usage-api-fixture.client.ts'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { UsagePanelView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { UsagePanelView } from '@deepseek-ai/dsh-api-session-controller/types'
 import { UsagesSection } from '../src/client/UsagesSection.tsx'
 import type { UsagesSectionInjected } from '../src/client/UsagesSection.tsx'
 import { en } from '../src/client/locales.ts'
@@ -42,7 +43,7 @@ function mount(options: {
         : { result: { ok: false as const, error: { code: 'internal', message: options.panelError, details: {} } } }),
     },
   }
-  render(<UsagesSection api={api as unknown as UsagesSectionInjected['api']} t={interpolate as never} />)
+  render(<UsagesSection api={usageApiOf(api as never)} t={interpolate as never} />)
   return { api }
 }
 
@@ -148,7 +149,7 @@ describe('UsagesSection', () => {
   })
 
   it('renders nothing without a translate seat', () => {
-    const { container } = render(<UsagesSection api={{ usage: { panel: vi.fn() } } as never} />)
+    const { container } = render(<UsagesSection api={usageApiOf({ usage: { panel: vi.fn() } } as never)} />)
     expect(container.textContent).toBe('')
   })
 
@@ -192,7 +193,7 @@ describe('UsagesSection', () => {
         }),
       },
     }
-    render(<UsagesSection api={api as unknown as UsagesSectionInjected['api']} t={interpolate as never} />)
+    render(<UsagesSection api={usageApiOf(api as never)} t={interpolate as never} />)
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe('ledger down')
     })

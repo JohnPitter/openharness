@@ -2,9 +2,8 @@
  * Live automatic-compaction preference used by the General Settings rows.
  * Host writes go through the bound scope; absent compositions stay process-local.
  */
-import {
-  createSnapshotStore, type SettingsScope, type SnapshotStore,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   COMPACTION_AUTO_FIELD, COMPACTION_THRESHOLD_FIELD,
   DEFAULT_COMPACTION_AUTO, DEFAULT_COMPACTION_THRESHOLD_PERCENT,
@@ -23,21 +22,23 @@ export class CompactionSettingsPolicy {
   readonly thresholdPercent: SnapshotStore<CompactionThresholdPercent> = createSnapshotStore(
     DEFAULT_COMPACTION_THRESHOLD_PERCENT,
   )
-  private readonly host: SettingsScope<CompactionUserSettings> | undefined
+  private readonly host: ConfigForm<CompactionUserSettings> | undefined
+  private readonly unsubscribe: (() => void) | undefined
 
   /**
-   * @param host - durable preference scope owned by the providing plugin;
-   * absent compositions stay process-local. The adoption subscription shares
-   * the scope's plugin lifetime — a disposed scope never publishes again, so
-   * the policy needs no release hook.
+   * @param host - shared configuration form owned by the providing plugin;
+   * absent compositions stay process-local.
    */
-  constructor(host?: SettingsScope<CompactionUserSettings>) {
+  constructor(host?: ConfigForm<CompactionUserSettings>) {
     this.host = host
     if (host !== undefined) {
-      host.subscribe(() => { this.adopt(host) })
+      this.unsubscribe = host.subscribe(() => { this.adopt(host) })
       this.adopt(host)
     }
   }
+
+  /** Release the preference subscription. */
+  dispose(): void { this.unsubscribe?.() }
 
   /**
    * Change whether automatic pressure and overflow recovery run.
@@ -63,11 +64,11 @@ export class CompactionSettingsPolicy {
    * Adopt the scope's accepted durable section without writing it back.
    * @param host - the constructor-narrowed scope driving this adoption.
    */
-  private adopt(host: SettingsScope<CompactionUserSettings>): void {
+  private adopt(host: ConfigForm<CompactionUserSettings>): void {
     const section = host.getSnapshot().value
     if (section === undefined) return
     if (this.auto.getSnapshot() !== section.auto) this.auto.set(section.auto)
-    if (this.thresholdPercent.getSnapshot() !== section.thresholdPercent) {
+    if (section.thresholdPercent !== undefined && this.thresholdPercent.getSnapshot() !== section.thresholdPercent) {
       this.thresholdPercent.set(section.thresholdPercent)
     }
   }

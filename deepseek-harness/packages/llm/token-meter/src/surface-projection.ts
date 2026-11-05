@@ -1,75 +1,101 @@
-import { deriveEventMessage, isSurfaceEvent } from '@deepseek-ai/dsh-session'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-compaction'
-import type { TokenSurfaceNode } from './types.ts'
-import { estimateMessage } from './estimate.ts'
+/**
+ * The context-pressure projection's O(1) surface-token fold.
+ *
+ * Its checkpoint keeps scalar totals rather than the retained surface used
+ * by measurement. Replacements ride the compact
+ * seam's shadow-price protocol: the metering event immediately before a
+ * surface `replace` (`compaction/summary` or `compaction/prune`) states the
+ * heuristic price of the exact replaced range, so the fold keeps a running
+ * total plus at most one pending claim and never retains per-node prices.
+ * The counts are exact by construction: producers derive them from the same
+ * fixed estimator this module prices appends with. A replacement without an
+ * armed claim folds with zero delta because bounded state cannot reconstruct
+ * the replaced range; this preserves replay at the cost of possible drift.
+ *
+ * @module @deepseek-ai/dsh-token-meter/surface-projection
+ */
 
-/** Pending compaction shadow price, retained for producer consistency checks. */
+import { deriveEventMessage, isSurfaceEvent, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
+// Type-only: the `compaction/*` SessionEventMap merges (shadow-price events).
+import type {} from '@deepseek-ai/dsh-compaction'
+import { estimateMessage } from './estimate.ts'
+import { isSurfaceCut } from './surface-fold.ts'
+
+/**
+ * One armed shadow price: the heuristic tokens of the surface range the
+ * IMMEDIATELY following event replaces. Plain JSON — it is part of the
+ * persisted unit state while armed.
+ */
 export interface ShadowPriceClaim {
-  start: number
-  end: number
+  /** Declared inclusive first surface-node seq of the priced range. */
+  start: SessionSeq
+  /** Declared inclusive last surface-node seq of the priced range. */
+  end: SessionSeq
+  /** Heuristic tokens of the priced range under the fixed estimator. */
   tokens: number
 }
 
-/** State needed to fold the active surface without token drift on cuts. */
-export interface SurfaceProjectionState {
-  readonly nodes: readonly TokenSurfaceNode[]
-  readonly claim: ShadowPriceClaim | undefined
-}
-
-/** One event's exact effect on the active surface token total. */
+/** One event's effect on a running surface-token total. */
 export interface SurfaceTokensFold {
+  /** Signed change in the surface total; 0 for events off the surface. */
   readonly deltaTokens: number
+  /** Claim to carry into the next event; undefined when none survives. */
   readonly claim: ShadowPriceClaim | undefined
-  readonly nodes: TokenSurfaceNode[]
 }
 
 /**
- * Fold one committed event while retaining the active priced nodes. This is
- * intentionally indexed by surface node rather than approximating a cut with
- * the replacement price: repeated and overlapping revisions must subtract each
- * currently active shadowed contribution exactly once.
- * @param state - active priced nodes and adjacent shadow-price claim.
- * @param event - next committed session event.
- * @returns the next state and signed token delta.
+ * Fold one committed event onto a running surface-token total.
+ *
+ * A shadow-price event arms a claim; any other event expires it, and a
+ * surface `replace` consumes the claim naming its exact range — the
+ * producers append the metering event and the replacement synchronously
+ * adjacent, so a surviving claim always prices the very next event.
+ * A replace with no claim folds with zero delta because the bounded state
+ * cannot reconstruct the replaced range. An armed claim for another range
+ * still fails because the adjacent events contradict each other.
+ * @param claim - the claim armed by the immediately preceding event, if any.
+ * @param event - the next committed session event.
+ * @returns the signed token delta and the claim state after this event.
+ * @throws when a replacement arrives with an armed claim for a different
+ *   range — the metering event was adjacent, so this is a live producer's
+ *   shadow-price contract violation, not historical data, and must fail
+ *   loud rather than let the total drift.
  */
 export function foldSurfaceProjection(
-  state: SurfaceProjectionState,
+  claim: ShadowPriceClaim | undefined,
   event: SessionEvent,
 ): SurfaceTokensFold {
   if (event.type === 'compaction/summary' || event.type === 'compaction/prune') {
     const { shadowedRange, shadowedTokenCount } = event.data
     return {
       deltaTokens: 0,
-      nodes: [...state.nodes],
-      claim: { start: shadowedRange.start, end: shadowedRange.end, tokens: shadowedTokenCount },
+      claim: {
+        start: SessionSeq(shadowedRange.start),
+        end: SessionSeq(shadowedRange.end),
+        tokens: shadowedTokenCount,
+      },
     }
   }
-  if (!isSurfaceEvent(event)) return { deltaTokens: 0, nodes: [...state.nodes], claim: undefined }
+  if (!isSurfaceEvent(event)) return { deltaTokens: 0, claim: undefined }
   const message = deriveEventMessage(event)
   const tokens = message === null ? 0 : estimateMessage(message)
-  const node = { seq: event.seq, tokens }
   const op = event.surfaceOp
-  if (op === 'append') return { deltaTokens: tokens, nodes: [...state.nodes, node], claim: undefined }
-  if (op.op === 'cut') {
-    const removed = state.nodes
-      .filter(item => item.seq >= op.anchorSeq && item.seq <= op.throughSeq)
-      .reduce((total, item) => total + item.tokens, 0)
-    const nodes = state.nodes.filter(item => item.seq < op.anchorSeq || item.seq > op.throughSeq)
-    nodes.push(node)
-    return { deltaTokens: tokens - removed, nodes, claim: undefined }
+  if (op === 'append') return { deltaTokens: tokens, claim: undefined }
+  // A same-session revision cut carries no shadow price and this bounded
+  // state retains no per-node prices, so it folds neutrally like an unmetered
+  // replacement; the next provider pressure sample re-anchors the total.
+  if (isSurfaceCut(op)) return { deltaTokens: 0, claim: undefined }
+  // Sessions recorded before the shadow-price protocol log replacements with
+  // no adjacent metering event; the bounded state cannot reconstruct the
+  // replaced range's price, so fold those neutrally — historical replay
+  // degrades to drift instead of failing.
+  if (claim === undefined) return { deltaTokens: 0, claim: undefined }
+  if (claim.start !== op.startSeq || claim.end !== op.endSeq) {
+    throw new Error(
+      `token surface: replace at seq ${event.seq} over range ${op.startSeq}-${op.endSeq} has no adjacent shadow price`
+      + ` (armed claim covers ${claim.start}-${claim.end})`,
+    )
   }
-  if (state.claim !== undefined && (state.claim.start !== op.start || state.claim.end !== op.end)) {
-    throw new Error(`token surface: replace at seq ${event.seq} over range ${op.start}-${op.end} has no adjacent shadow price`)
-  }
-  const start = state.nodes.findIndex(item => item.seq === op.start)
-  const end = state.nodes.findIndex(item => item.seq === op.end)
-  if (start < 0 || end < start) {
-    if (state.claim === undefined) return { deltaTokens: 0, nodes: [...state.nodes], claim: undefined }
-    throw new Error(`token surface: replace at seq ${event.seq} has invalid current range ${op.start}-${op.end}`)
-  }
-  const removed = state.nodes.slice(start, end + 1).reduce((total, item) => total + item.tokens, 0)
-  const nodes = [...state.nodes]
-  nodes.splice(start, end - start + 1, node)
-  return { deltaTokens: tokens - removed, nodes, claim: undefined }
+  return { deltaTokens: tokens - claim.tokens, claim: undefined }
 }

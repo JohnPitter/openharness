@@ -4,9 +4,9 @@
  * background, raise a system notification. Subagent rows stay silent —
  * their parent is still the user-facing task.
  */
-import type {
-  ObservableSnapshot, SessionId, SessionListState, SessionSummary,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   DEFAULT_TASK_COMPLETE_SOUND, type TaskCompleteSound,
 } from '../desktop-sound-settings.ts'
@@ -26,6 +26,22 @@ export interface DesktopTaskComplete {
   /** Catalog id from General settings. */
   sound: TaskCompleteSound
 }
+
+/**
+ * One list row as the completion diff reads it: the Host list summary plus
+ * the UI pending-interaction fact (approval, plan review, question) that the
+ * sidebar's amber dot shows.
+ */
+export type DesktopTaskRow = Pick<SessionSummary, 'id' | 'parentId' | 'origin' | 'running' | 'title' | 'displayTitle'> & {
+  /** Present while the session waits on the user; absent otherwise. */
+  readonly pendingInteraction?: unknown
+}
+
+/** Rows keyed by session id. */
+export type DesktopTaskRows = Readonly<Record<SessionId, DesktopTaskRow>>
+
+/** Pending-interaction facts per session (the ui-session status snapshot shape). */
+export type PendingInteractionSource = ObservableSnapshot<ReadonlyMap<SessionId, { readonly pendingInteraction: unknown }>>
 
 /**
  * True for a user-facing session. Catalog children and breadcrumb subagent
@@ -48,7 +64,7 @@ export function isRootTaskSession(row: Pick<SessionSummary, 'parentId' | 'origin
  * @param byId - current list rows.
  * @returns true when a child, grandchild, or deeper descendant is running.
  */
-function hasRunningDescendant(sessionId: SessionId, byId: SessionListState['byId']): boolean {
+function hasRunningDescendant(sessionId: SessionId, byId: DesktopTaskRows): boolean {
   for (const row of Object.values(byId)) {
     if (row.parentId !== sessionId) continue
     if (row.running || hasRunningDescendant(row.id, byId)) return true
@@ -73,12 +89,12 @@ function hasRunningDescendant(sessionId: SessionId, byId: SessionListState['byId
  */
 export function rootTaskCompletions(
   prev: ReadonlyMap<SessionId, boolean>,
-  byId: SessionListState['byId'],
+  byId: DesktopTaskRows,
   sound: TaskCompleteSound = DEFAULT_TASK_COMPLETE_SOUND,
 ): { next: Map<SessionId, boolean>; completed: DesktopTaskComplete[] } {
   const next = new Map<SessionId, boolean>()
   const completed: DesktopTaskComplete[] = []
-  for (const [sessionId, row] of Object.entries(byId) as [SessionId, SessionSummary][]) {
+  for (const [sessionId, row] of Object.entries(byId) as [SessionId, DesktopTaskRow][]) {
     if (!isRootTaskSession(row)) { next.set(sessionId, row.running); continue }
     const busy = row.running || hasRunningDescendant(sessionId, byId)
     next.set(sessionId, busy)
@@ -113,25 +129,52 @@ export function postDesktopPreviewSound(sound: TaskCompleteSound): void {
 }
 
 /**
+ * Merge the list rows with the live pending-interaction facts.
+ * @param byId - Host list rows.
+ * @param status - per-session pending-interaction facts, when composed.
+ * @returns rows the completion diff reads.
+ */
+function taskRows(
+  byId: SessionListState['byId'],
+  status: PendingInteractionSource | undefined,
+): DesktopTaskRows {
+  const pending = status?.getSnapshot()
+  if (pending === undefined || pending.size === 0) return byId
+  const rows: Record<SessionId, DesktopTaskRow> = {}
+  for (const [sessionId, row] of Object.entries(byId) as [SessionId, SessionSummary][]) {
+    const interaction = pending.get(sessionId)?.pendingInteraction
+    rows[sessionId] = interaction === undefined ? row : { ...row, pendingInteraction: interaction }
+  }
+  return rows
+}
+
+/**
  * Subscribe to the session list and emit each root running → idle edge.
  * @param list - sessions.list snapshot store.
  * @param post - test-injected sink; production posts to the parent window.
  * @param soundOf - live preference reader; defaults to the catalog default.
+ * @param status - pending-interaction facts (ui-session status); a paused root does not chime.
  * @returns unsubscribe.
  */
 export function watchDesktopTaskComplete(
   list: ObservableSnapshot<SessionListState>,
   post?: (event: DesktopTaskComplete) => void,
   soundOf?: () => TaskCompleteSound,
+  status?: PendingInteractionSource,
 ): () => void {
   const sink = post ?? postDesktopTaskComplete
   const soundReader = soundOf ?? (() => DEFAULT_TASK_COMPLETE_SOUND)
   let prev = new Map<SessionId, boolean>()
   const emit = (): void => {
-    const { next, completed } = rootTaskCompletions(prev, list.getSnapshot().byId, soundReader())
+    const { next, completed } = rootTaskCompletions(prev, taskRows(list.getSnapshot().byId, status), soundReader())
     prev = next
     for (const event of completed) sink(event)
   }
   emit()
-  return list.subscribe(emit)
+  const offList = list.subscribe(emit)
+  const offStatus = status?.subscribe(emit)
+  return () => {
+    offList()
+    offStatus?.()
+  }
 }

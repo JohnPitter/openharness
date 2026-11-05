@@ -1,9 +1,13 @@
+import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import type { Session } from '@deepseek-ai/dsh-session'
 import { type Agent } from '@deepseek-ai/dsh-agent'
 
 import * as tool from '../src/index.ts'
@@ -20,8 +24,18 @@ async function setup(): Promise<Context> {
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(tool)
   return ctx
+}
+
+function titlesOf(session: Session): string[] {
+  return foldMilestoneTitles(session.snapshotEvents())
+}
+
+function lastMilestone(session: Session) {
+  return session.snapshotEvents().findLast(e => e.type === 'milestone/write')
 }
 
 let callCounter = 0
@@ -30,9 +44,9 @@ function callMilestone(
   args: unknown,
   agent: Agent,
 ) {
-  return ctx.tools.execute({
+  return executeToolFixture(ctx, {
     signal: testToolSignal,
-    callId: CallId(`call-${++callCounter}`),
+    callId: ToolCallId(`call-${++callCounter}`),
     name: 'milestone_write',
     arguments: args,
     agent,
@@ -61,14 +75,14 @@ describe('dsh-tool-milestone', () => {
     })
     expect(text(result)).toBe('Wrote milestone: Root cause')
 
-    const event = session.events.findLast(e => e.type === 'milestone/write')!
+    const event = lastMilestone(session)!
     expect(event.data.title).toBe('Root cause')
     expect(event.data.body).toBe('Null deref in parse.')
     expect(event.data.origin).toBe('session')
     expect(event.data.childSessionId).toBeUndefined()
 
     await callMilestone(ctx, { title: 'Fix landed', body: 'Guard the parser.' }, agent)
-    expect(foldMilestoneTitles(session)).toEqual(['Root cause', 'Fix landed'])
+    expect(titlesOf(session)).toEqual(['Root cause', 'Fix landed'])
   })
 
   it('mirrors a child write onto a live parent and still succeeds when the parent is absent', async () => {
@@ -80,19 +94,19 @@ describe('dsh-tool-milestone', () => {
     expect(result.isError).toBe(false)
     if (result.isError) throw new Error('expected child write success')
 
-    const childEvent = child.events.findLast(e => e.type === 'milestone/write')!
-    const parentEvent = parent.events.findLast(e => e.type === 'milestone/write')!
+    const childEvent = lastMilestone(child)!
+    const parentEvent = lastMilestone(parent)!
     expect(childEvent.data.origin).toBe('session')
     expect(parentEvent.data.milestoneId).toBe(childEvent.data.milestoneId)
     expect(parentEvent.data.origin).toBe('worker')
     expect(parentEvent.data.childSessionId).toBe(child.id)
-    expect(foldMilestoneTitles(parent)).toEqual(['Worker finding'])
+    expect(titlesOf(parent)).toEqual(['Worker finding'])
 
     const orphan = ctx.sessions.create(SessionId('orphan'), { meta: { parentSession: SessionId('missing') } })
     const orphanAgent = { id: orphan.id, session: orphan } as unknown as Agent
     const orphaned = await callMilestone(ctx, { title: 'Still recorded', body: 'Parent was offline.' }, orphanAgent)
     expect(orphaned.isError).toBe(false)
-    expect(foldMilestoneTitles(orphan)).toEqual(['Still recorded'])
+    expect(titlesOf(orphan)).toEqual(['Still recorded'])
   })
 
   it('rejects empty title, oversized body, and a non-agent caller', async () => {
@@ -119,9 +133,9 @@ describe('dsh-tool-milestone', () => {
     expect(unsafe.isError).toBe(true)
     expect(text(unsafe)).toContain('`anchorSeq` must be a non-negative integer')
 
-    const noAgent = await ctx.tools.execute({
+    const noAgent = await executeToolFixture(ctx, {
       signal: testToolSignal,
-      callId: CallId('no-agent'),
+      callId: ToolCallId('no-agent'),
       name: 'milestone_write',
       arguments: { title: 'x', body: 'y' },
     })
@@ -163,6 +177,8 @@ describe('dsh-tool-milestone', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
+    await ctx.plugin(SessionProjectionRegistry)
     const fiber = await ctx.plugin(tool)
     expect(ctx.tools.schemas().some(s => s.name === 'milestone_write')).toBe(true)
     await fiber.dispose()
@@ -175,6 +191,6 @@ describe('dsh-tool-milestone', () => {
     session.append('turn/start', { turn: 1 })
     const agent = { id: session.id, session } as unknown as Agent
     await callMilestone(ctx, { title: 'Kept', body: 'Among other events.', anchorSeq: 1 }, agent)
-    expect(foldMilestoneTitles(session)).toEqual(['Kept'])
+    expect(titlesOf(session)).toEqual(['Kept'])
   })
 })

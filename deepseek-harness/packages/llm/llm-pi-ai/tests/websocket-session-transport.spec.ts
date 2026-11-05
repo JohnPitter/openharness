@@ -59,8 +59,8 @@ function terminalEvents(): AsyncIterable<AssistantMessageEvent> {
   })()
 }
 
-vi.mock('@earendil-works/pi-ai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@earendil-works/pi-ai')>()
+vi.mock('../src/models.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/models.ts')>()
   const models = {
     setProvider: vi.fn(),
     streamSimple: streamSimple,

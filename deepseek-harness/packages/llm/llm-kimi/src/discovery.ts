@@ -7,7 +7,7 @@
  */
 
 import { attributionHeaders, INVALID_CREDENTIAL_CODE, LlmError, normalizeApiKey } from '@deepseek-ai/dsh-llm'
-import type { LlmDiscoveredModel, LlmModelDiscoveryRequest } from '@deepseek-ai/dsh-llm'
+import type { LlmDiscoveredModel, LlmModelDiscoveryOperation } from '@deepseek-ai/dsh-llm'
 import { mergeCatalogs, parseLiveCatalog } from './adapter.ts'
 import type { KimiCatalogModel } from './adapter.ts'
 
@@ -46,7 +46,7 @@ function toDiscovered(entry: KimiCatalogModel): LlmDiscoveredModel {
  * @returns live models overlaid on the configured catalog.
  */
 export async function discoverModels(
-  request: LlmModelDiscoveryRequest,
+  request: LlmModelDiscoveryOperation,
   storedApiKey: () => Promise<string | undefined>,
   defaultBaseURL: string,
   configured: readonly KimiCatalogModel[],

@@ -4,16 +4,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { IApiClient, UsageBuckets, UsageDayView, UsagePanelView } from '@deepseek-ai/dsh-api-remotes/client'
-import { Button, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { UsageBuckets, UsageDayView, UsagePanelView } from '@deepseek-ai/dsh-api-session-controller/types'
+import { Button, IconRefreshOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { formatTokens } from './usage-format.ts'
+import type { UsageApi } from './usage-slots.ts'
 import css from './UsagesSection.module.css'
 
 /** Injected dependencies of {@link UsagesSection}. */
 export interface UsagesSectionInjected {
-  /** Wire face used to load the local usage panel. */
-  api: Pick<IApiClient, 'usage'>
+  /** Host read used to load the local usage panel. */
+  api: Pick<UsageApi, 'panel'>
 }
 
 export type UsagesSectionProps =
@@ -72,10 +73,10 @@ function sumDays(days: readonly UsageDayView[], fromDate: string): UsageBuckets 
   }, emptyBuckets())
 }
 
-async function loadPanel(api: Pick<IApiClient, 'usage'>): Promise<UsagePanelView> {
-  const response = await api.usage.panel({})
-  if (!response.result.ok) throw new Error(response.result.error.message)
-  return response.result.value
+async function loadPanel(api: Pick<UsageApi, 'panel'>): Promise<UsagePanelView> {
+  const response = await api.panel()
+  if (!response.ok) throw new Error(response.error)
+  return response.value
 }
 
 function dayLabel(iso: string): string {
@@ -144,7 +145,7 @@ export function UsagesSection(props: UsagesSectionProps): ReactNode {
           type="button"
           variant="outline"
           size="sm"
-          icon={<IconRefreshOutline16 size={14} />}
+          icon={<IconRefreshOutlineRegular size={14} />}
           disabled={loading}
           onClick={() => { refresh() }}
         >

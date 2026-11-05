@@ -1,15 +1,39 @@
 {
   "extends": "../../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
-  "include": ["src"],
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../llm/llm" },
-    { "path": "../../settings/settings" },
-    { "path": "../../credentials/credentials" },
-    { "path": "../../credentials/authorization" },
-    { "path": "../../util/launch-environment" },
-    { "path": "../../runtime-diagnostics/invariants" },
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../../vendor/schemastery" }
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../credentials/authorization"
+    },
+    {
+      "path": "../../util/launch-environment"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../../vendor/cosmokit"
+    },
+    {
+      "path": "../../../vendor/loader"
+    }
   ]
 }

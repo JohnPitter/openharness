@@ -1,3 +1,0 @@
-name: Workflow mode
-description: Orchestrator thinks and decides; a separate worker model gathers information and applies changes. Construction follows the J-Space protocol by default.
-order: 5

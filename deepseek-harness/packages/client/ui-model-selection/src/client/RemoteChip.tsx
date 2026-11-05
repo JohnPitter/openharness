@@ -7,7 +7,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import clsx from 'clsx'
-import { IconLinkOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconLinkOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import css from './RemoteChip.module.css'
@@ -203,7 +203,7 @@ export function RemoteChip(props: RemoteChipProps): ReactNode {
           data-active={open || url !== undefined || undefined}
           onClick={() => { setOpen(value => !value) }}
         >
-          <IconLinkOutline16 size={wide ? 16 : 18} />
+          <IconLinkOutlineRegular size={wide ? 16 : 18} />
           {wide && (
             <span className={css.badgeBody}>
               <span className={css.badgeLabel}>{t('menu.remote')}</span>

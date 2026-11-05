@@ -102,7 +102,7 @@ function clientMessages(run: FakeRun): unknown[] {
     .map(packet => decodeClientFrame(packet.payload)))
 }
 
-function dataFrame(value: unknown): Uint8Array {
+function dataFrame(value: { [k: string]: unknown }): Uint8Array {
   return frame(encodeServerFrame(value))
 }
 
@@ -250,7 +250,7 @@ describe('CursorAgentAdapter run protocol', () => {
       messages: [
         { role: 'user', content: [{ type: 'text', text: 'weather?' }] } as never,
         { role: 'assistant', content: [{ type: 'tool-call', id: 'call_1', name: 'get_weather', arguments: '{"city":"Lisbon"}' }] } as never,
-        { role: 'user', content: [{ type: 'tool-result', toolCallId: 'call_1', content: [{ type: 'text', text: '22C sunny' }] }] } as never,
+        { role: 'tool', toolCallId: 'call_1', content: [{ type: 'text', text: '22C sunny' }] } as never,
       ],
     }))
     await vi.waitFor(() => {

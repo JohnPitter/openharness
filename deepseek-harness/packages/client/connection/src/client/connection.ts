@@ -1,26 +1,20 @@
-import type { HostDescription, IApiClient, HostFrame, MuxFrame, RpcRequest } from './api.ts'
+/** Connection generation readiness, cancellation, and continuous recovery. */
+import { resolveConnectionConfig, type ConnectionRecoveryConfig } from '../recovery-config.ts'
 
-/** Reconnect/backoff tunables (deployment-varying — no hardcoded tunables; these become the
- *  future `ctx.connection` plugin's Config). All fields optional; defaults below. */
-export interface ConnectionConfig {
-  /** First-retry backoff cap in ms (jittered: actual delay is cap/2..cap). */
-  backoffBaseMs?: number
-  /** Exponential growth factor per consecutive failed attempt. */
-  backoffFactor?: number
-  /** Upper bound for the backoff cap in ms. */
-  backoffMaxMs?: number
-  /** Cap on waiting for both streams' onOpen before onConnected, in ms. The strict handshake
-   *  waits for mux+host stream establishment plus describe; a carrier that never
-   *  fires onOpen (misbehaving proxy) must not wedge the connection forever — on timeout the
-   *  generation proceeds as connected and the live-gap repair path covers stragglers. */
-  streamOpenTimeoutMs?: number
+export type { ConnectionRecoveryConfig } from '../recovery-config.ts'
+
+/** Stable Host facts delivered by one established Remote event generation. */
+export interface ConnectionHostInfo {
+  /** Host account home used only to abbreviate displayed filesystem paths. */
+  readonly home: string
 }
 
-const CONNECTION_DEFAULTS: Required<ConnectionConfig> = {
-  backoffBaseMs: 500,
-  backoffFactor: 2,
-  backoffMaxMs: 10_000,
-  streamOpenTimeoutMs: 3_000,
+/** One successfully established Host generation. */
+export interface ConnectionGeneration {
+  /** Monotone generation number within this Client runtime. */
+  readonly id: number
+  /** Host facts carried by this generation's opening frame. */
+  readonly host: ConnectionHostInfo
 }
 
 const MANUAL_RECONNECT = new Error('connection: manual reconnect requested')
@@ -45,27 +39,40 @@ function waitForAbort(signal: AbortSignal): Promise<void> {
   })
 }
 
-/** Coarse connection state for the UI after the first attempt has an outcome. */
-export type ConnectionState = 'connected' | 'disconnected' | 'connecting'
+/** Connection lifecycle state published after the first attempt has an outcome. */
+export type ConnectionState =
+  | 'connected'
+  | 'disconnected'
+  | 'connecting'
 
-/** Frame sink callbacks: the Controller owns the physical streams; business dispatch belongs to
- *  SessionManager. */
+/** Connection-generation callbacks owned by API Gateway. */
 export interface ConnectionSinks {
-  onMuxEnvelope?: (envelope: RpcRequest<MuxFrame>) => void
-  onHostEnvelope?: (envelope: RpcRequest<HostFrame>) => void
-  /** After each connection generation is established (both streams open + describe succeeded), first connect included. */
-  onConnected?: (description: HostDescription) => void
-  /** Coarse state transitions (deduplicated: fires only on change). The initial pre-connect
-   *  span reports nothing — the UI treats "no state yet" as connecting, not as an outage. */
+  /** After the generation source reports ready, first connect included. */
+  onConnected?: (host: ConnectionHostInfo) => void
+  /** State transitions after the initial attempt has an outcome. Equivalent states are deduplicated. */
   onStateChange?: (state: ConnectionState) => void
+  /** Start one fresh physical-carrier attempt before each logical retry. */
+  onReconnectRequested?: () => void
 }
 
 /**
- * Opens both streams and keeps iterating (pull mode: nothing reads the socket and the tap
- * never fires unless someone for-awaits), reconnecting with exponential backoff on loss.
+ * One long-lived source defining a Connection generation. The source must
+ * attach its incremental listeners before calling `ready`, then remain pending
+ * until the generation is lost or `signal` aborts. On abort it must stop
+ * delivery, release its resources, and settle before a replacement can start.
+ * @param signal - cancellation for the current generation.
+ * @param ready - one-shot report that incremental delivery is attached.
+ * @returns a promise settling only when this generation ends or fails.
+ */
+export type ConnectionGenerationSource = (
+  signal: AbortSignal,
+  ready: (host: ConnectionHostInfo) => void,
+) => Promise<void>
+
+/**
+ * Opens the registered generation source, reconnecting with exponential backoff on loss.
  * State (generation/attempt) is instance-private, never in the store.
- * The pump body feeds each frame to a sink (sink exceptions must
- * not kill the pump — a broken business layer must not drag down the connection layer).
+ * Sink exceptions do not kill the generation loop.
  */
 export class ConnectionController {
   private generation = 0
@@ -75,15 +82,15 @@ export class ConnectionController {
   private running = false
   private immediateRetry = false
   private networkAvailable = true
-  private lastState: ConnectionState | null = null
-  private readonly config: Required<ConnectionConfig>
+  private lastState: ConnectionState | undefined
+  private readonly config: Required<ConnectionRecoveryConfig>
 
   constructor(
-    private readonly api: IApiClient,
+    private readonly source: ConnectionGenerationSource,
     private readonly sinks: ConnectionSinks = {},
-    config: ConnectionConfig = {},
+    config: ConnectionRecoveryConfig = {},
   ) {
-    this.config = { ...CONNECTION_DEFAULTS, ...config }
+    this.config = resolveConnectionConfig(config)
   }
 
   /** Idempotent: begin the connect/pump/reconnect loop. */
@@ -93,7 +100,7 @@ export class ConnectionController {
     void this.loop()
   }
 
-  /** Stop the loop and abort the current generation's streams. */
+  /** Stop the loop and abort the current generation source. */
   stop(): void {
     this.running = false
     this.current?.abort()
@@ -139,10 +146,9 @@ export class ConnectionController {
     return cap / 2 + Math.random() * (cap / 2)
   }
 
-  private isFinalBackoffTier(attempt: number): boolean {
-    const cap = this.backoffCap(attempt)
-    const nextCap = this.backoffCap(attempt + 1)
-    return cap >= this.config.backoffMaxMs || !Number.isFinite(nextCap) || nextCap <= cap
+  /** Re-read retry inputs after a potentially reentrant state sink. */
+  private isRetryInterrupted(immediate: boolean): boolean {
+    return this.immediateRetry || (!this.networkAvailable && !immediate)
   }
 
   /** Read through a method: stop() flips the flag across awaits, so narrowing from the loop condition must not stick. */
@@ -175,17 +181,10 @@ export class ConnectionController {
         this.immediateRetry = false
         if (immediate) this.attempt = 0
         manualAttempt = immediate
-        if (!immediate && this.attempt > 0 && this.isFinalBackoffTier(this.attempt)) {
-          const retryDelay = new AbortController()
-          this.retryDelay = retryDelay
-          this.emitState('disconnected')
-          await waitForAbort(retryDelay.signal)
-          if (this.retryDelay === retryDelay) this.retryDelay = null
-          continue
-        }
         const attempt = ++this.attempt
         this.emitState('connecting')
         if (!this.isRunning()) return
+        if (this.isRetryInterrupted(immediate)) continue
         if (!immediate) {
           const retryDelay = new AbortController()
           this.retryDelay = retryDelay
@@ -194,59 +193,71 @@ export class ConnectionController {
           if (!this.isRunning()) return
           if (retryDelay.signal.aborted) continue
         }
-        console.warn(`[web-runtime] connection lost, retry #${String(attempt)}`)
+        console.warn(`[connection] connection lost, retry #${String(attempt)}`)
+        this.callSink(() => { this.sinks.onReconnectRequested?.() })
+        if (!this.isRunning()) return
       }
 
       const gen = ++this.generation
       const ac = new AbortController()
       this.current = ac
 
-      /* v8 ignore next -- initializer placeholder: the Promise executor
-       * below runs synchronously and replaces it before anyone can call it. */
-      let muxOpened = (): void => {}
-      /* v8 ignore next -- same placeholder pattern as muxOpened. */
-      let hostOpened = (): void => {}
-      const streamsOpen = Promise.all([
-        new Promise<void>((resolve) => { muxOpened = resolve }),
-        new Promise<void>((resolve) => { hostOpened = resolve }),
-      ])
+      let sourceReady = false
+      let resolveReady!: (host: ConnectionHostInfo) => void
+      let rejectReady!: (error: Error) => void
+      let rejectSourceLost!: (error: Error) => void
+      const ready = new Promise<ConnectionHostInfo>((resolve, reject) => {
+        resolveReady = resolve
+        rejectReady = reject
+      })
+      const sourceLost = new Promise<never>((_resolve, reject) => {
+        rejectSourceLost = reject
+      })
+      const reportReady = (host: ConnectionHostInfo): void => {
+        if (sourceReady || gen !== this.generation || !this.isGenerationActive(ac)) return
+        sourceReady = true
+        resolveReady(host)
+      }
 
       const failed = new Promise<void>((resolve) => {
         const settle = (): void => {
           if (gen === this.generation && !ac.signal.aborted) ac.abort()
           resolve()
         }
-        void this.pumpStream(this.api.events.mux({}, ac.signal, muxOpened), this.sinks.onMuxEnvelope, settle)
-        void this.pumpStream(this.api.events.host({}, ac.signal, hostOpened), this.sinks.onHostEnvelope, settle)
+        void Promise.resolve()
+          .then(() => this.source(ac.signal, reportReady))
+          .then(
+            () => {
+              const error = new Error('connection generation ended')
+              if (!sourceReady) rejectReady(error)
+              rejectSourceLost(error)
+              settle()
+            },
+            (error: unknown) => {
+              const failure = error instanceof Error
+                ? error
+                : new Error('connection generation failed', { cause: error })
+              if (!sourceReady) rejectReady(failure)
+              rejectSourceLost(failure)
+              settle()
+            },
+          )
       })
 
       try {
-        // Strict readiness handshake: describe proves unary reachability, onOpen
-        // proves each physical stream is established before any frame —
-        // only then may onConnected fire, so the resync it triggers cannot outrun the
-        // subscribed baseline. The timeout guards against a carrier that never fires onOpen
-        // (see ConnectionConfig.streamOpenTimeoutMs).
-        const timeout = new AbortController()
-        const [description] = await Promise.all([
-          this.api.host.describe({}),
-          Promise.race([streamsOpen, sleep(this.config.streamOpenTimeoutMs, timeout.signal)]),
+        const host = await Promise.race([
+          waitForReady(ready, this.config, ac.signal),
+          sourceLost,
         ])
-        timeout.abort()
-        const descriptionResult = description.result
-        if (!descriptionResult.ok) {
-          throw new Error(`host.describe failed: ${descriptionResult.error.code}: ${descriptionResult.error.message}`)
-        }
         if (ac.signal.aborted) throw new Error('generation aborted during readiness handshake')
         this.attempt = 0
         this.emitState('connected')
-        // A state sink may synchronously stop this controller. Do not publish
-        // a description for a generation that no longer exists afterward.
+        // A state sink may synchronously stop this controller.
         if (this.isGenerationActive(ac)) {
-          this.callSink(() => { this.sinks.onConnected?.(descriptionResult.value) })
+          this.callSink(() => { this.sinks.onConnected?.(host) })
         }
-      } catch {
-        // Transport failure: treat as generation failure, fall through to the shared backoff.
-        if (!ac.signal.aborted) ac.abort()
+      } catch (error) {
+        if (!ac.signal.aborted) ac.abort(error)
       }
 
       await failed
@@ -263,28 +274,50 @@ export class ConnectionController {
     this.callSink(() => this.sinks.onStateChange?.(state))
   }
 
-  private async pumpStream<F extends { type: string }>(
-    stream: AsyncIterable<RpcRequest<F>>,
-    sink: ((envelope: RpcRequest<F>) => void) | undefined,
-    onEnd: () => void,
-  ): Promise<void> {
-    try {
-      for await (const envelope of stream) {
-        if (envelope.payload.type === 'stream/error') break
-        if (sink !== undefined) this.callSink(() => { sink(envelope) })
-      }
-    } catch {
-      // Stream loss: converge on onEnd, which triggers the shared reconnect.
-    }
-    onEnd()
-  }
-
   /** Sink exception isolation: a business-layer throw is logged only, never affecting pump or reconnect semantics. */
   private callSink(fn: () => void): void {
     try {
       fn()
     } catch (error) {
-      console.error('[web-runtime] connection sink threw:', error)
+      console.error('[connection] connection sink threw:', error)
     }
   }
+}
+
+/** Report a slow handshake before the hard deadline ends its generation. */
+function waitForReady<T>(
+  ready: Promise<T>,
+  config: Required<ConnectionRecoveryConfig>,
+  signal: AbortSignal,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const warning = setTimeout(() => {
+      console.warn(`[connection] generation is still not ready after ${String(config.generationReadyWarnMs)}ms`)
+    }, config.generationReadyWarnMs)
+    const timeout = setTimeout(() => {
+      const error = new Error(`connection generation was not ready within ${String(config.generationReadyTimeoutMs)}ms`)
+      console.warn(`[connection] ${error.message}; cancelling generation`)
+      finish({ error })
+    }, config.generationReadyTimeoutMs)
+    const aborted = (): void => {
+      finish({ error: new Error('connection generation aborted', { cause: signal.reason }) })
+    }
+    const finish = (outcome: { readonly value: T } | { readonly error: Error }): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(warning)
+      clearTimeout(timeout)
+      signal.removeEventListener('abort', aborted)
+      if ('error' in outcome) reject(outcome.error)
+      else resolve(outcome.value)
+    }
+    signal.addEventListener('abort', aborted, { once: true })
+    void ready.then(
+      (value) => { finish({ value }) },
+      (error: unknown) => {
+        finish({ error: error as Error })
+      },
+    )
+  })
 }

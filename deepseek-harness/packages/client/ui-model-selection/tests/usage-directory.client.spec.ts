@@ -1,6 +1,6 @@
 /** Current-session directory observable used by the sidebar usage chip. */
 import { describe, expect, it, vi } from 'vitest'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import { currentDirectorySource } from '../src/client/usage-directory.ts'
@@ -9,7 +9,7 @@ const sid = (k: string): SessionId => k as SessionId
 
 function empty(): ModelDirectoryState {
   return {
-    current: null, routable: null, currentMetering: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, routable: null, currentMetering: null, groups: [], failures: [], status: 'idle', pending: null, error: null,
   }
 }
 
@@ -19,7 +19,11 @@ describe('currentDirectorySource', () => {
     const b = createSnapshotStore<ModelDirectoryState>(empty())
     a.update((s) => { s.current = { provider: 'deepseek-official', model: 'deepseek-v4-flash' } })
     b.update((s) => { s.current = { provider: 'kimi-for-coding', model: 'k3-256k' } })
-    const list = createSnapshotStore<{ current: SessionId | undefined }>({ current: sid('a') })
+    // The main view retains the Session the chip follows.
+    const shown = (id: SessionId | undefined) => ({
+      byId: id === undefined ? {} : { [id]: { id, retainedBy: { mainView: 1 } } },
+    })
+    const list = createSnapshotStore<ReturnType<typeof shown>>(shown(sid('a')))
     const models = {
       directoryFor: (id: SessionId) => {
         if (id === sid('a')) return { store: a }
@@ -38,7 +42,7 @@ describe('currentDirectorySource', () => {
     a.update((s) => { s.routable = true })
     expect(listener).toHaveBeenCalled()
 
-    list.update((s) => { s.current = sid('b') })
+    list.set(shown(sid('b')))
     expect(source.getSnapshot().current?.model).toBe('k3-256k')
     listener.mockClear()
     b.update((s) => { s.routable = true })
@@ -47,9 +51,9 @@ describe('currentDirectorySource', () => {
     a.update((s) => { s.routable = false })
     expect(listener).not.toHaveBeenCalled()
 
-    list.update((s) => { s.current = undefined })
+    list.set(shown(undefined))
     expect(source.getSnapshot().current).toBeNull()
-    list.update((s) => { s.current = sid('ghost') })
+    list.set(shown(sid('ghost')))
     expect(source.getSnapshot().current).toBeNull()
     stop()
   })

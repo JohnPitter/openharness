@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionId, SessionListState, SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   DESKTOP_PREVIEW_SOUND,
   DESKTOP_TASK_COMPLETE,
@@ -8,21 +9,35 @@ import {
   postDesktopTaskComplete,
   rootTaskCompletions,
   watchDesktopTaskComplete,
+  type DesktopTaskRow,
 } from '../src/client/desktop-complete.ts'
 
 function sid(id: string): SessionId {
   return id as SessionId
 }
 
-function row(id: string, running: boolean, extra?: Partial<SessionSummary>): SessionSummary {
+interface RowExtra {
+  displayTitle?: string
+  title?: string
+  parentId?: SessionId
+  origin?: 'subagent'
+}
+
+function row(id: string, running: boolean, extra: RowExtra = {}): SessionSummary {
   return {
     id: sid(id),
-    displayTitle: extra?.displayTitle ?? id,
+    displayTitle: id,
     running,
+    retainedBy: {},
     blank: false,
     updatedAt: 1,
     ...extra,
   }
+}
+
+/** A list row merged with the UI pending-interaction fact, as `rootTaskCompletions` reads it. */
+function pausedRow(id: string, extra: RowExtra & { pendingInteraction: unknown }): DesktopTaskRow {
+  return { ...row(id, false, extra), pendingInteraction: extra.pendingInteraction }
 }
 
 describe('desktop-complete', () => {
@@ -75,7 +90,7 @@ describe('desktop-complete', () => {
     (pendingInteraction) => {
       const prev = new Map<SessionId, boolean>([[sid('a'), true]])
       const { next, completed } = rootTaskCompletions(prev, {
-        [sid('a')]: row('a', false, { title: 'Ship the client', pendingInteraction }),
+        [sid('a')]: pausedRow('a', { title: 'Ship the client', pendingInteraction }),
       }, 'ding')
       expect(completed).toEqual([])
       // The pause is still recorded, so a later real idle correctly diffs against it.
@@ -90,7 +105,7 @@ describe('desktop-complete', () => {
     prev = rootTaskCompletions(prev, { [sid('a')]: row('a', true, { title: 'Ship the client' }) }).next
     // It pauses to ask the user something — no chime yet.
     let result = rootTaskCompletions(prev, {
-      [sid('a')]: row('a', false, { title: 'Ship the client', pendingInteraction: 'question' }),
+      [sid('a')]: pausedRow('a', { title: 'Ship the client', pendingInteraction: 'question' }),
     })
     expect(result.completed).toEqual([])
     prev = result.next

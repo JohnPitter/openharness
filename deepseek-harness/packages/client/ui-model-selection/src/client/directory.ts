@@ -1,39 +1,43 @@
 /**
  * Per-session model directory: the ONE state both selection entries share.
- * The /model popup and the composer-seat selector load through the same
- * controller and submit through the same selectModel call, so the host stays
- * the single fact source and the store is one shared echo — a switch made in
- * either entry is what the other shows next.
+ * The /model popup and composer seat combine one shared Host catalog with the
+ * Session's durable selection projection, then submit through the same
+ * selectModel call. A switch made in either entry updates this shared state.
  */
+import type { ModelSelectionProjection } from '@deepseek-ai/dsh-agent/types'
+import type { TrackProductEvent } from '@deepseek-ai/dsh-client-product-analytics/client'
 import type {
-  IApiClient, ModelCatalogFailure, ModelProviderGroup, ModelSelection, SessionId, SessionModels,
-} from '@deepseek-ai/dsh-api-remotes/client'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+  ModelCatalogFailure, ModelProviderGroup, ModelSelection,
+} from '@deepseek-ai/dsh-api-session-controller/types'
+import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { RemoteResult, TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
+import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ModelCatalogDirectory } from './catalog.ts'
 
 /** Directory snapshot both entries render from. */
 export interface ModelDirectoryState {
-  /** Model selection the host reports for the next assembled step; null before the first load. */
+  /** Saved selection, retained even when its provider or model leaves the catalog. */
   current: ModelSelection | null
-  /**
-   * Whether an adapter serves the current selection's provider, as the host reports
-   * it — null before the first load, which is NOT the same as blocked. Read
-   * this rather than "current matches no group": catalog membership is
-   * advisory, so a route serving a model it stopped advertising is missing
-   * from the groups yet perfectly usable.
-   */
+  /** Saved effort caption retained when the selected model is unavailable. */
+  retainedEffort?: string
+  /** Whether the current selection is present in the available catalog; null while unresolved. */
   routable: boolean | null
   /**
-   * Charged unit of the current provider, as the host reports it — null before
-   * the first load. The client must not infer this from the provider id.
+   * Charged unit of the current selection's provider as its catalog group
+   * declares it (`requests` for coding plans, `tokens` otherwise); null while
+   * the provider is not in the loaded catalog. Clients must not infer it from
+   * the provider id.
    */
-  currentMetering: SessionModels['currentMetering'] | null
+  currentMetering: 'tokens' | 'requests' | null
   /** Successfully loaded provider groups (last good load). */
   groups: readonly ModelProviderGroup[]
   /** Provider-local failures from the last load; usable groups stay usable. */
   failures: readonly ModelCatalogFailure[]
   /** Lifecycle of the in-flight operation. */
   status: 'idle' | 'loading' | 'ready' | 'selecting' | 'error'
+  /** Selection submitted by the latest `select` until it settles; null otherwise. */
+  pending: ModelSelection | null
   /** Whole-request or selection failure text; null when none. */
   error: string | null
 }
@@ -42,125 +46,114 @@ export interface ModelDirectoryState {
 export class ModelDirectory {
   /** The shared snapshot both entries render from (uSES-safe store). */
   readonly store: SnapshotStore<ModelDirectoryState> = createSnapshotStore<ModelDirectoryState>({
-    current: null, routable: null, currentMetering: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, routable: null, currentMetering: null, groups: [], failures: [], status: 'idle', pending: null, error: null,
   })
 
-  /** Latest operation wins; an older response never overwrites a newer one. */
+  /** Latest selection operation wins; an older response never overwrites a newer one. */
   private generation = 0
   private disposed = false
+  private readonly unsubscribeCatalog: () => void
+  private readonly unsubscribeSelection: () => void
 
   /**
    * @param sessions - the session wire face (captured from the plugin's root connection).
    * @param sessionId - the owning session.
    * @param available - whether this session may use Agent-bound model RPCs.
+   * @param catalog - Host-generation catalog shared by every Session.
+   * @param projected - durable model selection projected from Session history.
+   * @param isBlank - whether this Session has no first message yet.
+   * @param track - desktop-only callback after a successful user selection.
    */
   constructor(
-    private readonly sessions: Pick<IApiClient['sessions'], 'models' | 'selectModel'>,
+    private readonly sessions: Pick<TypertClientRemote['session'], 'selectModel'>,
     private readonly sessionId: SessionId,
     private readonly available: () => boolean,
-  ) {}
+    private readonly catalog: ModelCatalogDirectory,
+    private readonly projected: ObservableSnapshot<unknown>,
+    private readonly isBlank: () => boolean,
+    private readonly track?: TrackProductEvent,
+  ) {
+    this.unsubscribeCatalog = catalog.store.subscribe(() => { this.syncInputs() })
+    this.unsubscribeSelection = projected.subscribe(() => { this.syncInputs() })
+    this.syncInputs()
+  }
 
   /**
-   * Refresh the advisory directory (both entries call this on open).
-   * Failure preserves the last good groups and current selection.
-   * A thrown transport failure records `status: 'error'` so the picker does not stay on loading.
+   * Ensure the Host generation's shared available catalog is loaded.
    * @returns the fresh directory value.
    */
-  async load(): Promise<SessionModels> {
+  async load(): Promise<ModelDirectoryState> {
     this.assertAvailable()
-    const generation = ++this.generation
-    this.store.update((s) => { s.status = 'loading'; s.error = null })
-    try {
-      const { result } = await this.sessions.models({ sessionId: this.sessionId })
-      if (this.disposed || generation !== this.generation) {
-        if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-        return result.value
-      }
-      if (!result.ok) {
-        this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
-        throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
-      }
-      const { current, routable, currentMetering, groups, failures } = result.value
-      this.store.update((s) => {
-        s.current = current
-        s.routable = routable
-        s.currentMetering = currentMetering
-        s.groups = groups
-        s.failures = failures
-        s.status = 'ready'
-        s.error = null
-      })
-      return result.value
-    } catch (error: unknown) {
-      if (!this.disposed && generation === this.generation && this.store.getSnapshot().status === 'loading') {
-        const message = error instanceof Error ? error.message : String(error)
-        this.store.update((s) => { s.status = 'error'; s.error = message })
-      }
-      throw error
-    }
+    await this.catalog.load()
+    this.syncInputs()
+    return this.store.getSnapshot()
   }
 
   /**
-   * Select the complete provider/model/reasoning selection (both entries submit through here). Success
-   * updates the shared current; failure surfaces on the store and throws so
-   * each entry's own retry surface engages.
+   * Select the complete provider/model/reasoning selection. The durable
+   * projection frame updates the shared current; failures surface on the store
+   * and return with the operation so each entry can present its own failure.
    * @param selection - provider, provider-owned model id, and optional adapter-owned effort.
- */
-  async select(selection: ModelSelection): Promise<void> {
+   * @returns the selection outcome, including the original Remote failure.
+   */
+  async select(selection: ModelSelection): Promise<RemoteResult<void>> {
     this.assertAvailable()
+    const previous = this.store.getSnapshot().current
+    const previousEffort = previous?.reasoningEffort ?? (previous === null ? undefined : this.catalog.reasoningFor(previous)?.defaultEffort)
+    const nextEffort = selection.reasoningEffort ?? this.catalog.reasoningFor(selection)?.defaultEffort
     const generation = ++this.generation
-    this.store.update((s) => { s.status = 'selecting'; s.error = null })
-    try {
-      const { result } = await this.sessions.selectModel({
-        sessionId: this.sessionId,
-        provider: selection.provider,
-        model: selection.model,
-        ...selection.reasoningEffort === undefined
-          ? {}
-          : { reasoningEffort: selection.reasoningEffort },
-      })
-      if (this.disposed || generation !== this.generation) {
-        if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-        return
-      }
-      if (!result.ok) {
-        this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
-        throw new Error(`session.selectModel failed: ${result.error.code}: ${result.error.message}`)
-      }
-      // The Host validated the route before accepting it, so a selection that
-      // landed is by construction one it can serve.
-      this.store.update((s) => {
-        s.current = result.value.selected
-        s.routable = true
-        s.currentMetering = result.value.metering
-        s.status = 'ready'
-        s.error = null
-      })
-    } catch (error: unknown) {
-      if (!this.disposed && generation === this.generation && this.store.getSnapshot().status === 'selecting') {
-        const message = error instanceof Error ? error.message : String(error)
-        this.store.update((s) => { s.status = 'error'; s.error = message })
-      }
-      throw error
+    this.store.update((s) => { s.status = 'selecting'; s.pending = selection; s.error = null })
+    const result = await this.sessions.selectModel({
+      sessionId: this.sessionId,
+      provider: selection.provider,
+      model: selection.model,
+      ...selection.reasoningEffort === undefined
+        ? {}
+        : { reasoningEffort: selection.reasoningEffort },
+    })
+    if (this.disposed || generation !== this.generation) {
+      return result.ok ? { ok: true, value: undefined } : result
     }
+    if (!result.ok) {
+      this.store.update((s) => {
+        s.status = 'error'
+        s.pending = null
+        s.error = `${result.error.code}: ${result.error.message}`
+      })
+      return result
+    }
+    if (previous !== null) {
+      const from = `${previous.provider}/${previous.model}`
+      const to = `${selection.provider}/${selection.model}`
+      if (from !== to) this.track?.('model_switch', { ...this.isBlank() ? {} : { session_id: this.sessionId }, switch_from: from, switch_to: to })
+      if (from === to && previousEffort !== nextEffort) this.track?.('thinking_level_switch', {
+        ...this.isBlank() ? {} : { session_id: this.sessionId }, model_name: to, switch_from: previousEffort ?? 'default', switch_to: nextEffort ?? 'default',
+      })
+    }
+    this.store.update((s) => { s.status = 'ready'; s.pending = null; s.error = null })
+    this.syncInputs()
+    return { ok: true, value: undefined }
   }
 
   /**
-   * Repull the Host generation's projection. Last-good `current` and `groups`
-   * stay rendered (stale-while-revalidate) so a reconnect does not empty the
-   * chip; `load` still supersedes in-flight work via the generation counter
-   * and replaces the snapshot with the Host answer.
+   * Invalidate an in-flight selection response from the previous Host generation.
    */
   resetConnected(): void {
     if (this.disposed) return
     ++this.generation
-    if (!this.available()) return
-    void this.load().catch(() => { /* the next menu open remains the explicit retry surface */ })
+    this.store.update((state) => {
+      if (state.status === 'selecting') state.status = 'idle'
+      state.pending = null
+      state.error = null
+    })
+    this.syncInputs()
   }
 
   /** Scope teardown: late settlements lose write access to the store. */
   dispose(): void {
     this.disposed = true
+    this.unsubscribeSelection()
+    this.unsubscribeCatalog()
   }
 
   private assertAvailable(): void {
@@ -168,4 +161,50 @@ export class ModelDirectory {
       throw new Error('model selection is unavailable for addressed subagent sessions')
     }
   }
+
+  private syncInputs(): void {
+    if (this.disposed) return
+    const catalog = this.catalog.store.getSnapshot()
+    const projected = modelSelectionProjection(this.projected.getSnapshot())
+    const intended = projected?.next ?? catalog.value?.default
+    const reasoning = intended === undefined ? undefined : this.catalog.reasoningFor(intended)
+    const effort = intended?.reasoningEffort ?? reasoning?.defaultEffort
+    const retainedEffort = effort === undefined ? undefined
+      : reasoning?.efforts.find(level => level.id === effort)?.name ?? effort
+    if (catalog.status !== 'ready' || catalog.value === null || projected === undefined) {
+      this.store.set({
+        current: catalog.value === null ? null : this.store.getSnapshot().current,
+        ...retainedEffort === undefined ? {} : { retainedEffort },
+        routable: null,
+        currentMetering: null,
+        groups: catalog.value?.groups ?? [],
+        failures: catalog.value?.failures ?? [],
+        status: catalog.status === 'error' ? 'error' : 'loading',
+        pending: this.store.getSnapshot().pending,
+        error: catalog.error,
+      })
+      return
+    }
+    const selection = projected.next ?? catalog.value.default
+    const routable = catalog.value.groups.some(group => group.id === selection.provider
+      && group.models.some(model => model.id === selection.model))
+    const group = catalog.value.groups.find(candidate => candidate.id === selection.provider)
+    this.store.set({
+      current: selection,
+      ...retainedEffort === undefined ? {} : { retainedEffort },
+      routable,
+      currentMetering: group === undefined ? null : group.metering ?? 'tokens',
+      groups: catalog.value.groups,
+      failures: catalog.value.failures,
+      status: this.store.getSnapshot().status === 'selecting'
+        ? 'selecting'
+        : 'ready',
+      pending: this.store.getSnapshot().pending,
+      error: null,
+    })
+  }
+}
+
+function modelSelectionProjection(value: unknown): ModelSelectionProjection | undefined {
+  return value === undefined ? undefined : value as ModelSelectionProjection
 }

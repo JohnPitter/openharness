@@ -19,7 +19,7 @@
   padding: 0 10px;
   box-sizing: border-box;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-md);
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font-family: inherit;
@@ -29,9 +29,14 @@
   overflow: hidden;
 }
 
-.badge:hover,
 .badge[data-active] {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+@media (hover: hover) {
+  .badge:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .badgeBody {
@@ -69,6 +74,7 @@
   justify-content: center;
   padding: 0;
   border-radius: 50%;
+  corner-shape: round;
 }
 
 .panel {
@@ -79,8 +85,8 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 12px;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: var(--dsw-shadow-lv2);
 }
@@ -109,7 +115,7 @@
   height: 180px;
   margin: 0 auto;
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--dsw-radius-sm);
   background: #fff;
 }
 
@@ -135,8 +141,8 @@
 .action {
   flex: 1 1 auto;
   height: 32px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
   background: transparent;
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -144,6 +150,8 @@
   cursor: pointer;
 }
 
-.action:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .action:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }

@@ -2,7 +2,7 @@
 /** Composer account-quota ring: lead-window readout beside the send button. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import type { AccountUsageView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { AccountUsageView } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import type { QuotaRingProps } from '../src/client/QuotaRing.tsx'
 import { QuotaRing } from '../src/client/QuotaRing.tsx'
@@ -22,6 +22,7 @@ function directory(overrides: Partial<ModelDirectoryState> = {}): ModelDirectory
     }],
     failures: [],
     status: 'ready',
+    pending: null,
     error: null,
     ...overrides,
   }

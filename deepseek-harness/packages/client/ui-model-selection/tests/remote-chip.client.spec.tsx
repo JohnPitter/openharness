@@ -30,12 +30,12 @@ function interpolate(key: keyof typeof en, vars?: Record<string, string>): strin
 
 function mount(wide = true) {
   const unused = (() => { throw new Error('unused') }) as never
-  const props: RemoteChipProps = {
+  const props = {
     wide,
     t: interpolate as RemoteChipProps['t'],
     useSessions: unused,
     useWorkspaces: unused,
-  }
+  } as unknown as RemoteChipProps
   return render(<RemoteChip {...props} />)
 }
 

@@ -5,17 +5,19 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { contentHasImage, createUserMessage, BlockAssembler, LlmError } from '@deepseek-ai/dsh-llm'
+import { contentHasImage, BlockAssembler, LlmError } from '@deepseek-ai/dsh-llm'
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type {
-  ContentBlock, FinishReason, GenerateOptions, Message, TokenUsage, ToolSchema,
+  ContentBlock, FinishReason, GenerateOptions, Message, RequestMessage, TokenUsage, ToolSchema,
 } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { foldMilestoneTitles } from '@deepseek-ai/dsh-tool-milestone'
 
 interface SummaryConfig {
   readonly summarizationProvider: string
   readonly summarizationModel: string
   readonly maxTokens: number
+  /** Recorded session milestone titles the checkpoint must keep, in log order. */
+  readonly milestoneTitles?: readonly string[]
 }
 
 /** Tags wrapping the structured summary inside the landed checkpoint node. */
@@ -109,11 +111,9 @@ const CHECKPOINT_PREAMBLE =
  * input for region reconstruction; the LLM call itself does not advertise them.
  */
 export interface SummarizationInput {
-  /** The conversation's own system prompt, reused for prefix-cache alignment; absent for a system-less request. */
-  readonly system?: string
   /** Tool schemas of the shadowed request; recorded here, not sent on the summarizer call. */
   readonly tools?: readonly ToolSchema[]
-  /** The shadowed region, in surface order, that precedes the compaction instruction. */
+  /** The derived system head, when present, followed by the shadowed region in surface order. */
   readonly messages: readonly Message[]
 }
 
@@ -179,18 +179,19 @@ export async function summarizeWithLlm(
   }
 
   const assembler = new BlockAssembler()
-  const messages: Message[] = [
+  const messages: RequestMessage[] = [
     ...input.messages,
-    createUserMessage({
-      content: [{ type: 'text', text: compactionInstruction(foldMilestoneTitles(agent.session)) }],
-      source: { kind: 'plugin', plugin: 'dsh-compaction-basic' },
+    deepFreeze({
+      role: 'user',
+      content: [{ type: 'text', text: compactionInstruction(config.milestoneTitles) }],
     }),
   ]
   const options: GenerateOptions = {
     provider: target.provider,
     model: target.model,
     messages,
-    ...input.system === undefined ? {} : { system: input.system },
+    // Tools and their folded history are omitted: a model that can tool-call
+    // often does so instead of writing the checkpoint.
     maxTokens: config.maxTokens,
     sessionId: agent.session.id,
     purpose: 'compaction',
@@ -253,9 +254,7 @@ function finishError(finish: FinishReason): (Error & { code?: string }) | undefi
   switch (finish.kind) {
     case 'error':
     case 'aborted': {
-      const error = new Error(finish.failure.message) as Error & { code?: string }
-      error.code = finish.failure.code
-      return error
+      return new LlmError(finish.failure.message, finish.failure.code, finish.failure)
     }
     case 'max-tokens': {
       const error = new Error('summarization truncated at the token cap (incomplete checkpoint)') as Error & { code?: string }

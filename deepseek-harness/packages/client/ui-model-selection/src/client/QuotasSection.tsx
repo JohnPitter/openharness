@@ -4,10 +4,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type {
-  AccountUsageView, ConfigurableProviderView, IApiClient,
-} from '@deepseek-ai/dsh-api-remotes/client'
-import { Button, IconRefreshOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { AccountUsageView } from '@deepseek-ai/dsh-api-session-controller/types'
+import { Button, IconRefreshOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   awaitWithAbort,
@@ -15,6 +13,7 @@ import {
   quotaProbeErrorText,
 } from './usage-quota-live.ts'
 import { QuotaBody } from './usage-quota.tsx'
+import type { UsageApi, UsageProviderEntry } from './usage-slots.ts'
 import css from './UsagesSection.module.css'
 
 /** One provider card on the Limits page. */
@@ -26,8 +25,8 @@ interface ProviderQuotaRow {
 
 /** Injected dependencies of {@link QuotasSection}. */
 export interface QuotasSectionInjected {
-  /** Wire face used to list providers and load account quotas. */
-  api: Pick<IApiClient, 'llm'>
+  /** Host reads used to list providers and load account quotas. */
+  api: Pick<UsageApi, 'listProviders' | 'accountUsage'>
 }
 
 export type QuotasSectionProps =
@@ -69,32 +68,26 @@ export function QuotasSection(props: QuotasSectionProps): ReactNode {
 
     const run = async (): Promise<void> => {
       try {
-        const listed = await api.llm.providers({})
+        const listed = await api.listProviders()
         if (ac.signal.aborted) return
-        if (!listed.result.ok) {
+        if (!listed.ok) {
           setRows([])
-          setError(listed.result.error.message)
+          setError(listed.error)
           return
         }
-        const providers = listed.result.value.providers
-        setRows(providers.map((entry: ConfigurableProviderView) => ({
+        const providers = listed.value
+        setRows(providers.map((entry: UsageProviderEntry) => ({
           provider: entry.provider,
           displayName: entry.displayName,
           quota: 'loading' as const,
         })))
         setPending(providers.length)
         if (providers.length === 0) return
-        await Promise.all(providers.map(async (entry: ConfigurableProviderView) => {
+        await Promise.all(providers.map(async (entry: UsageProviderEntry) => {
           const probe = createUsageProbeSignal(ac.signal)
           let quota: AccountUsageView
           try {
-            const response = await awaitWithAbort(
-              api.llm.accountUsage({ provider: entry.provider }, probe.signal),
-              probe.signal,
-            )
-            quota = !response.result.ok
-              ? { supported: true, error: response.result.error.message }
-              : response.result.value
+            quota = await awaitWithAbort(api.accountUsage(entry.provider, probe.signal), probe.signal)
           } catch (caught: unknown) {
             quota = quotaFromFailure(caught, t('usage.quotaTimeout'))
           } finally {
@@ -104,7 +97,7 @@ export function QuotasSection(props: QuotasSectionProps): ReactNode {
           setRows((current) => {
             const base = Array.isArray(current)
               ? current
-              : providers.map((item: ConfigurableProviderView) => ({
+              : providers.map((item: UsageProviderEntry) => ({
                 provider: item.provider,
                 displayName: item.displayName,
                 quota: 'loading' as const,
@@ -148,7 +141,7 @@ export function QuotasSection(props: QuotasSectionProps): ReactNode {
           type="button"
           variant="outline"
           size="sm"
-          icon={<IconRefreshOutline16 size={14} />}
+          icon={<IconRefreshOutlineRegular size={14} />}
           disabled={busy}
           onClick={() => { refresh() }}
         >

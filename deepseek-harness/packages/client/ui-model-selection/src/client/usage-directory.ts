@@ -5,7 +5,7 @@
  */
 
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
-import type { ISessions } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelDirectoryState } from './directory.ts'
 import type { ModelDirectoryResolver } from './service.ts'
@@ -17,7 +17,19 @@ const EMPTY_DIRECTORY: ModelDirectoryState = {
   groups: [],
   failures: [],
   status: 'idle',
+  pending: null,
   error: null,
+}
+
+/**
+ * The Session the main view shows: the first list row retained by the main
+ * view (the same rule ui-session uses to publish its main binding).
+ * @param sessions - the Session list.
+ * @returns the main-view Session, or undefined when none is shown.
+ */
+export function mainSessionId(sessions: { list: Pick<ISessions['list'], 'getSnapshot'> }): SessionId | undefined {
+  const rows = Object.values(sessions.list.getSnapshot().byId)
+  return rows.find(row => (row.retainedBy?.mainView ?? 0) > 0)?.id
 }
 
 /**
@@ -27,7 +39,7 @@ const EMPTY_DIRECTORY: ModelDirectoryState = {
  * @returns a stable source the slot renderer binds to `useDirectory`.
  */
 export function currentDirectorySource(
-  sessions: ISessions,
+  sessions: Pick<ISessions, 'list'>,
   models: ModelDirectoryResolver,
 ): HostObservable<ModelDirectoryState> {
   const directoryOf = (id: SessionId | undefined) => {
@@ -41,12 +53,12 @@ export function currentDirectorySource(
 
   return {
     getSnapshot: () =>
-      directoryOf(sessions.list.getSnapshot().current)?.store.getSnapshot() ?? EMPTY_DIRECTORY,
+      directoryOf(mainSessionId(sessions))?.store.getSnapshot() ?? EMPTY_DIRECTORY,
     subscribe: (listener) => {
       let unsubDir = (): void => {}
       const rebind = (): void => {
         unsubDir()
-        const directory = directoryOf(sessions.list.getSnapshot().current)
+        const directory = directoryOf(mainSessionId(sessions))
         unsubDir = directory === undefined ? () => {} : directory.store.subscribe(listener)
       }
       rebind()

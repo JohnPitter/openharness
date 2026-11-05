@@ -8,12 +8,15 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  IconAgentPresetOutline16, IconChevronDownOutline14, Menu,
+  IconAgentPresetOutlineRegular, IconChevronDownOutlineRegular, Menu,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+// Type-only: pulls the ui-conversation SlotMap merge (the header actions).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-agent-preset-registry/types'
 import type { AgentPresetSettingsState } from './settings-store.ts'
 import { presetDisplayText } from './locales.ts'
 import css from './AgentPresetLabel.module.css'
@@ -27,7 +30,7 @@ export interface AgentPresetLabelInjected {
   /** Read the roster, so the label can show a name rather than an id. */
   load: () => Promise<void>
   /** Recompose this session from the picked preset. */
-  select: (id: string) => Promise<void>
+  select: (sessionId: SessionId, id: string) => Promise<void>
 }
 
 /** Full component props. */
@@ -44,7 +47,10 @@ export type AgentPresetLabelProps =
 export function AgentPresetLabel({
   sessionId, useSessions, useAgentPresets, load, select, t,
 }: AgentPresetLabelProps) {
-  const preset = useSessions(state => state.byId[sessionId]?.agentPreset)
+  const preset = useSessions((state) => {
+    const value = state.byId[sessionId]?.projectionValues?.agentPreset
+    return typeof value === 'string' ? value : undefined
+  })
   const running = useSessions(state => state.byId[sessionId]?.running === true)
   const subagent = useSessions(state => state.byId[sessionId]?.origin === 'subagent')
   const options = useAgentPresets(state => state.options)
@@ -66,7 +72,7 @@ export function AgentPresetLabel({
   if (subagent) {
     return (
       <span className={css.label} title={text?.description ?? t('headerHint')}>
-        <IconAgentPresetOutline16 size={14} className={css.icon} />
+        <IconAgentPresetOutlineRegular size={14} className={css.icon} />
         {label}
       </span>
     )
@@ -94,7 +100,7 @@ export function AgentPresetLabel({
         if (id === preset) return
         setBusy(true)
         setError(null)
-        void select(id).then(
+        void select(sessionId, id).then(
           () => { setBusy(false) },
           (cause: unknown) => {
             setBusy(false)
@@ -114,9 +120,9 @@ export function AgentPresetLabel({
           disabled={busy || running || options.length === 0}
           onClick={() => { setOpen(value => !value) }}
         >
-          <IconAgentPresetOutline16 size={14} className={css.icon} />
+          <IconAgentPresetOutlineRegular size={14} className={css.icon} />
           {label}
-          <IconChevronDownOutline14 className={css.chevron} />
+          <IconChevronDownOutlineRegular size={14} className={css.chevron} />
         </button>
       )}
     />

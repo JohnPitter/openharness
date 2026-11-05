@@ -1,12 +1,23 @@
-import type { CommonKey } from './zh.ts'
+/** Portuguese common-namespace dictionary. */
+import type { en } from './en.ts'
 
-/** pt-BR base dictionary for the common namespace, checked complete against the zh key set. */
+/** Complete Portuguese copy for the common namespace. */
 export const pt = {
   'ok': 'OK',
   'cancel': 'Cancelar',
   'close': 'Fechar',
   'copy': 'Copiar',
   'copied': 'Copiado',
+  'codeBlock.title': 'Bloco de código',
+  'codeBlock.wrap': 'Quebrar linhas',
+  'codeBlock.unwrap': 'Não quebrar linhas',
+  'copy.failed': 'Falha na cópia',
+  'copy.value': 'Copiar valor',
+  'copy.json': 'Copiar JSON',
+  'copy.path': 'Copiar caminho da propriedade',
+  'copy.prettyJson': 'Copiar JSON formatado',
+  'copy.compactJson': 'Copiar JSON compacto',
+  'copy.optionsHint': '{action}; clique com o botão direito para opções de cópia',
   'retry': 'Tentar novamente',
   'loading': 'Carregando…',
   'load.failed': 'Falha ao carregar',
@@ -18,12 +29,19 @@ export const pt = {
   'delete': 'Excluir',
   'edit': 'Editar',
   'save': 'Salvar',
-  'search': 'Buscar',
+  'search': 'Pesquisar',
   'more': 'Mais',
   'collapse': 'Recolher',
   'expand': 'Expandir',
   'back': 'Voltar',
+  'brand.localBuild': 'Versão local do DSH',
+  'workspace.defaultName': 'Espaço de trabalho padrão',
   'unknown': 'Desconhecido',
   'none': 'Nenhum',
   'truncated': 'Truncado',
-} satisfies Record<CommonKey, string>
+  'json.label': 'JSON',
+  'markdown.footnotes': 'Notas de rodapé',
+  'markdown.truncatedCharacters': '… truncado em {total} caracteres',
+  'number.thousand': '{value}K',
+  'number.million': '{value}M',
+} satisfies Record<keyof typeof en, string>
