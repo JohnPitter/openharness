@@ -20,12 +20,38 @@ type winJob struct {
 	handle windows.Handle
 }
 
-// prepareSidecarCmd nasce suspenso e fora do job do Wails/WebView2, para o
-// AssignProcessToJobObject acontecer antes de qualquer fork do Node.
+// prepareSidecarCmd nasce suspenso e, quando permitido, fora do job do
+// Wails/WebView2, para o AssignProcessToJobObject acontecer antes de qualquer
+// fork do Node.
 func prepareSidecarCmd(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_SUSPENDED | windows.CREATE_BREAKAWAY_FROM_JOB,
+		CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_SUSPENDED | breakawayFlag(),
 	}
+}
+
+// breakawayFlag pede CREATE_BREAKAWAY_FROM_JOB só quando o job que contém
+// este processo permite breakaway. Dentro de um job sem BREAKAWAY_OK (alguns
+// launchers, runners de CI) o CreateProcess com essa flag falha com "Access is
+// denied" e o harness nem subiria; sem a flag o filho fica no job herdado e o
+// nosso job aninhado (Windows 8+) continua matando a árvore no fechamento.
+func breakawayFlag() uint32 {
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	err := windows.QueryInformationJobObject(
+		0, // job do processo atual
+		windows.JobObjectExtendedLimitInformation,
+		uintptr(unsafe.Pointer(&info)),
+		uint32(unsafe.Sizeof(info)),
+		nil,
+	)
+	if err != nil {
+		// Fora de qualquer job (caso comum do exe aberto pelo Explorer).
+		return windows.CREATE_BREAKAWAY_FROM_JOB
+	}
+	const allowed = windows.JOB_OBJECT_LIMIT_BREAKAWAY_OK | windows.JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
+	if info.BasicLimitInformation.LimitFlags&allowed != 0 {
+		return windows.CREATE_BREAKAWAY_FROM_JOB
+	}
+	return 0
 }
 
 func resumeSidecar(p *os.Process) {
