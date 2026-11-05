@@ -10,6 +10,10 @@
   - button "Jump to turn 1"
   - button "Jump to turn 2"
   - button "Jump to turn 3"
+- group "Session waypoints":
+  - 'button "Message: Use the read tool twice in one assistant message: read a.txt and b.txt. Then re…"'
+  - 'button "Message: Now give the final answer."'
+  - 'button "Message: Keep this later input in the original conversation."'
 - text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. {{clock}}"
 - button "Copy"
 - tooltip "Copy"
@@ -33,6 +37,7 @@
 - button "Branch into a new conversation"
 - text: {{clock}} Keep this later input in the original conversation. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - paragraph: ORIGINAL ONLY
@@ -44,7 +49,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
 - button "Send message" [disabled]
 - button "3 turns 4 steps · {{throughput}} tok/s": 3 turns 4 steps{{throughput}} tok/s
 - button "7.9K tok · Cache hit 98%": 7.9K tokCache hit 98%

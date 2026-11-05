@@ -418,10 +418,10 @@ export class PiAiAdapter extends LlmAdapter {
     return this.snapshot
   }
 
-  /** Route ids whose catalog provider declares an OAuth login method. */
+  /** Route ids that opt into `oauth` and whose catalog provider declares an OAuth login method. */
   oauthRouteIds(): string[] {
     return [...this.current().profiles.entries()]
-      .filter(([, profile]) => profile.piProvider?.auth.oauth !== undefined)
+      .filter(([, profile]) => profile.oauth === true && profile.piProvider?.auth.oauth !== undefined)
       .map(([provider]) => provider)
   }
 

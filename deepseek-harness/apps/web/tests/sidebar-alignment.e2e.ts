@@ -104,7 +104,8 @@ describe('web e2e: sidebar search alignment and row action targets', () => {
   let tripwire: ReturnType<typeof watchConsole>
 
   beforeAll(async () => {
-    scaffold = await launchWebScaffold({})
+    // The footer geometry cases measure the DeepSeek account menu, which OpenHarness ships disabled.
+    scaffold = await launchWebScaffold({ deepSeekAccount: true })
     const workspace = await scaffold.ctx.workspaceRegistry.create(scaffold.workspaceCwd, workspaceTitle)
     const id = await seedSession(scaffold, await readFile(SEED, 'utf8'), 'sidebar-action-geometry')
     await workspace.attachSession(id)

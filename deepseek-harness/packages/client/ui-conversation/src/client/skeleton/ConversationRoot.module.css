@@ -643,6 +643,12 @@
     margin-left: auto;
   }
 
+  /* The corner's -16px pull assumes the wide header's 28px right padding;
+     the narrow paddings would push it past the column edge. */
+  .headerCorner {
+    margin-right: 0;
+  }
+
   .tabs {
     gap: 20px;
     padding-left: 0;

@@ -1,6 +1,6 @@
 - banner:
   - navigation "Session hierarchy": "Plan a small change: add"
-  - text: Standard mode
+  - button "Standard mode"
   - button "More actions"
   - tablist:
     - tab "Chat" [selected]
@@ -29,7 +29,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Send message" [disabled]
 - button "1 turns 2 steps · {{throughput}} tok/s": 1 turns 2 steps{{throughput}} tok/s
 - button "10.6K tok · Cache hit 51%": 10.6K tokCache hit 51%

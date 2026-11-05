@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Stage the embedded DeepSeek Harness runtime for the OpenHarness sidecar.
 //
-//   node scripts/stage-runtime.mjs [--skip-build] [--node <node.exe>] [--out <dir>]
+//   node scripts/stage-runtime.mjs [--skip-build] [--node <node.exe>] [--out <dir>] [--harness <dir>]
 //                                  [--no-smoke] [--no-zip]
 //
 // Steps (the manual pipeline in AGENTS.md, automated):
@@ -19,15 +19,16 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const harness = join(repo, 'deepseek-harness')
 const { values: opts } = parseArgs({
   options: {
+    harness: { type: 'string', default: join(repo, 'deepseek-harness') },
     'skip-build': { type: 'boolean', default: false },
     node: { type: 'string' },
     out: { type: 'string', default: join(repo, 'dsh-runtime') },
@@ -35,6 +36,7 @@ const { values: opts } = parseArgs({
     'no-zip': { type: 'boolean', default: false },
   },
 })
+const harness = resolve(opts.harness)
 const out = resolve(opts.out)
 const isWindows = process.platform === 'win32'
 
@@ -55,7 +57,7 @@ async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'))
 }
 
-/** Workspace package directories (vendor/*, packages/*/*, apps/web) keyed by package name. */
+// Workspace package directories (vendor/<pkg>, packages/<group>/<pkg>, apps/<app>) keyed by package name.
 async function workspacePackages() {
   const found = new Map()
   const roots = [['vendor'], ['packages', '*'], ['apps']]
@@ -74,6 +76,25 @@ async function workspacePackages() {
     }
   }
   return found
+}
+
+// Package names under `name:` in the shipped bundle patches and preset patches.
+async function composedPackageNames() {
+  const names = new Set()
+  const bundles = join(harness, 'packages', 'bundle')
+  for (const bundle of await readdir(bundles, { withFileTypes: true })) {
+    if (!bundle.isDirectory()) continue
+    const files = [join(bundles, bundle.name, 'cordis.patch.yml')]
+    const presets = join(bundles, bundle.name, 'presets')
+    if (existsSync(presets)) {
+      for (const file of await readdir(presets)) if (file.endsWith('.yml')) files.push(join(presets, file))
+    }
+    for (const file of files) {
+      if (!existsSync(file)) continue
+      for (const match of (await readFile(file, 'utf8')).matchAll(/name:\s*['"]?(@deepseek-ai\/[a-z0-9-]+)/g)) names.add(match[1])
+    }
+  }
+  return names
 }
 
 const SKIP_DIRS = new Set(['node_modules', 'tests', 'test', 'src', '.turbo', 'coverage', 'snapshots'])
@@ -99,10 +120,9 @@ async function build() {
 async function deploy() {
   await rm(out, { recursive: true, force: true })
   pnpm([
-    '--filter', '@deepseek-ai/dsh', 'deploy', '--prod', '--legacy',
+    '--filter', '@deepseek-ai/dsh', 'deploy', '--prod',
     '--config.allow-unused-patches=true',
     '--config.node-linker=hoisted',
-    '--config.auto-install-peers=false',
     `--config.pnpmfile=${join(harness, 'scripts', 'python-runtime-deploy.pnpmfile.mjs')}`,
     '--config.link-workspace-packages=true',
     '--config.hoist-workspace-packages=false',
@@ -112,7 +132,7 @@ async function deploy() {
   const code = [
     `const m = await import(${JSON.stringify(new URL(`file:///${helper.replaceAll('\\', '/')}`).href)})`,
     `await m.materializeStagedLinks(${JSON.stringify(out)})`,
-    `await m.deduplicateStagedWorkspacePackages(${JSON.stringify(out)}, ${JSON.stringify(harness)})`,
+    `await m.deduplicateStagedWorkspacePackages(${JSON.stringify(out)}, ${JSON.stringify(out)})`,
   ].join('\n')
   run(process.execPath, ['--import', 'tsx/esm', '--input-type=module', '-e', code], { cwd: harness, shell: false })
 }
@@ -120,15 +140,35 @@ async function deploy() {
 async function overlay() {
   const modules = join(out, 'node_modules')
   const packages = await workspacePackages()
-  let added = 0
-  for (const [name, source] of packages) {
+  // Plugins the shipped composition names (bundles and their presets) load by
+  // name at runtime; copy any the deploy closure left out, plus the workspace
+  // packages they depend on in turn.
+  // The deploy closure omits workspace peer dependencies; close over those too.
+  const queue = [...await composedPackageNames()]
+  for (const entry of await readdir(join(modules, '@deepseek-ai'), { withFileTypes: true })) {
+    const manifestPath = join(modules, '@deepseek-ai', entry.name, 'package.json')
+    if (!entry.isDirectory() || !existsSync(manifestPath)) continue
+    const manifest = await readJson(manifestPath)
+    for (const dep of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })) {
+      if (packages.has(dep)) queue.push(dep)
+    }
+  }
+  const added = []
+  for (let name = queue.shift(); name !== undefined; name = queue.shift()) {
     const target = join(modules, ...name.split('/'))
     if (existsSync(join(target, 'package.json'))) continue
-    if (!existsSync(join(source, 'lib')) && !existsSync(join(source, 'dist'))) continue
+    const source = packages.get(name)
+    if (source === undefined) throw new Error(`composition names ${name}, which is not a workspace package`)
     await copyPackage(source, target)
-    added++
+    added.push(name)
+    const manifest = await readJson(join(source, 'package.json'))
+    for (const dep of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })) {
+      if (packages.has(dep)) queue.push(dep)
+    }
   }
-  log(`copied ${added} workspace package(s) the deploy left out`)
+  log(added.length === 0
+    ? 'the deploy closure already holds every composed plugin'
+    : `copied ${added.length} composed workspace package(s) the deploy left out: ${added.join(', ')}`)
   const webDist = join(harness, 'apps', 'web', 'dist')
   const webTarget = join(modules, '@deepseek-ai', 'dsh-web-frontend', 'dist')
   if (!existsSync(join(webDist, 'index.html'))) throw new Error(`missing ${webDist}; build the web frontend first`)
@@ -147,8 +187,66 @@ async function overlay() {
   for (const required of [join(out, 'lib', 'bin.js'), join(webTarget, 'index.html')]) {
     if (!existsSync(required)) throw new Error(`staged runtime is missing ${required}`)
   }
-  const lsp = join(modules, '.bin', isWindows ? 'typescript-language-server.cmd' : 'typescript-language-server')
-  if (!existsSync(lsp)) log(`warning: ${lsp} is missing; run scripts/stage-typescript-language-server.ps1`)
+  await writeLspShims(modules)
+  await verifyDependencies(modules)
+}
+
+// Preset plugins load only when a session starts, after the boot smoke; check
+// that every staged @deepseek-ai package's runtime dependencies resolve.
+async function verifyDependencies(modules) {
+  const scope = join(modules, '@deepseek-ai')
+  const missing = []
+  for (const entry of await readdir(scope, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const dir = join(scope, entry.name)
+    const manifest = await readJson(join(dir, 'package.json'))
+    const require = createRequire(join(dir, 'package.json'))
+    const optional = new Set(Object.keys(manifest.optionalDependencies ?? {}))
+    for (const [dep, meta] of Object.entries(manifest.peerDependenciesMeta ?? {})) if (meta?.optional) optional.add(dep)
+    for (const dep of new Set([...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})])) {
+      if (optional.has(dep)) continue
+      try {
+        require.resolve(`${dep}/package.json`)
+      } catch {
+        // Packages whose exports hide package.json still count when their directory exists.
+        if (!existsSync(join(modules, ...dep.split('/'), 'package.json'))) missing.push(`${manifest.name} -> ${dep}`)
+      }
+    }
+  }
+  if (missing.length > 0) throw new Error(`unresolved runtime dependencies:\n  ${missing.join('\n  ')}`)
+  log('every staged @deepseek-ai package resolves its runtime dependencies')
+}
+
+// lsp-stdio resolves `typescript-language-server` on PATH when a preset mounts;
+// the sidecar puts node_modules/.bin first on PATH. pnpm's own shims point into
+// the build machine's store, so write relocatable ones that run the staged CLI
+// with the embedded node.exe (runtime/node.exe, three levels above .bin).
+async function writeLspShims(modules) {
+  for (const required of ['typescript-language-server/lib/cli.mjs', 'typescript/package.json']) {
+    if (!existsSync(join(modules, ...required.split('/')))) {
+      throw new Error(`staged runtime is missing node_modules/${required}; apps/cli must depend on it`)
+    }
+  }
+  const bin = join(modules, '.bin')
+  await mkdir(bin, { recursive: true })
+  await writeFile(join(bin, 'typescript-language-server.cmd'), [
+    '@ECHO off',
+    'SETLOCAL',
+    'SET "_node=%~dp0..\\..\\..\\node.exe"',
+    'IF NOT EXIST "%_node%" SET "_node=node"',
+    '"%_node%" "%~dp0..\\typescript-language-server\\lib\\cli.mjs" %*',
+    '',
+  ].join('\r\n'))
+  const sh = join(bin, 'typescript-language-server')
+  await writeFile(sh, [
+    '#!/bin/sh',
+    'dir=$(dirname "$0")',
+    'node_bin="$dir/../../../node.exe"',
+    '[ -x "$node_bin" ] || node_bin=node',
+    'exec "$node_bin" "$dir/../typescript-language-server/lib/cli.mjs" "$@"',
+    '',
+  ].join('\n'), { mode: 0o755 })
+  log('wrote node_modules/.bin/typescript-language-server shims')
 }
 
 async function smoke() {

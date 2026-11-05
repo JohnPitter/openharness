@@ -13,15 +13,17 @@
 - tree "Sessions":
   - treeitem "workspace" [expanded]
   - treeitem "New Session" [selected]
-- button "Account menu": More
+- button "Remote access, currently Off": Remote Off
+- button "DeepSeek · DeepSeek-V4-Flash, context 128K": DeepSeek · DeepSeek-V4-Flash 128K
+- button "Settings"
 - banner:
   - button "Open right sidebar"
-- text: Into the Unknown Preview
+- text: OpenHarness Preview
 - button "Choose workspace": workspace
 - button "Standard mode"
 - textbox "Describe what you want to build, / commands, @ files or sessions":
   - paragraph
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Send message" [disabled]

@@ -3,6 +3,8 @@
   - navigation:
     - button "通用设置"
     - button "模型"
+    - button "限额"
+    - button "状态"
     - button "内置插件"
     - button "Agent 预设"
   - button "打开配置文件"
@@ -15,7 +17,7 @@
       - 'button "新任务默认: 标准模式" [disabled] [pressed]':
         - text: 标准模式 新任务默认
         - code: standard
-        - text: 处理代码、文件和资料，适合大多数任务。Agent 会按需使用检索、编辑和终端等工具。
+        - text: 处理代码、文件和资料，适合大多数任务。Agent 会按需使用检索、编辑和终端等工具。构建默认遵循 J-Space 协议。
       - 'button "模式说明: 标准模式"': 模式说明
       - 'button "如何使用: 标准模式"': 如何使用
       - 'button "查看配置: 标准模式"': 查看配置
@@ -23,7 +25,7 @@
       - 'button "设为新任务默认: PTC 模式"':
         - text: PTC 模式 内置
         - code: ptc
-        - text: 包含标准模式的所有能力，更适合批量调用工具，并对结果进行筛选、整理、去重、统计或汇总的任务。
+        - text: 包含标准模式的所有能力，更适合批量调用工具，并对结果进行筛选、整理、去重、统计或汇总的任务。构建默认遵循 J-Space 协议。
       - 'button "模式说明: PTC 模式"': 模式说明
       - 'button "如何使用: PTC 模式"': 如何使用
       - 'button "查看配置: PTC 模式"': 查看配置
@@ -43,5 +45,11 @@
       - 'button "模式说明: 创造模式"': 模式说明
       - 'button "如何使用: 创造模式"': 如何使用
       - 'button "查看配置: 创造模式"': 查看配置
+    - listitem:
+      - 'button "设为新任务默认: 工作流模式"':
+        - text: 工作流模式 内置
+        - code: workflow
+        - text: 编排与规划会话，具备标准模式工具。为本会话选择规划模型，并为子代理与构建选择工人模型。构建默认遵循 J-Space 协议。
+      - 'button "查看配置: 工作流模式"': 查看配置
   - heading "自定义" [level=3]
   - button "让 Agent 帮我创建预设模式"

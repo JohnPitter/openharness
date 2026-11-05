@@ -17,9 +17,9 @@ describe('CompactionSettingsPolicy', () => {
     const host = stubConfigForm<CompactionUserSettings>()
     const policy = new CompactionSettingsPolicy(host.scope)
     policy.setAuto(false)
-    expect(host.set).toHaveBeenCalledWith('auto', false)
+    expect(host.set).toHaveBeenCalledWith('compactionAuto', false)
     policy.setThresholdPercent(50)
-    expect(host.set).toHaveBeenCalledWith('thresholdPercent', 50)
+    expect(host.set).toHaveBeenCalledWith('compactionThresholdPercent', 50)
     policy.setAuto(false)
     policy.setThresholdPercent(50)
     expect(host.set).toHaveBeenCalledTimes(2)
@@ -30,7 +30,7 @@ describe('CompactionSettingsPolicy', () => {
     const policy = new CompactionSettingsPolicy(host.scope)
     host.publish({
       status: 'ready',
-      value: { auto: false, thresholdPercent: 25 },
+      value: { compactionAuto: false, compactionThresholdPercent: 25 },
       revision: 1,
       writable: true,
     })
@@ -45,7 +45,7 @@ describe('CompactionSettingsPolicy', () => {
     const host = stubConfigForm<CompactionUserSettings>()
     host.publish({
       status: 'ready',
-      value: { auto: false, thresholdPercent: 100 },
+      value: { compactionAuto: false, compactionThresholdPercent: 100 },
       revision: 1,
       writable: true,
     })

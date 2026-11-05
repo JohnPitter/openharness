@@ -3,6 +3,8 @@
   - navigation:
     - button "通用设置"
     - button "模型"
+    - button "限额"
+    - button "状态"
     - button "内置插件"
     - button "Agent 预设"
   - button "打开配置文件"
@@ -46,4 +48,32 @@
           - button "添加模型"
       - button "取消"
       - button "保存"
+    - listitem:
+      - text: Codex
+      - img "API 密钥缺失"
+      - button "编辑 Codex (openai-codex)": 编辑
+    - listitem:
+      - text: OpenCode
+      - img "API 密钥缺失"
+      - button "编辑 OpenCode (opencode)": 编辑
+    - listitem:
+      - text: OpenCode Go
+      - img "API 密钥缺失"
+      - button "编辑 OpenCode Go (opencode-go)": 编辑
+    - listitem:
+      - text: GLM Coding Plan
+      - img "API 密钥缺失"
+      - button "编辑 GLM Coding Plan (zai)": 编辑
+    - listitem:
+      - text: Claude Code
+      - img "API 密钥缺失"
+      - button "编辑 Claude Code (claude-code)": 编辑
+    - listitem:
+      - text: Cursor
+      - img "API 密钥缺失"
+      - button "编辑 Cursor (cursor)": 编辑
+    - listitem:
+      - text: Kimi for Code
+      - img "API 密钥缺失"
+      - button "编辑 Kimi for Code (kimi-for-coding)": 编辑
   - button "添加模型提供商"

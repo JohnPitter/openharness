@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { chromium, type WebSocketRoute } from 'playwright'
 import { expect, it, onTestFailed, onTestFinished } from 'vitest'
 import { launchWebScaffold, seedSession, watchConsole } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot, writeComposerDraft } from './support.ts'
+import { newEnglishPage, saveFailureShot, writeComposerDraft, heroHeadline } from './support.ts'
 
 it.each([false, true])('retains the mounted application across WebSocket recovery with an active Session: %s', async (activeSession) => {
   const scaffold = await launchWebScaffold({
@@ -56,7 +56,7 @@ it.each([false, true])('retains the mounted application across WebSocket recover
     await writeComposerDraft(page, composer, draft)
     await expect.poll(() => sessionBaselines).toBeGreaterThan(0)
   } else {
-    await page.getByText('Into the Unknown', { exact: true }).waitFor({ timeout: 20_000 })
+    await heroHeadline(page).waitFor({ timeout: 20_000 })
   }
   await expect.poll(() => readyFrames).toBeGreaterThan(0)
   const root = await page.locator('[data-slot="root"]').elementHandle()
@@ -85,5 +85,5 @@ it.each([false, true])('retains the mounted application across WebSocket recover
   }
 
   expect(navigations).toBe(0)
-  if (!activeSession) expect(await page.getByText('Into the Unknown', { exact: true }).isVisible()).toBe(true)
+  if (!activeSession) expect(await heroHeadline(page).isVisible()).toBe(true)
 })

@@ -485,6 +485,9 @@ const EXPECTED_TOOLS = [
   'job_output',
   'list_agents',
   'list_subagent_models',
+  // OpenHarness: LSP navigation and milestone recording ship in the Standard preset.
+  'lsp',
+  'milestone_write',
   'plugin_manager',
   'present',
   'read',
@@ -1084,7 +1087,8 @@ it('withdraws Auto on shipped Loader unload and does not restore migrated live s
     expect(ctx.permissionPresets.names).not.toContain('auto')
     expect(ctx.permissionPresets.current(handle.agent.session)).toBe('danger-full-access')
     expect(ctx.sandboxPolicy.overrideOf(handle.agent.session)).toBe('danger-full-access')
-    expect(ctx.approval.overrideOf(handle.agent.session)).toBe('never')
+    // OpenHarness: Full access auto-grants every approval ask.
+    expect(ctx.approval.overrideOf(handle.agent.session)).toBe('always')
     expect(terminals.list(handle.agent)).toMatchObject([
       { sessionId: terminal.sessionId, pid: terminal.pid, status: { kind: 'running' } },
     ])

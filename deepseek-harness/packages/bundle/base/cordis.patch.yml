@@ -151,12 +151,14 @@
           claude-code:
             displayName: Claude Code
             apiKeyEnv: CLAUDE_CODE_OAUTH_TOKEN
+            oauth: true
             catalog: anthropic
             # 1h cache_control TTL (system + tools + last turn). Default short is 5m.
             cacheRetention: long
           openai-codex:
             displayName: Codex
             apiKeyEnv: CODEX_ACCESS_TOKEN
+            oauth: true
             cacheRetention: long
           zai:
             displayName: GLM Coding Plan

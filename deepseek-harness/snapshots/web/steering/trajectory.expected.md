@@ -1,6 +1,6 @@
 - banner:
   - navigation "Session hierarchy": Use the ask_user_question tool to
-  - text: Standard mode
+  - button "Standard mode"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
@@ -25,6 +25,9 @@
     - 'row "CONTEXT, Current runtime context. This snapshot supersedes earlier runtime-context snapshots. Current working directory: \"{{cwd}}/workspace\". Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"{{cwd}}/workspace\". Some pl…"':
       - cell "CONTEXT"
       - 'cell "Current runtime context. This snapshot supersedes earlier runtime-context snapshots. Current working directory: \"{{cwd}}/workspace\". Current DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"{{cwd}}/workspace\". Some pl…"'
+    - 'row "CONTEXT, <system-reminder> A skill is a reusable set of task-specific instructions. The following skills are available in this session: <available_skills> j-space: Load only for long-horizon, multi-stage, or competition-level work, or when the user asks to think harder. Classify fast/full/loop, then Read modules from this skill''s resource base. Do not call this skill again after it is loaded. Skip ordinary one-glance edits. </available_skills> If the user names a skill, or the task clearly matches a skill''s descript…"':
+      - cell "CONTEXT"
+      - 'cell "<system-reminder> A skill is a reusable set of task-specific instructions. The following skills are available in this session: <available_skills> j-space: Load only for long-horizon, multi-stage, or competition-level work, or when the user asks to think harder. Classify fast/full/loop, then Read modules from this skill''s resource base. Do not call this skill again after it is loaded. Skip ordinary one-glance edits. </available_skills> If the user names a skill, or the task clearly matches a skill''s descript…"'
     - 'row "CONTEXT, Time sampled while preparing turn 1, step 1: 2026-01-15T{{clock}}+{{clock}}[Asia/Shanghai] Browser time zone for this request: Asia/Shanghai. Interpret otherwise-unqualified dates and times in this zone. Elapsed since the preceding model-visible message: unavailable."':
       - cell "CONTEXT"
       - 'cell "Time sampled while preparing turn 1, step 1: 2026-01-15T{{clock}}+{{clock}}[Asia/Shanghai] Browser time zone for this request: Asia/Shanghai. Interpret otherwise-unqualified dates and times in this zone. Elapsed since the preceding model-visible message: unavailable."'
@@ -47,7 +50,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Send message" [disabled]
 - button "1 turns 2 steps · {{throughput}} tok/s": 1 turns 2 steps{{throughput}} tok/s
 - button "30 tok · Cache hit 0%": 30 tokCache hit 0%

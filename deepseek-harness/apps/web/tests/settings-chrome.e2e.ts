@@ -75,15 +75,16 @@ describe('web e2e: settings modal and General preferences', () => {
       if (await dialog.isVisible()) await page.keyboard.press('Escape')
       await dialog.waitFor({ state: 'hidden' })
     })
-    const trigger = page.getByRole('button', { name: '账号菜单', exact: true })
-    expect(await trigger.getAttribute('aria-haspopup')).toBe('menu')
+    // OpenHarness ships without the DeepSeek-account occupant, so the sidebar
+    // foot carries the settings shell's own trigger, which opens the dialog
+    // directly instead of an account menu.
+    const trigger = page.getByRole('button', { name: '设置', exact: true })
+    expect(await trigger.getAttribute('aria-haspopup')).toBe('dialog')
     expect(await trigger.getAttribute('aria-expanded')).toBe('false')
     await trigger.click()
-    expect(await trigger.getAttribute('aria-expanded')).toBe('true')
-    await page.getByRole('menuitem', { name: '设置', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '设置' })
     await dialog.waitFor({ timeout: 10_000 })
-    expect(await trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(await trigger.getAttribute('aria-expanded')).toBe('true')
     const panelBox = await dialog.boundingBox()
     const optionsBox = await dialog.locator('[class*="_options"]').boundingBox()
     const firstSectionBox = await dialog.getByRole('navigation').getByRole('button').first().boundingBox()
@@ -357,7 +358,7 @@ describe('web e2e: settings modal and General preferences', () => {
     expect(closeBox!.y + closeBox!.height).toBeLessThanOrEqual(844)
     await close.click()
     await dialog.waitFor({ state: 'hidden' })
-    const trigger = phone.getByRole('button', { name: '账号菜单', exact: true })
+    const trigger = phone.getByRole('button', { name: '设置', exact: true })
     await expect.poll(() => trigger.evaluate(el => el === document.activeElement)).toBe(true)
 
     expect(console.pageErrors).toEqual([])
@@ -412,7 +413,8 @@ describe('web e2e: settings modal and General preferences', () => {
     expect(confirmed.snapshotEvents().map(event => [event.type, event.data])).toEqual([
       ['permission/preset', { preset: 'danger-full-access' }],
       ['sandbox/mode', { mode: 'danger-full-access' }],
-      ['approval/policy', { policy: 'never' }],
+      // OpenHarness: Full access auto-grants every approval ask.
+      ['approval/policy', { policy: 'always' }],
     ])
     await page.keyboard.press('Escape')
     expect(tripwire.pageErrors).toEqual([])
@@ -867,6 +869,54 @@ describe('web e2e: settings modal and General preferences', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
+  it('persists automatic compaction and its threshold, and restores them across reload', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-compaction'))
+    onTestFinished(async () => {
+      const open = page.getByRole('dialog', { name: '设置' })
+      if (await open.isVisible()) await page.keyboard.press('Escape')
+      await open.waitFor({ state: 'hidden' })
+    })
+    const patchDocument = (): Promise<string> => readFile(join(scaffold.harnessHome, 'profiles', 'scaffold', 'cordis.patch.yml'), 'utf8')
+    await openSettings(page, 'zh')
+    const dialog = page.getByRole('dialog', { name: '设置' })
+    await dialog.waitFor({ timeout: 10_000 })
+    // OpenHarness General rows: automatic compaction (on every route) and its context-window threshold.
+    const autoRow = dialog.getByText('自动压缩', { exact: true }).locator('../..')
+    const thresholdRow = dialog.getByText('压缩阈值', { exact: true }).locator('../..')
+    await thresholdRow.getByRole('button', { name: '75%', exact: true }).click()
+    await page.getByRole('menuitem', { name: '50%', exact: true }).click()
+    await thresholdRow.getByRole('button', { name: '50%', exact: true }).waitFor({ timeout: 10_000 })
+    await autoRow.getByRole('button', { name: '开启', exact: true }).click()
+    await page.getByRole('menuitem', { name: '停用', exact: true }).click()
+    await autoRow.getByRole('button', { name: '停用', exact: true }).waitFor({ timeout: 10_000 })
+    await expect.poll(patchDocument, { timeout: 5_000 }).toMatch(/id: ui-conversation[\s\S]*compactionAuto: false/)
+    await expect.poll(patchDocument, { timeout: 5_000 }).toMatch(/id: ui-conversation[\s\S]*compactionThresholdPercent: 50/)
+    await page.keyboard.press('Escape')
+
+    const warningStart = tripwire.warnings.length
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    acknowledgeReloadConnectionLoss(tripwire, warningStart)
+    await openSettings(page, 'zh')
+    const reloaded = page.getByRole('dialog', { name: '设置' })
+    const reloadedAuto = reloaded.getByText('自动压缩', { exact: true }).locator('../..')
+    const reloadedThreshold = reloaded.getByText('压缩阈值', { exact: true }).locator('../..')
+    await reloadedThreshold.getByRole('button', { name: '50%', exact: true }).waitFor({ timeout: 10_000 })
+    await reloadedAuto.getByRole('button', { name: '停用', exact: true }).waitFor({ timeout: 10_000 })
+
+    // Restore the shipped defaults so later scenarios on this page see them.
+    // The threshold selector is disabled while automatic compaction is off.
+    await reloadedAuto.getByRole('button', { name: '停用', exact: true }).click()
+    await page.getByRole('menuitem', { name: '开启', exact: true }).click()
+    await reloadedAuto.getByRole('button', { name: '开启', exact: true }).waitFor({ timeout: 10_000 })
+    await reloadedThreshold.getByRole('button', { name: '50%', exact: true }).click()
+    await page.getByRole('menuitem', { name: '75%', exact: true }).click()
+    await reloadedThreshold.getByRole('button', { name: '75%', exact: true }).waitFor({ timeout: 10_000 })
+    await expect.poll(patchDocument, { timeout: 5_000 }).toMatch(/id: ui-conversation[\s\S]*compactionThresholdPercent: 75/)
+    await page.keyboard.press('Escape')
+    expect(tripwire.pageErrors).toEqual([])
+  }, 90_000)
+
   it('persists the settings language across reload and a distinct port', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-language'))
     await openSettings(page, 'zh')
@@ -901,7 +951,8 @@ describe('web e2e: settings modal and General preferences', () => {
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
-    const enTrigger = page.getByRole('button', { name: 'Account menu' })
+    // The sidebar foot's Settings trigger (OpenHarness ships no account menu) carries the English label.
+    const enTrigger = page.getByRole('button', { name: 'Settings', exact: true })
     await enTrigger.waitFor({ timeout: 10_000 })
 
     // A Chinese browser on another port still receives the explicit English

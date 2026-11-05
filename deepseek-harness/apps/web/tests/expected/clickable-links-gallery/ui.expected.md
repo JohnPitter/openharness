@@ -6,8 +6,11 @@
     - tab "Chat" [selected]
     - tab "Trajectory"
   - button "More conversation views"
+- group "Session waypoints":
+  - 'button "Message: Assemble the link gallery: write the report and styles, inspect the sources, an…"'
 - text: "Assemble the link gallery: write the report and styles, inspect the sources, and summarize. {{clock}}"
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Wrote files, ran commands, called tools, etc." [expanded]
@@ -167,6 +170,6 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
 - button "Send message" [disabled]
 - button "1 turns 2 steps"

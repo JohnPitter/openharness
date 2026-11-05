@@ -1,14 +1,17 @@
 - banner:
   - navigation "Session hierarchy": Use the ask_user_question tool to
-  - text: Standard mode
+  - button "Standard mode"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
   - button "More conversation views"
+- group "Session waypoints":
+  - 'button "Message: Use the ask_user_question tool to ask me exactly one question with id \"checkpoi…"'
 - text: Use the ask_user_question tool to ask me exactly one question with id "checkpoint", question "Ready to continue?", header "Checkpoint", and options labeled "Yes" and "No". After I answer, reply with one short sentence acknowledging my answer and stop. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - button "Asked questions" [expanded]
@@ -32,7 +35,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Send message" [disabled]
 - button "1 turns 2 steps · {{throughput}} tok/s": 1 turns 2 steps{{throughput}} tok/s
 - button "40 tok · Cache hit 0%": 40 tokCache hit 0%

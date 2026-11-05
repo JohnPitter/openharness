@@ -8,7 +8,11 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { expect, it, onTestFailed, onTestFinished } from 'vitest'
-import { REPO_ROOT, newEnglishPage, saveFailureShot, writeComposerDraft } from './support.ts'
+import { REPO_ROOT, installInstallationBinOnPath, newEnglishPage, saveFailureShot, writeComposerDraft } from './support.ts'
+
+// The spawned `dsh` inherits PATH: the packaged runtime puts its bundled
+// `typescript-language-server` (shipped presets' lsp-stdio) on PATH the same way.
+installInstallationBinOnPath()
 
 class RestartableServer {
   private child: ChildProcess | undefined

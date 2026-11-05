@@ -48,8 +48,12 @@ o runtime precisa de arquivos REAIS em disco (por isso extração, não SEA/pkg)
 Automatizado em `scripts/stage-runtime.mjs` (build com a marca → `pnpm deploy`
 → materialização via `scripts/build-exe-for-python-sdk-staging.ts` do upstream →
 pacotes workspace faltantes + `dsh-web-frontend/dist` → smoke do `dsh web` →
-zip determinístico por `tools/zipruntime` → `--node` copia o `node.exe`). Os
-passos manuais abaixo descrevem o que ele faz.
+zip determinístico por `tools/zipruntime` → `--node` copia o `node.exe`). Ele
+também fecha as dependências workspace (inclusive peers) que o deploy omite,
+gera shims relocáveis de `typescript-language-server` em `node_modules/.bin`
+(usam o `node.exe` embutido; sem eles nenhum preset com LSP cria sessão) e
+falha se algum pacote `@deepseek-ai/*` staged não resolver suas dependências.
+Os passos manuais abaixo descrevem o que ele faz.
 
 ```powershell
 cd deepseek-harness
@@ -173,8 +177,10 @@ ou colar o token. `layoutOf` mapeia `llm-cursor` → família `cursor`.
 `metering: 'requests'`. Registrado em `cordis.patch.yml` + `package.json` +
 `tsconfig.host.json`.
 
-Login OAuth (Settings → Models, no card do provider): Claude Code e Codex
-aceitam **Sign in** (PKCE no browser, callback localhost) **e** colar token.
+Login OAuth (Settings → Models, no card do provider): opt-in por rota
+(`oauth: true` em `llm-pi-ai.config.providers`, só `claude-code` e `openai-codex`);
+rotas Platform do mesmo catálogo (`anthropic`, `openai`) ficam só com chave.
+Claude Code e Codex aceitam **Sign in** (PKCE no browser, callback localhost) **e** colar token.
 Codex também oferece device code se a porta 1455 estiver ocupada. Tokens ficam
 em `$DSH_HOME/pi-ai-oauth.json` e o pi-ai faz refresh no request. HTTP:
 `GET/POST /dsh-llm-pi-ai/oauth/{status,login,logout}`. Cursor usa o mesmo
@@ -248,8 +254,10 @@ go vet ./...  # lint
 - **Custo por rota:** coding plans (Kimi, Claude Code, Codex, GLM, OpenCode, Cursor)
   cobram por request; DeepSeek e plataformas pay-per-token cobram por token.
   Em rota de request o harness não dispara título-LLM (o fallback de primeiras
-  palavras continua). Compactação automática (campos voláteis `compaction-basic.auto` /
-  `thresholdPercent`, editados na aba Geral) ainda
+  palavras continua). Compactação automática (campos voláteis
+  `ui-conversation.compactionAuto` / `compactionThresholdPercent`, editados na aba
+  Geral; o host expõe o serviço `compactionUserSettings` e cada `compaction-basic`
+  montado pelos presets lê dele o que o próprio Config não fixa) ainda
   resume; overflow e `/compact` limitam o intervalo para o summarizer caber.
   A unidade vem do adapter (`metering`), não do nome do provedor.
 - **Busca na web:** padrão é DuckDuckGo (HTML, sem chave). A busca nativa

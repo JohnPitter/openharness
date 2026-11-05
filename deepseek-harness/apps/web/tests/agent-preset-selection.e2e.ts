@@ -1,11 +1,10 @@
 // Web e2e scenario: agent-preset selection. Every lane mounts the plugin's
 // own shipped presets; this is the lane that puts them in front of a browser.
 //
-// Two surfaces, one host rule: a session's composition is fixed when the
-// session starts. Before that, the new-session chip stages the choice beside
-// the workspace picker — the only screen where it still works. After it, the
-// session header names what the session runs and offers no control at all,
-// because the host answers `agent-preset-locked` to anything else.
+// Two surfaces, one host rule (OpenHarness): a live session can switch
+// composition except while a turn is in flight. Before a session exists, the
+// new-session chip stages the choice beside the workspace picker. After it,
+// the session header is the control that switches this session.
 //
 // Zero model calls: no replay fixture mounts, so a stray stream fails loud.
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -430,9 +429,19 @@ describe('web e2e: agent-preset selection', () => {
     expect(snapshot).toContain('button "1 subagent"')
     expect(snapshot.indexOf('Minimal mode')).toBeLessThan(snapshot.indexOf('button "1 subagent"'))
     expect(snapshot.indexOf('button "1 subagent"')).toBeLessThan(snapshot.indexOf('button "More actions"'))
-    // Static chrome, not a control: the header can only report a composition
-    // the host would refuse to change.
-    expect(snapshot).not.toContain('button "Minimal mode"')
+    // A control (OpenHarness live preset switch): the header switches this
+    // session while its agent is idle.
+    expect(snapshot).toContain('button "Minimal mode"')
+  })
+
+  it('switches a resumed session from the header', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-header-switch'))
+    await page.locator('[class*="titleRow"]').getByRole('button', { name: 'Minimal mode', exact: true }).click()
+    await page.getByRole('menuitem', { name: /^Standard mode/ }).first().click()
+    await expect.poll(() => livePreset(scaffold, sessionId(SEED_ID)), { timeout: 15_000 }).toBe('standard')
+    await expect.poll(() => page.locator('[class*="titleRow"]').getByRole('button', { name: 'Standard mode', exact: true }).count(), {
+      timeout: 5_000,
+    }).toBe(1)
   })
 
   it('drove every surface without a page error or a stream warning', () => {

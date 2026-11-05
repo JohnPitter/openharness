@@ -1,6 +1,6 @@
 - banner:
   - navigation "Session hierarchy": workspace
-  - text: Standard mode
+  - button "Standard mode" [disabled]
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
@@ -25,5 +25,5 @@
 - textbox "Cmd/Ctrl+Enter steers all queued messages"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Stop generating"

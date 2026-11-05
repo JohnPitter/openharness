@@ -8,8 +8,11 @@
     - tab "Chat" [selected]
     - tab "Trajectory"
   - button "More conversation views"
+- group "Session waypoints":
+  - 'button "Message: Inspect the protected operation, but do not run it unless authorized."'
 - text: Inspect the protected operation, but do not run it unless authorized. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Called tools, ran code, ran commands" [expanded]
@@ -21,7 +24,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Auto review"': Auto review
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
 - button "Send message" [disabled]
 - button "1 turns 2 steps"
 
@@ -35,8 +38,11 @@
     - tab "Chat" [selected]
     - tab "Trajectory"
   - button "More conversation views"
+- group "Session waypoints":
+  - 'button "Message: Inspect the protected operation, but do not run it unless authorized."'
 - text: Inspect the protected operation, but do not run it unless authorized. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Called tools, ran code, ran commands" [expanded]
@@ -52,7 +58,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Auto review"': Auto review
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
 - button "Send message" [disabled]
 - button "1 turns 2 steps"
 
@@ -117,6 +123,6 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Auto review"': Auto review
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
 - button "Send message" [disabled]
 - button "1 turns 2 steps"

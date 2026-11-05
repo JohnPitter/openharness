@@ -1,6 +1,6 @@
 - banner:
   - navigation "Session hierarchy": Reply with a one-sentence description
-  - text: Standard mode
+  - button "Standard mode"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
@@ -11,6 +11,10 @@
   - button "Jump to turn 1"
   - button "Jump to turn 2"
   - button "Jump to turn 3"
+- group "Session waypoints":
+  - 'button "Message: Reply with a one-sentence description of event sourcing, then stop."'
+  - 'button "Message: Compare with this screenshot"'
+  - 'button "Message: Continue with the queued comparison"'
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy"
 - status: Stopped
@@ -35,6 +39,7 @@
 - button "Branch into a new conversation"
 - text: {{clock}} Continue with the queued comparison {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}"
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
@@ -46,7 +51,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Send message" [disabled]
 - button "3 turns 3 steps · {{throughput}} tok/s": 3 turns 3 steps{{throughput}} tok/s
 - button "15.7K tok · Cache hit 99%": 15.7K tokCache hit 99%

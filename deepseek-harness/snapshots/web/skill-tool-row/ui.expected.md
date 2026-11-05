@@ -6,8 +6,11 @@
     - tab "Chat" [selected]
     - tab "Trajectory"
   - button "More conversation views"
+- group "Session waypoints":
+  - 'button "Message: Load the editing-cordis-compositions skill with the skill tool, then reply DONE."'
 - text: Load the editing-cordis-compositions skill with the skill tool, then reply DONE. {{date}} {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Called tools" [expanded]
@@ -24,8 +27,8 @@
 - text: {{date}} {{clock}}
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
-- 'button "Access mode, current: Full access"': Full access
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- 'button "Access mode, current: Custom"': Custom
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
 - button "Send message" [disabled]
 - button "1 turns 2 steps"
 - button "310 tok · Cache hit 0%": 310 tokCache hit 0%

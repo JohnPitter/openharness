@@ -67,9 +67,9 @@ export class CompactionSettingsPolicy {
   private adopt(host: ConfigForm<CompactionUserSettings>): void {
     const section = host.getSnapshot().value
     if (section === undefined) return
-    if (this.auto.getSnapshot() !== section.auto) this.auto.set(section.auto)
-    if (section.thresholdPercent !== undefined && this.thresholdPercent.getSnapshot() !== section.thresholdPercent) {
-      this.thresholdPercent.set(section.thresholdPercent)
-    }
+    const auto = section.compactionAuto ?? DEFAULT_COMPACTION_AUTO
+    if (this.auto.getSnapshot() !== auto) this.auto.set(auto)
+    const percent = section.compactionThresholdPercent
+    if (percent !== undefined && this.thresholdPercent.getSnapshot() !== percent) this.thresholdPercent.set(percent)
   }
 }

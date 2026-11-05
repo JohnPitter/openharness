@@ -294,6 +294,9 @@ describe('web e2e: the composer model switch is the default for later sessions',
   })
 
   it('shares provider order, fuzzy result order and sticky header material between both model pickers', async () => {
+    const withoutContextWindow = (groups: { label: string | null, rows: (string | null)[] }[]) => groups.map(group => ({
+      ...group, rows: group.rows.map(row => row?.replace(/\d+(?:\.\d+)?[KM] 上下文$/u, '') ?? null),
+    }))
     const readGroups = (surface: Locator, role: 'option' | 'menuitemradio') => surface.locator('[data-menu-group]')
       .evaluateAll((groups, rowRole) => groups.map(group => ({
         label: group.querySelector('[data-menu-group-heading]')!.textContent,
@@ -331,11 +334,13 @@ describe('web e2e: the composer model switch is the default for later sessions',
       await page.getByRole('option', { name: /^模型/ }).click()
       const popup = page.locator('[aria-label="/model 选项"]')
       await popup.getByRole('option').first().waitFor()
-      expect(await readGroups(popup, 'option')).toEqual(order)
+      // OpenHarness: the composer picker's rows also show each model's
+      // context window ("1M 上下文"); the slash popup lists the same rows.
+      expect(await readGroups(popup, 'option')).toEqual(withoutContextWindow(order))
       expect(await checkSticky(popup, popup.getByRole('listbox'))).toEqual(sticky)
       const popupSearch = page.getByRole('textbox', { name: '筛选选项', exact: true })
       await popupSearch.fill('  ACMLG  ')
-      expect(await readGroups(popup, 'option')).toEqual(filtered)
+      expect(await readGroups(popup, 'option')).toEqual(withoutContextWindow(filtered))
       expect(await popupSearch.evaluate(node => node === node.ownerDocument.activeElement)).toBe(true)
     } finally {
       await page.keyboard.press('Escape')
@@ -577,7 +582,7 @@ describe('web e2e: the composer model switch is the default for later sessions',
     expect(await page.getByRole('menuitemradio').count()).toBe(modelWeights.length)
     expect(await page.getByRole('button', { name: '清除搜索', exact: true }).count()).toBe(0)
     await search.fill('  ACMLG  ')
-    expect(await page.getByRole('menuitemradio').allTextContents()).toEqual(['Acme Large'])
+    expect(await page.getByRole('menuitemradio').allTextContents()).toEqual(['Acme Large1M 上下文'])
     expect(await page.getByRole('group', { name: 'Origin Gateway', exact: true }).count()).toBe(0)
     await compareOrRefreshGolden(
       fileURLToPath(new URL('./expected/default-model/search.expected.md', import.meta.url)),

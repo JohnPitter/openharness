@@ -27,7 +27,11 @@ import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import WebSocket from 'ws'
-import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot } from './support.ts'
+import { REPO_ROOT, installInstallationBinOnPath, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot } from './support.ts'
+
+// The spawned `dsh` inherits PATH: the packaged runtime puts its bundled
+// `typescript-language-server` (shipped presets' lsp-stdio) on PATH the same way.
+installInstallationBinOnPath()
 
 const WEB_SURFACE_PROMPT = fileURLToPath(new URL('./expected/web-runtime-context/web-surface-prompt.expected.md', import.meta.url))
 /** Framed user text that marks the auxiliary title request's own messages. */

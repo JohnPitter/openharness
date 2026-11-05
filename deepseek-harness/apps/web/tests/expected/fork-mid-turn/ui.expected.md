@@ -4,6 +4,7 @@
 - button "Completed in {{duration}}"
 - text: FORK_BRANCH_USER Summarize what this branch knows about the reads. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}"
 - paragraph: FORK_BRANCH_FIRST this branch has no read results, so I would check what the parent completed before retrying. FORK_BRANCH_DONE.

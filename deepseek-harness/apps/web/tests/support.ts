@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { createRequire } from 'node:module'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Locator, Page } from 'playwright'
 import { expect, vi, type MockInstance } from 'vitest'
@@ -21,6 +21,19 @@ export const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 export function experimentalBundleDescription(bundle: string, locale: string): string {
   const resource = JSON.parse(readFileSync(join(REPO_ROOT, 'packages/experimental', bundle, 'locale', `${locale}.json`), 'utf8')) as { meta: { description: string } }
   return resource.meta.description
+}
+
+/**
+ * Put the installation's `node_modules/.bin` first on this process's PATH,
+ * as the packaged OpenHarness sidecar does for its Host (internal/sidecar
+ * sidecarEnv), so the shipped presets' `lsp-stdio` resolves the bundled
+ * `typescript-language-server`. Child `dsh` processes inherit it. Idempotent.
+ */
+export function installInstallationBinOnPath(): void {
+  const installationBin = join(REPO_ROOT, 'apps/cli/node_modules/.bin')
+  const inheritedPath = process.env.PATH ?? ''
+  if (inheritedPath.split(delimiter).includes(installationBin)) return
+  process.env.PATH = [installationBin, inheritedPath].filter(part => part !== '').join(delimiter)
 }
 
 const installationRequire = createRequire(join(REPO_ROOT, 'apps/cli/package.json'))
@@ -217,6 +230,20 @@ export async function revealNavigationDrawer(page: Page, locale: 'en' | 'zh' | '
   await closed.waitFor({ state: 'detached' })
 }
 
+/** The product headline the empty-state hero renders (`hero.headline`; OpenHarness branding). */
+export const HERO_HEADLINE = 'OpenHarness'
+
+/**
+ * The empty-state hero's headline text. The sidebar brand slot renders the
+ * same product name (aria-hidden), so a bare text lookup is ambiguous; this
+ * scopes to the hero's title group.
+ * @param page - the page under test.
+ * @returns the hero headline locator.
+ */
+export function heroHeadline(page: Page): Locator {
+  return page.locator('[class*="titleGroup"]').getByText(HERO_HEADLINE, { exact: true })
+}
+
 /**
  * Drive the hero's workspace picker through the composed directory dialog
  * until the live composer unlocks. A fresh world has no Workspace, so the boot
@@ -359,20 +386,26 @@ export function conversationContextKey(kind: string, id: string): string {
   return `${kind.length}:${kind}${id}`
 }
 
-/** Open Settings through the sidebar account menu.
+/** Open Settings from the sidebar foot.
+ * OpenHarness ships without the DeepSeek-account occupant (`ui-settings-account`),
+ * so the foot carries the settings shell's own Settings button; a scaffold that
+ * mounts the account occupant gets its Account menu, whose first item opens
+ * Settings.
  * @param page - browser page with the mounted sidebar.
  * @param locale - current UI language.
  */
 export async function openSettings(page: Page, locale: 'en' | 'zh' | 'ja'): Promise<void> {
   const labels = { en: ['Account menu', 'Settings'], zh: ['账号菜单', '设置'], ja: ['アカウントメニュー', '設定'] } as const
-  const trigger = page.getByRole('button', {
-    name: labels[locale][0], exact: true, includeHidden: true,
-  })
-  await trigger.waitFor({ state: 'attached' })
+  const accountMenu = page.getByRole('button', { name: labels[locale][0], exact: true, includeHidden: true })
+  const settingsButton = page.getByRole('button', { name: labels[locale][1], exact: true, includeHidden: true })
+  const trigger = accountMenu.or(settingsButton)
+  await trigger.first().waitFor({ state: 'attached' })
   await revealNavigationDrawer(page, locale)
-  if (!await trigger.isVisible()) {
+  const viaAccount = await accountMenu.count() > 0
+  const target = viaAccount ? accountMenu : settingsButton
+  if (!await target.isVisible()) {
     await page.getByRole('button', { name: { en: 'Open sidebar', zh: '打开侧边栏', ja: 'サイドバーを開く' }[locale], exact: true }).click()
   }
-  await trigger.click()
-  await page.getByRole('menuitem', { name: labels[locale][1], exact: true }).click()
+  await target.click()
+  if (viaAccount) await page.getByRole('menuitem', { name: labels[locale][1], exact: true }).click()
 }

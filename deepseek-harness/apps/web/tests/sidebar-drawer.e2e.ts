@@ -280,7 +280,8 @@ it('overlays the conversation and closes after navigation without losing its sid
         label.selectNodeContents(tab)
         return label.getBoundingClientRect().left - tab.closest('header')!.getBoundingClientRect().left
       })
-      expect(await tabInset()).toBeCloseTo(20, 1)
+      // OpenHarness tightens the conversation header to an 8px inset in columns up to 480px wide.
+      expect(await tabInset()).toBeCloseTo(8, 1)
       // Restore CSS-probe markers in the same synchronous task, before rendering.
       const desktopInsets = await chatTab.evaluate((tab) => {
         const root = document.documentElement
@@ -295,10 +296,12 @@ it('overlays the conversation and closes after navigation without losing its sid
           delete root.dataset.platform
         }
       })
-      for (const inset of desktopInsets) expect(inset).toBeCloseTo(28, 1)
+      // The narrow-column header inset applies on every platform.
+      for (const inset of desktopInsets) expect(inset).toBeCloseTo(8, 1)
       await page.setViewportSize({ width: 768, height: 844 })
       await frame.waitFor({ state: 'detached' })
-      expect(await tabInset()).toBeCloseTo(28, 1)
+      // A 768px window leaves the conversation column under 720px: OpenHarness's 12px narrow inset.
+      expect(await tabInset()).toBeCloseTo(12, 1)
       await page.setViewportSize({ width: 390, height: 844 })
       await frame.waitFor()
       await opener.click()
@@ -437,8 +440,8 @@ it('overlays the conversation and closes after navigation without losing its sid
       await drawer.getByRole('button', { name: 'Search sessions', exact: true }).tap()
       await searchWithKeyboard.tap()
       await searchWithKeyboard.fill('retained search')
-      await drawer.getByRole('button', { name: 'Account menu', exact: true }).tap()
-      await page.getByRole('menuitem', { name: 'Settings', exact: true }).tap()
+      // OpenHarness ships no account menu: the drawer foot's Settings button opens the dialog.
+      await drawer.getByRole('button', { name: 'Settings', exact: true }).tap()
       const settings = page.getByRole('dialog', { name: 'Settings', exact: true })
       await settings.waitFor()
       const settingsBox = (await settings.boundingBox())!

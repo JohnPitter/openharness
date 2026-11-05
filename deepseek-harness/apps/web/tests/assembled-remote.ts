@@ -172,6 +172,9 @@ export function createAssembledRemote(options: AssembledRemoteOptions = {}): Ass
         },
       },
       'session/cancel': ok({ accepted: true }),
+      // OpenHarness: the sidebar usage chip reads the selected route's account quota;
+      // the assembled fixture routes have none.
+      'usage/accountUsage': ok({ supported: false }),
     },
   })
 

@@ -1,6 +1,16 @@
 - dialog "添加一个 API Key 开始使用":
   - heading "添加一个 API Key 开始使用" [level=2]
   - paragraph: 配置 DeepSeek 官方模型，即可开始使用。
+  - text: 提供商
+  - combobox "提供商":
+    - option "DeepSeek" [selected]
+    - option "Cursor"
+    - option "Kimi for Code"
+    - option "Codex"
+    - option "OpenCode"
+    - option "OpenCode Go"
+    - option "GLM Coding Plan"
+    - option "Claude Code"
   - text: API 密钥
   - button "认证说明": "?"
   - textbox "API 密钥":

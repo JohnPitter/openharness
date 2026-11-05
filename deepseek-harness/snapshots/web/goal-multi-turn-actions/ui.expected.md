@@ -1,6 +1,6 @@
 - banner:
   - navigation "Session hierarchy": workspace
-  - text: Standard mode
+  - button "Standard mode"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
@@ -119,7 +119,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Send message" [disabled]
 - button "2 turns 12 steps · {{throughput}} tok/s": 2 turns 12 steps{{throughput}} tok/s
 - button "115K tok · Cache hit 91%": 115K tokCache hit 91%

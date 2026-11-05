@@ -73,6 +73,7 @@ export {
   CompactionUserSettingsSchema,
   type CompactionThresholdPercent,
   type CompactionUserSettings,
+  type CompactionUserSettingsSource,
 } from './user-settings.ts'
 
 /** Resolve the exact provider/model durably routed for the latest request. */
@@ -189,7 +190,14 @@ export class BasicCompactionEngine extends CompactionEngine {
 
   /** Current volatile settings overlay. */
   private userSettings(): CompactionUserSettings {
-    return readCompactionUserSettings(this.liveFields.auto, this.liveFields.thresholdPercent)
+    const own = readCompactionUserSettings(this.liveFields.auto, this.liveFields.thresholdPercent)
+    const shared = this.ctx.get('compactionUserSettings')?.read()
+    const auto = own.auto ?? shared?.auto
+    const thresholdPercent = own.thresholdPercent ?? shared?.thresholdPercent
+    return {
+      ...auto === undefined ? {} : { auto },
+      ...thresholdPercent === undefined ? {} : { thresholdPercent },
+    }
   }
 
   /** Live `auto` wins when set; an unset volatile field means the default (on). */

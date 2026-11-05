@@ -40,9 +40,17 @@ async function frames(page: Page): Promise<void> {
 }
 
 function readGroups(viewport: Locator) {
+  // OpenHarness: composer picker rows also show the model's context window
+  // ("1M 上下文"); the slash popup lists the same names without it.
   return viewport.locator('[data-menu-group]').evaluateAll(groups => groups.map(group => ({
     label: group.querySelector('[data-menu-group-heading]')!.textContent,
-    rows: [...group.querySelectorAll('[role="option"], [role="menuitemradio"]')].map(row => row.textContent),
+    rows: [...group.querySelectorAll('[role="option"], [role="menuitemradio"]')].map((row) => {
+      const copy = row.cloneNode(true) as Element
+      for (const node of copy.querySelectorAll('*')) {
+        if (/^\d+(?:\.\d+)?[KM] (?:上下文|context)$/u.test(node.textContent ?? '')) node.remove()
+      }
+      return copy.textContent
+    }),
   })))
 }
 

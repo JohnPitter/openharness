@@ -1,3 +1,4 @@
 - status:
   - text: This turn failedRequest quota exhausted.
+  - button "Continue"
   - code: ACCOUNT_QUOTA

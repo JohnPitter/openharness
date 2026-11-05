@@ -3,6 +3,8 @@
   - navigation:
     - button "通用设置"
     - button "模型"
+    - button "限额"
+    - button "状态"
     - button "内置插件"
     - button "Agent 预设"
   - button "打开配置文件"

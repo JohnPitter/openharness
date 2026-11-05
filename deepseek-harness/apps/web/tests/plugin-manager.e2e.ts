@@ -502,9 +502,11 @@ describe('web e2e: plugin manager', () => {
         const basic = panel.locator('[data-plugin-group="basic"]')
         await basic.locator('[data-plugin-item]').first().waitFor()
         // Configuration cards lead the list; their absent switches give the text column more width.
+        // OpenHarness ships DeepSeek search disabled, so no Web search page joins them.
         const loaded = await measure(basic)
-        expect(await basic.locator(':scope > ul > li[data-plugin-item]').count()).toBe(4)
-        expect(loaded.rows).toHaveLength(loading.rows.length)
+        expect(await basic.locator(':scope > ul > li[data-plugin-item]').count()).toBe(3)
+        // The skeleton paints four placeholder rows; the three loaded cards align with the first three.
+        expect(loaded.rows).toHaveLength(Math.min(loading.rows.length, 3))
         const compare = (name: string, a: typeof loading.pageHeader, b: typeof loaded.pageHeader, axes: readonly (keyof typeof a)[] = ['x', 'y', 'width', 'height']) => {
           for (const axis of axes) {
             expect(Math.abs(a[axis] - b[axis]), `${width}px ${name}.${axis}: loading=${a[axis]}, loaded=${b[axis]}`).toBeLessThanOrEqual(0.1)
@@ -835,7 +837,8 @@ describe('web e2e: plugin manager', () => {
     expect(focusRing.outlineWidth).toBeGreaterThan(0)
     // Profile bundles stay in Installed; configuration pages and offered bundles have their own groups.
     expect(await panel.locator('[data-plugin-group="bundles"] [data-plugin-package]').count()).toBe(2)
-    expect(await panel.locator('[data-plugin-group="basic"] [data-plugin-item]').count()).toBe(4)
+    // Shell, Agent loop, Subagent: the Web search page follows the disabled DeepSeek search row.
+    expect(await panel.locator('[data-plugin-group="basic"] [data-plugin-item]').count()).toBe(3)
     expect(await panel.locator('[data-plugin-package="@deepseek-ai/dsh-experimental-inspector"]').count()).toBe(0)
     expect(await panel.getByRole('switch', { name: '启用 语音输入', exact: true }).getAttribute('aria-checked')).toBe('false')
     expect(await panel.getByRole('switch', { name: '启用 自定义插件索引', exact: true }).getAttribute('aria-checked')).toBe('false')
@@ -1169,7 +1172,8 @@ describe('web e2e: plugin manager', () => {
       // Schedule ships in the delivered composition, so no bundle card carries it in either language.
       expect(await panel.getByRole('button', { name: 'View Automation tasks', exact: true }).count()).toBe(0)
       // The official configuration pages follow the language too, from their own dictionary.
-      for (const title of ['Shell', 'Agent loop', 'Subagent', 'Web search']) {
+      // (OpenHarness serves no DeepSeek search row, so the Web search page is absent.)
+      for (const title of ['Shell', 'Agent loop', 'Subagent']) {
         await panel.getByRole('button', { name: `View ${title}`, exact: true }).waitFor()
       }
     } finally {

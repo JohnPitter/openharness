@@ -22,9 +22,15 @@ describe.skipIf(MODE === 'record').each([false, true])('web e2e: native credenti
 
   beforeAll(async () => {
     scaffold = await launchWebScaffold({
+      // The DeepSeek sign-in onboarding belongs to the account surfaces OpenHarness ships disabled.
+      deepSeekAccount: true,
       deepSeekMissingCredential: true,
       welcomeNoticePending: true,
-      ...desktop ? {} : { extraOverlayPath: fileURLToPath(new URL('./fixtures/onboarding-native/cordis.patch.yml', import.meta.url)) },
+      // OpenHarness ships coding-plan provider cards; the scenario runs over the upstream dormant directory.
+      extraOverlayPath: [
+        fileURLToPath(new URL('./dormant-providers.overlay.yml', import.meta.url)),
+        ...desktop ? [] : [fileURLToPath(new URL('./fixtures/onboarding-native/cordis.patch.yml', import.meta.url))],
+      ],
     })
     browser = await chromium.launch()
     page = await browser.newPage({ viewport: { width: 1440, height: 960 }, locale: ZH_BROWSER_LOCALE })

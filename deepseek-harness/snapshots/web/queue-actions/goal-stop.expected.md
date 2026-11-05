@@ -1,6 +1,6 @@
 - banner:
   - navigation "Session hierarchy": Queue item to remove
-  - text: Standard mode
+  - button "Standard mode"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
@@ -11,6 +11,9 @@
   - button "Jump to turn 1"
   - button "Jump to turn 2"
   - button "Jump to turn 3"
+- group "Session waypoints":
+  - 'button "Message: Queue item to remove"'
+  - 'button "Message: Wake the preserved queue"'
 - group "Command input": /goal Keep working after Stop
 - 'button "goal Goal created Status: active Objective: Keep working after Stop Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"'
 - button "Continuing goal {{clock}}":
@@ -36,6 +39,7 @@
 - button "Branch into a new conversation"
 - text: {{clock}} Wake the preserved queue {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}"
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
@@ -50,7 +54,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Send message" [disabled]
 - button "3 turns 3 steps · {{throughput}} tok/s": 3 turns 3 steps{{throughput}} tok/s
 - button "7.9K tok · Cache hit 99%": 7.9K tokCache hit 99%

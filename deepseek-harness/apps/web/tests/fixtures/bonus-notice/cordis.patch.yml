@@ -7,7 +7,12 @@
     platformOrigin: "{{origin}}"
     allowLoopbackHttp: true
 # This scenario exercises the account launcher after initial setup.
+# OpenHarness ships the DeepSeek-account surfaces disabled; this scenario
+# mounts them explicitly.
 - id: ui-settings-account
+  disabled: false
   config:
     step: done
     completion: completed
+- id: llm-deepseek-account
+  disabled: false

@@ -1,2 +1,4 @@
-- button "Account menu": More
+- button "Remote access, currently Off": Remote Off
+- button "No model selected, context Waiting for a request": No model selected 0
+- button "Settings"
 - button "Reconnecting, reconnect now": Reconnecting

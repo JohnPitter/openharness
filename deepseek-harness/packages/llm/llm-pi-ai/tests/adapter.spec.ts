@@ -1463,3 +1463,15 @@ describe('PiAiAdapter accountUsage', () => {
     expect(usageCalls).toBe(2)
   })
 })
+
+describe('PiAiAdapter oauthRouteIds', () => {
+  it('offers OAuth sign-in only on routes that opt in', () => {
+    const adapter = adapterOf({
+      'claude-code': { apiKeyEnv: 'PI_TEST_KEY', catalog: 'anthropic', oauth: true },
+      anthropic: { apiKeyEnv: 'PI_TEST_KEY' },
+      'openai-codex': { apiKeyEnv: 'PI_TEST_KEY', oauth: true },
+      openai: { apiKeyEnv: 'PI_TEST_KEY' },
+    })
+    expect(adapter.oauthRouteIds().sort()).toEqual(['claude-code', 'openai-codex'])
+  })
+})

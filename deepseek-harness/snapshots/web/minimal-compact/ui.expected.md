@@ -1,6 +1,6 @@
 - banner:
   - navigation "Session hierarchy": "Remember the project requirements: imple"
-  - text: Minimal mode
+  - button "Minimal mode"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
@@ -10,6 +10,9 @@
 - navigation "Turn navigation":
   - button "Jump to turn 1"
   - button "Jump to turn 2"
+- group "Session waypoints":
+  - 'button "Message: Remember the project requirements: implement image reading in minimal mode by r…"'
+  - 'button "Message: Continue using the project requirements. Reply exactly MINIMAL_COMPACT_OK and s…"'
 - text: "Remember the project requirements: implement image reading in minimal mode by reusing the existing filesystem tool. Preserve the fixed system prompt and keep standard mode unchanged. The new tool selection configuration must default to the full filesystem suite and reject unknown names, duplicate names, and empty lists. Minimal mode selects read_image only. Image reads must use the inherited filesystem authorization and durable attachment store, and the calling model must explicitly support image input. Do not register text read, write, or edit tools in minimal mode. Enable automatic compaction under context pressure and manual /compact while the agent is idle, using the existing backend to generate the summary. Keep the token meter shared and the compaction service isolated per preset. Preserve balanced tool-call and result pairs when replacing older history, retain recent context, and continue from the checkpoint. Dispose every tool, command, and listener with its owning plugin. Reply exactly MINIMAL_COMPACT_READY and stop. {{clock}}"
 - button "Copy"
 - status: Completed
@@ -24,6 +27,7 @@
 - paragraph: Implement minimal image reading through the existing filesystem tool, preserving permissions, model capability checks, and standard mode. Enable automatic and manual compaction.
 - text: Continue using the project requirements. Reply exactly MINIMAL_COMPACT_OK and stop. {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - paragraph: MINIMAL_COMPACT_OK
@@ -35,7 +39,7 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash 128K On
 - button "Send message" [disabled]
 - button "2 turns 2 steps"
 - button "28 tok · Cache hit 0%": 28 tokCache hit 0%

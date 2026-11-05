@@ -3,6 +3,8 @@
   - navigation:
     - button "通用设置"
     - button "模型"
+    - button "限额"
+    - button "状态"
     - button "内置插件"
     - button "Agent 预设"
   - button "打开配置文件"
@@ -33,6 +35,10 @@
   - button "编辑快捷键"
   - text: 繁忙时的发送行为 智能体运行时 Enter 键和发送按钮的行为；Cmd/Ctrl+Enter 使用另一行为
   - button "排队发送"
+  - text: 自动压缩 在用量达到阈值时压缩历史，适用于所有路由（含按请求计费的编码计划）。关闭后仍可使用 /compact。
+  - button "开启"
+  - text: 压缩阈值 估计用量达到模型上下文窗口的该比例时压缩
+  - button "75%"
   - text: 性能与用量 选择性能与用量信息展示的详细程度
   - button "详细"
   - text: 在使用官方模型 API 时上传 Session Log 帮助改进 DeepSeek 模型与产品

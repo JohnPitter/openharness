@@ -3,6 +3,8 @@
   - navigation:
     - button "通用设置"
     - button "模型"
+    - button "限额"
+    - button "状态"
     - button "内置插件"
     - button "Agent 预设"
   - button "打开配置文件"
@@ -11,6 +13,14 @@
   - paragraph: 填入各提供商的 API 密钥即可使用其模型。
   - list:
     - listitem:
+      - text: Cursor
+      - img "API 密钥缺失"
+      - button "编辑 Cursor (cursor)": 编辑
+    - listitem:
+      - text: Kimi for Code
+      - img "API 密钥缺失"
+      - button "编辑 Kimi for Code (kimi-for-coding)": 编辑
+    - listitem:
       - text: openrouter
       - button "编辑 openrouter": 编辑
       - button "删除 openrouter": 删除
@@ -18,7 +28,6 @@
     - listitem:
       - text: zai
       - button "编辑 zai": 编辑
-      - button "删除 zai": 删除
     - listitem:
       - text: acme-gateway 自定义
       - button "编辑 acme-gateway": 编辑

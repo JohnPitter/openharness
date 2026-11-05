@@ -3,6 +3,8 @@
   - navigation:
     - button "General"
     - button "Models"
+    - button "Limits"
+    - button "Status"
     - button "Built-in plugins"
     - button "Agent presets"
   - button "Open configuration file"
@@ -33,6 +35,10 @@
   - button "Edit shortcuts"
   - text: Send behavior while busy What Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior
   - button "Queue"
+  - text: Automatic compaction Compact history when usage reaches the threshold, on every route including request-metered coding plans. /compact remains available when off.
+  - button "On"
+  - text: Compaction threshold Compact when estimated tokens reach this fraction of the model context window
+  - button "75%"
   - text: Performance & usage Choose how much performance and usage information to show
   - button "Detailed"
   - text: Upload Session Log when using the official model API Help improve DeepSeek models and products.

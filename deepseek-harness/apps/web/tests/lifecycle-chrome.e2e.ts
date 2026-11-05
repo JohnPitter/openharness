@@ -24,7 +24,7 @@ import {
 } from './scaffold.ts'
 import {
   connectFreshWorkspace, connectFreshWorkspaceZh, expandOwningTurnProcess, newEnglishPage, saveFailureShot,
-  writeComposerDraft, ZH_BROWSER_LOCALE,
+  writeComposerDraft, ZH_BROWSER_LOCALE, heroHeadline,
 } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/lifecycle-chrome', import.meta.url))
@@ -315,11 +315,11 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     }
     // The blank frame renders the hero, not the resident composer: the
     // headline plus the guidance placeholder are the empty state's anchors.
-    await expect.poll(() => page.getByText('Into the Unknown', { exact: false }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => heroHeadline(page).count(), { timeout: 15_000 }).toBe(1)
     const input = page.locator('[data-composer-input]').first()
     await input.waitFor({ timeout: 10_000 })
     if (MODE !== 'record') {
-      await page.getByText('Into the Unknown', { exact: false }).hover()
+      await heroHeadline(page).hover()
       await expect.poll(() => page.getByRole('tooltip').count()).toBe(0)
       // Golden of the hero's stable waiting state (captured before any send;
       // the conversation-region goldens belong to the other scenarios).
@@ -506,21 +506,26 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       await recoveryPage.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
       await recoveryPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       await expect.poll(() => sockets.length).toBe(1)
-      rejectConnections = true
-      await recoveryPage.context().setOffline(true)
-      await expect.poll(() => recoveryPage.evaluate(() => navigator.onLine)).toBe(false)
-      const offline = recoveryPage.getByRole('button', {
-        name: 'Disconnected, reconnect now', exact: true,
-      })
-      await offline.waitFor({ timeout: 2_000 })
-      await recoveryPage.clock.fastForward(60_000)
-      expect(sockets).toHaveLength(1)
-
-      await recoveryPage.context().setOffline(false)
-      await expect.poll(() => recoveryPage.evaluate(() => navigator.onLine)).toBe(true)
       const connecting = recoveryPage.getByRole('button', {
         name: 'Reconnecting, reconnect now', exact: true,
       })
+      // OpenHarness: a loopback page ignores the browser's offline/online
+      // events — the local sidecar stays reachable while WebView2 reports
+      // `navigator.onLine === false` — so going offline neither shows the
+      // Disconnected pill nor tears down the live generation.
+      await recoveryPage.context().setOffline(true)
+      await expect.poll(() => recoveryPage.evaluate(() => navigator.onLine)).toBe(false)
+      await recoveryPage.waitForTimeout(500)
+      expect(await recoveryPage.getByRole('button', { name: 'Disconnected, reconnect now', exact: true }).count()).toBe(0)
+      expect(await connecting.count()).toBe(0)
+      expect(sockets).toHaveLength(1)
+      await recoveryPage.context().setOffline(false)
+      await expect.poll(() => recoveryPage.evaluate(() => navigator.onLine)).toBe(true)
+
+      // A lost carrier is what drives recovery on loopback: the Host closes the
+      // live socket while new connections are refused.
+      rejectConnections = true
+      await sockets[0]!.close({ code: 4001, reason: 'connection recovery test' })
       await connecting.waitFor({ timeout: 10_000 })
       expect(await connecting.innerText()).toMatch(/^Reconnecting\.{1,3}$/)
       const connectingGeometry = await connectionIndicatorGeometry(connecting)

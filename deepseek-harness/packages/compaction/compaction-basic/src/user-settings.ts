@@ -37,6 +37,24 @@ export interface CompactionUserSettings {
   thresholdPercent?: CompactionThresholdPercent
 }
 
+/**
+ * Host-wide automatic-compaction preference. Presets mount this engine per
+ * Agent, so the General settings rows edit a host entry instead; that entry
+ * provides this service and each engine reads it at event time for every
+ * field its own Config leaves unset.
+ */
+export interface CompactionUserSettingsSource {
+  /** @returns the current host-wide preference; absent fields defer to the engine. */
+  read(): CompactionUserSettings
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host-wide automatic-compaction preference; absent when no host entry provides it. */
+    compactionUserSettings: CompactionUserSettingsSource
+  }
+}
+
 /** Volatile threshold-percent field schema shared by the plugin Config. */
 export const thresholdPercentSchema: z<CompactionThresholdPercent> = z.union([
   z.const(25), z.const(50), z.const(75), z.const(100),

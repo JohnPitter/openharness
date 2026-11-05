@@ -7,7 +7,7 @@ import {
   acknowledgeReloadConnectionLoss, captureExpandedTurnProcessAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, selectedSessionFixture, watchConsole, webSnapshotMode,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, heroHeadline } from './support.ts'
 
 const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/fresh-round-trip/session.v3.jsonl', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('../../../snapshots/web/fresh-round-trip/ui-expanded.expected.md', import.meta.url))
@@ -67,7 +67,7 @@ describe.skipIf(webSnapshotMode() === 'record')('web session replay', () => {
         await captureExpandedTurnProcessAria(page, '[class*="centerCol"]', scaffold.workspaceCwd), 'replay')
 
       await page.getByRole('button', { name: 'New session', exact: true }).last().click()
-      await page.getByText('Into the Unknown', { exact: true }).waitFor()
+      await heroHeadline(page).waitFor()
       await page.getByRole('treeitem').filter({ has: page.getByText('Use the bash tool to', { exact: true }) }).click()
       await page.getByText('DONE', { exact: true }).waitFor({ timeout: 15_000 })
       await compareOrRefreshGolden(UI_EXPECTED,

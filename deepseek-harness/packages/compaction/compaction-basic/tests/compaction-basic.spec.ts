@@ -2808,6 +2808,33 @@ describe('automatic listener and loader composition', () => {
     expect(overflowSession.snapshotEvents().some(event => event.type === 'compaction/summary')).toBe(false)
   })
 
+  it('follows the host-wide compactionUserSettings when its own Config leaves auto unset', async () => {
+    const ctx = createContext(10_000)
+    let shared: { auto?: boolean } = { auto: false }
+    ctx.provide('compactionUserSettings', { read: () => shared })
+    const compact = new TestCompactionEngine(ctx, { thresholdRatio: 0.5, retainTokens: 180 })
+    const compactIfNeededSpy = vi.spyOn(compact, 'compactIfNeeded')
+    await preStep(ctx, agent(conversation(4), MODEL))
+    expect(compactIfNeededSpy).not.toHaveBeenCalled()
+
+    shared = { auto: true }
+    await preStep(ctx, agent(conversation(4), MODEL))
+    expect(compactIfNeededSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps its own live auto over the host-wide preference', async () => {
+    const ctx = createContext(10_000)
+    ctx.provide('compactionUserSettings', { read: () => ({ auto: true }) })
+    const compact = new TestCompactionEngine(ctx, {
+      thresholdRatio: 0.5,
+      retainTokens: 180,
+      auto: live<boolean | undefined>(false),
+    })
+    const compactIfNeededSpy = vi.spyOn(compact, 'compactIfNeeded')
+    await preStep(ctx, agent(conversation(4), MODEL))
+    expect(compactIfNeededSpy).not.toHaveBeenCalled()
+  })
+
   it('declares auto and thresholdPercent as volatile Config fields for the settings forms', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)

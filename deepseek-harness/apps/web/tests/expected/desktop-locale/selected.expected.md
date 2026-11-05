@@ -3,6 +3,8 @@
   - navigation:
     - button "General"
     - button "Models"
+    - button "Limits"
+    - button "Status"
     - button "Built-in plugins"
     - button "Agent presets"
   - button "Open configuration file"

@@ -57,7 +57,8 @@ async function material(menu: Locator) {
 }
 
 it('shares menu transparency and blur across palettes and follows native menu bounds', async () => {
-  const scaffold = await launchWebScaffold({})
+  // The account menu is the material sample; OpenHarness ships its occupant disabled.
+  const scaffold = await launchWebScaffold({ deepSeekAccount: true })
   onTestFinished(() => scaffold.close())
   await seedSession(scaffold, await readFile(seed, 'utf8'), 'menu-material-session')
   const browser = await chromium.launch()

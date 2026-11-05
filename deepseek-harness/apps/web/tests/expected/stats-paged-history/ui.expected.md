@@ -35,6 +35,35 @@
   - button "Jump to turn 26"
   - button "Jump to turn 27"
   - button "Jump to turn 28"
+- group "Session waypoints":
+  - 'button "Message: m1"'
+  - 'button "Message: m2"'
+  - 'button "Message: m3"'
+  - 'button "Message: m4"'
+  - 'button "Message: m5"'
+  - 'button "Message: m6"'
+  - 'button "Message: m7"'
+  - 'button "Message: m8"'
+  - 'button "Message: m9"'
+  - 'button "Message: m10"'
+  - 'button "Message: m11"'
+  - 'button "Message: m12"'
+  - 'button "Message: m13"'
+  - 'button "Message: m14"'
+  - 'button "Message: m15"'
+  - 'button "Message: m16"'
+  - 'button "Message: m17"'
+  - 'button "Message: m18"'
+  - 'button "Message: m19"'
+  - 'button "Message: m20"'
+  - 'button "Message: m21"'
+  - 'button "Message: m22"'
+  - 'button "Message: m23"'
+  - 'button "Message: m24"'
+  - 'button "Message: m25"'
+  - 'button "Message: m26"'
+  - 'button "Message: m27"'
+  - 'button "Message: m28"'
 - text: m1 7/25 {{clock}}
 - button "Copy"
 - status: Completed
@@ -280,6 +309,7 @@
 - button "Branch into a new conversation"
 - text: 7/25 {{clock}} m28 7/25 {{clock}}
 - button "Copy"
+- button "Edit message"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - paragraph: r28
@@ -292,6 +322,6 @@
 - textbox "Message or run a task, / commands, @ files or sessions"
 - button "Add files or run commands"
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash On
 - button "Send message" [disabled]
 - button "28 turns 28 steps"

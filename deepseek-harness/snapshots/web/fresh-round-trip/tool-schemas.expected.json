@@ -353,6 +353,68 @@
       }
     },
     {
+      "name": "lsp",
+      "description": "Query a language server for precise code navigation. operation is one of goToDefinition, findReferences, goToImplementation, hover. line and character are one-based UTF-16 cursor coordinates. findReferences includes the declaration.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "description": "goToDefinition, findReferences, goToImplementation, or hover.",
+            "enum": [
+              "goToDefinition",
+              "findReferences",
+              "goToImplementation",
+              "hover"
+            ]
+          },
+          "file_path": {
+            "type": "string",
+            "description": "The source file to query, relative to the workspace or absolute."
+          },
+          "line": {
+            "type": "number",
+            "description": "One-based line of the cursor."
+          },
+          "character": {
+            "type": "number",
+            "description": "One-based UTF-16 column of the cursor."
+          }
+        },
+        "required": [
+          "operation",
+          "file_path",
+          "line",
+          "character"
+        ]
+      }
+    },
+    {
+      "name": "milestone_write",
+      "description": "Record a durable session milestone when a finding, decision, or fix closes. Call it in the same tool step as the work that produced the fact — do not open a new turn only to write the milestone. Title is the one-line label the human and later model turns use as an index; body is the recorded fact. Do not use this for a task checklist (that is todo_write).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "One-line label for the rail and the model-visible index."
+          },
+          "body": {
+            "type": "string",
+            "description": "The recorded finding, decision, or fix."
+          },
+          "anchorSeq": {
+            "type": "integer",
+            "description": "Session seq this fact is about, when known."
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ]
+      }
+    },
+    {
       "name": "plugin_manager",
       "description": "List plugins or bundles in the current profile, enable or disable them, install a bundle, or remove an installed bundle. Every action requires danger-full-access permission or approval for this call. Approval does not change the session permission mode. Changes affect every session in this profile. List first to obtain exact identifiers. Package installation can execute allowed build scripts. Live profiles apply changes immediately, including upgrades of installed packages; a change result that is not applied carries nextStep, which says what to do or tell the user. Unmet DSH version requirements (engines.dsh, else DSH peer dependencies) block installation and activation. Version exemptions risk crashes and data loss: warn the user and obtain explicit permission for the exact plugin and runtime versions before granting one.",
       "parameters": {

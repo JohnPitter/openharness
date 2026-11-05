@@ -28,7 +28,12 @@ describe.skipIf(MODE === 'record')('web e2e: another usable provider ends first-
   let tripwire: ReturnType<typeof watchConsole>
 
   beforeAll(async () => {
-    scaffold = await launchWebScaffold({ deepSeekMissingCredential: true })
+    // The scenario's premise is a DeepSeek-only first run beside a dormant pi-ai
+    // directory; OpenHarness ships coding-plan cards, so restore that directory.
+    scaffold = await launchWebScaffold({
+      deepSeekMissingCredential: true,
+      extraOverlayPath: fileURLToPath(new URL('./dormant-providers.overlay.yml', import.meta.url)),
+    })
     browser = await chromium.launch()
     // The scenario asserts the shipped Chinese copy, so the browser asks for it.
     page = await browser.newPage({ viewport: { width: 1440, height: 960 }, locale: ZH_BROWSER_LOCALE })
@@ -44,9 +49,9 @@ describe.skipIf(MODE === 'record')('web e2e: another usable provider ends first-
 
   it('closes the setup card without discarding the add card beside it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-onboarding-setup-card-cancel'))
-    const signIn = page.getByRole('dialog', { name: '开始使用', exact: true })
-    await signIn.waitFor({ timeout: 15_000 })
-    await signIn.getByRole('button', { name: '添加 API Key', exact: true }).click()
+    // OpenHarness ships no DeepSeek-account sign-in step: first run opens the
+    // provider credential step directly.
+    expect(await page.getByRole('dialog', { name: '开始使用', exact: true }).count()).toBe(0)
     const credentialStep = page.getByRole('dialog', { name: CREDENTIAL_STEP })
     await credentialStep.waitFor({ timeout: 15_000 })
     await credentialStep.getByRole('button', { name: '稍后配置' }).click()

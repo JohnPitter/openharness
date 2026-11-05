@@ -127,7 +127,8 @@ it('uses 16px text for coarse-pointer font fields and preserves compact fine-poi
 })
 
 it('shares settings card materials and control sizes in both palettes', async () => {
-  const scaffold = await launchWebScaffold({})
+  // The Account card is one of the sampled materials; OpenHarness ships its occupant disabled.
+  const scaffold = await launchWebScaffold({ deepSeekAccount: true })
   onTestFinished(() => scaffold.close())
   await scaffold.ctx.settings.mutate('ui-settings-account', [
     { op: 'set', path: ['step'], value: 'done' },

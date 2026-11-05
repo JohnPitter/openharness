@@ -108,6 +108,12 @@ export interface PiAiProviderProfile {
   /** Name shown by configuration surfaces; defaults to the route key. */
   displayName?: string
   /**
+   * Offer the catalog provider's OAuth sign-in on this route's Settings card.
+   * Opt-in: only coding-plan routes (Claude Code, Codex) set it; pay-per-token
+   * Platform routes of the same catalog keep key-only setup.
+   */
+  oauth?: boolean
+  /**
    * Installed catalog to inherit when it is not this route's key. Lets a
    * second billed path (Claude Code OAuth) keep Anthropic's model table
    * without restating every id. Omission inherits under the route key.
@@ -365,6 +371,7 @@ const modelOverride: z<PiAiModelOverride> = z.object(modelFields)
 const profile = z.object({
   apiKeyEnv: z.string().role('credential-ref'),
   displayName: z.string(),
+  oauth: z.boolean(),
   catalog: z.string(),
   api: z.union(supportedProtocols()),
   baseURL: z.string(),

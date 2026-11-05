@@ -113,7 +113,8 @@ describe.skipIf(MODE === 'record')('web e2e: catalog model badges', () => {
       expect(await updated.locator('[data-tone]').getAttribute('data-tone')).toBe('success')
       adapter.badge = undefined
       scaffold.ctx.emit('llm/models-updated', provider)
-      await expect.poll(() => trigger.textContent()).toBe('Live model')
+      // OpenHarness: the trigger also carries the J-Space toggle state (开).
+      await expect.poll(() => trigger.textContent()).toBe('Live model开')
       const cleared = page.getByRole('menuitemradio', { name: 'Live model', exact: true })
       await cleared.waitFor()
       expect(await cleared.locator('[data-tone]').count()).toBe(0)
@@ -133,7 +134,7 @@ describe.skipIf(MODE === 'record')('web e2e: catalog model badges', () => {
       await trigger.click()
       await page.getByRole('menuitem', { name: /^模型/ }).click()
       await page.getByRole('menuitemradio', { name: `${LONG_NAME} Preview`, exact: true }).click()
-      await expect.poll(() => trigger.textContent()).toBe(`Preview ${LONG_NAME}`)
+      await expect.poll(() => trigger.textContent()).toBe(`Preview ${LONG_NAME}开`)
       const triggerBadge = trigger.getByText('Preview', { exact: true })
       const triggerBox = (await trigger.boundingBox())!
       const triggerBadgeBox = (await triggerBadge.boundingBox())!
