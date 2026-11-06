@@ -30,10 +30,17 @@ internal/
                         commitar — ver .gitignore; gerados pelo pipeline abaixo)
   app/                  bindings Wails: HarnessState, RestartHarness,
                         EnableRemote / DisableRemote (túnel + QR)
+  harnessproxy/         reverse proxy autenticado para o dsh web: resgata o
+                        `?token=` uma vez e anexa o cookie `dsh-auth-*`
+                        (SameSite=Strict) em cada request HTTP/WebSocket.
+                        `StartLocal` serve o iframe do shell em
+                        127.0.0.1:<porta>/<segredo>/ (página Wails e harness
+                        são sites diferentes, então o WebView2 não guarda o
+                        cookie no iframe); o segredo do caminho + o Host fixo
+                        são o portão
   remote/               proxy em 127.0.0.1 + túnel HTTPS público com cookie
-                        de token; o celular abre o harness como no desktop. O
-                        proxy resgata o `?token=` do dsh web uma vez e anexa o
-                        cookie `dsh-auth-*` em cada request (HTTP e WebSocket)
+                        de token (usa harnessproxy); o celular abre o harness
+                        como no desktop
 frontend/dist/          shell estático (sem build step): titlebar própria
                         (logo, --wails-draggable, min/max/close via runtime
                         Wails) + iframe full-bleed para a URL do harness
