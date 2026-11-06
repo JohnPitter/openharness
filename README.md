@@ -67,7 +67,7 @@ Opt-in. O exe publica um HTTPS público a partir de `127.0.0.1` (túnel Cloudfla
 ```powershell
 wails generate module
 Copy-Item -Recurse -Force frontend\wailsjs frontend\dist\wailsjs
-wails build -ldflags "-X openharness/internal/update.Version=0.2.0"
+wails build -ldflags "-X openharness/internal/update.Version=0.2.1"
 go test ./...
 ```
 

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"openharness/internal/harnessproxy"
 	"openharness/internal/remote"
 	"openharness/internal/sidecar"
 	"openharness/internal/update"
@@ -17,14 +18,21 @@ type App struct {
 	ctx     context.Context
 	manager *sidecar.Manager
 	remote  remote.Server
-	// mu guards url/err/manager: the boot goroutine writes them while the
-	// frontend polls HarnessState from Wails' binding goroutines.
+	// mu guards url/err/manager/frame: the boot goroutine writes them while
+	// the frontend polls HarnessState from Wails' binding goroutines.
 	mu  sync.Mutex
-	url string
+	url string // dsh web URL with its launch token (Remote proxies it)
 	err string
+	// frame serves the harness to the shell's iframe: the iframe is another
+	// site than the Wails page, so dsh web's SameSite cookie never sticks there.
+	frame *harnessproxy.Local
 }
 
 func (a *App) setResult(url string, err error) {
+	var frame *harnessproxy.Local
+	if err == nil {
+		frame, err = harnessproxy.StartLocal(url)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err != nil {
@@ -32,6 +40,13 @@ func (a *App) setResult(url string, err error) {
 		return
 	}
 	a.url = url
+	a.frame = frame
+}
+
+// closeFrameLocked drops the iframe proxy; the caller holds a.mu.
+func (a *App) closeFrameLocked() {
+	a.frame.Close()
+	a.frame = nil
 }
 
 func (a *App) harnessURL() string {
@@ -70,6 +85,7 @@ func (a *App) Shutdown(ctx context.Context) {
 	a.remote.Stop()
 	a.mu.Lock()
 	m := a.manager
+	a.closeFrameLocked()
 	a.mu.Unlock()
 	m.Stop()
 }
@@ -78,13 +94,13 @@ func (a *App) Shutdown(ctx context.Context) {
 // enquanto isso, {phase} informa "extracting" ou "starting".
 func (a *App) HarnessState() map[string]string {
 	a.mu.Lock()
-	errMsg, url, m := a.err, a.url, a.manager
+	errMsg, frame, m := a.err, a.frame, a.manager
 	a.mu.Unlock()
 	if errMsg != "" {
 		return map[string]string{"error": errMsg}
 	}
-	if url != "" {
-		return map[string]string{"url": url}
+	if frame != nil {
+		return map[string]string{"url": frame.URL}
 	}
 	if phase, ok := m.Phase.Load().(string); ok && phase != "" {
 		return map[string]string{"phase": phase}
@@ -107,6 +123,7 @@ func (a *App) RestartHarness() error {
 	a.manager = m
 	a.err = ""
 	a.url = ""
+	a.closeFrameLocked()
 	a.mu.Unlock()
 	old.Stop()
 	go func() {
